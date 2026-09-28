@@ -19,6 +19,7 @@ This table tracks board definitions from `internal_filesystem/lib/mpos/board/`.
 | `unphone.py`                                         | unPhone                                         | Jens Diemer              | @jedie           | Unknown       |
 | `squixl.py`                                          | SQUiXL                                          | Jens Diemer              | @jedie           | Unknown       |
 | `unihiker_k10.py`                                    | DFRobot UniHiker K10                            | Brandon Woodward         | @woodhead-tech   | Unknown       |
+| `waveshare_esp32_s3_touch_lcd_1_54.py`               | Waveshare ESP32-S3-Touch-LCD-1.54               | Flavio Coelho            | @fccoelho        | Unknown       |
 | `waveshare_esp32_s3_touch_lcd_2.py`                  | Waveshare ESP32-S3-Touch-LCD-2                  | Thomas Farstrike         | @ThomasFarstrike | @ThomasF7e    |
 | `lilygo_t4.py`                                       | LilyGo T4                                       | yusuhua                  | @yusuhua         | Unknown       |
 

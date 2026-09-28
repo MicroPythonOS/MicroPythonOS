@@ -1,6 +1,10 @@
 Future release (next version)
 =====
 
+Board Support:
+- ESP32-S3: new board definition for the Waveshare ESP32-S3-Touch-LCD-1.54 (1.54" 240x240 ST7789, CST816S touch, ES8311 speaker + ES7210 microphone, TF card slot), with automatic board detection
+- New `drivers/codec/es7210.py` driver for the ES7210 4-channel microphone ADC
+
 Builtin Apps:
 - Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
 
