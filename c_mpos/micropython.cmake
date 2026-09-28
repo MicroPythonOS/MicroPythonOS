@@ -9,6 +9,8 @@ set(MPOS_C_INCLUDES)
 set(MPOS_C_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}/../lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__esp_codec_dev/include/
     ${CMAKE_CURRENT_LIST_DIR}/../lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__esp_codec_dev/interface/
+    # esp_new_jpeg (jpegdec module) headers
+    ${CMAKE_CURRENT_LIST_DIR}/../lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__esp_new_jpeg/include/
     # RVSWD programmer component headers
     ${CMAKE_CURRENT_LIST_DIR}/../esp32-component-rvswd/include/
 )
@@ -17,6 +19,7 @@ set(MPOS_C_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/adc_mic.c
     ${CMAKE_CURRENT_LIST_DIR}/src/pdm_mic.c
     ${CMAKE_CURRENT_LIST_DIR}/src/quirc_decode.c
+    ${CMAKE_CURRENT_LIST_DIR}/src/jpegdec.c
     ${CMAKE_CURRENT_LIST_DIR}/quirc/lib/identify.c
     ${CMAKE_CURRENT_LIST_DIR}/quirc/lib/version_db.c
     ${CMAKE_CURRENT_LIST_DIR}/quirc/lib/decode.c

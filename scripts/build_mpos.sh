@@ -156,6 +156,17 @@ else
 	echo "No need to add adc_mic to $idfile"
 fi
 
+echo "Check need to add esp_new_jpeg to $idfile"
+if ! grep esp_new_jpeg "$idfile"; then
+	echo "Adding esp_new_jpeg to $idfile"
+        echo '  espressif/esp_new_jpeg:
+    rules:
+      - if: "target in [esp32, esp32s2, esp32s3, esp32p4]"
+    version: "*"' >> "$idfile"
+else
+	echo "No need to add esp_new_jpeg to $idfile"
+fi
+
 echo "Resulting $idfile file:"
 cat "$idfile"
 
@@ -446,6 +457,20 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		usb_usermod=""
 	fi
 	set -x
+	# ESP-IDF features no MicroPythonOS board or app uses, dropped from every
+	# ESP32-family image to keep the OTA app partitions from overflowing (the
+	# native JPEG decoder alone costs ~75 KB):
+	# - PPP (network.PPP): no board has a cellular modem or a serial PPP link
+	# - DTLS: MicroPython's ssl module never speaks TLS over UDP
+	# - TLS server side: nothing serves HTTPS; ssl stays fully functional as a
+	#   client, client certificates included
+	# - BLE 5 controller features (extended/periodic advertising, 2M/coded PHY):
+	#   MicroPython's bluetooth module only does legacy advertising and scanning
+	extra_configs="$extra_configs CONFIG_LWIP_PPP_SUPPORT=n CONFIG_LWIP_PPP_PAP_SUPPORT=n CONFIG_LWIP_PPP_CHAP_SUPPORT=n CONFIG_MBEDTLS_SSL_PROTO_DTLS=n CONFIG_MBEDTLS_TLS_SERVER_AND_CLIENT=n CONFIG_MBEDTLS_TLS_CLIENT_ONLY=y CONFIG_BT_NIMBLE_50_FEATURE_SUPPORT=n"
+	# - IPv6: the one trim users could notice (sockets are IPv4 only afterwards);
+	#   everything the OS and its apps talk to is reachable over IPv4, and it is
+	#   worth ~23 KB of flash plus the neighbour-discovery tables in RAM
+	extra_configs="$extra_configs CONFIG_LWIP_IPV6=n"
 	python3 make.py $ccache_arg $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
