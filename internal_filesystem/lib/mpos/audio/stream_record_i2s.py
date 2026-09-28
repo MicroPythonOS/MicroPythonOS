@@ -146,6 +146,14 @@ class RecordStream:
             if not use_simulation:
                 # Initialize I2S in RX mode with correct pins for microphone
                 try:
+                    # A warm playback output (see WAVStream) holds the I2S
+                    # peripheral and the MCLK pin; release it before recording.
+                    try:
+                        from mpos.audio.stream_wav import WAVStream
+                        WAVStream.release_warm()
+                    except Exception as e:
+                        logger.error("release_warm before recording failed: %s", e)
+
                     # Start MCLK on mck pin if provided (required for I2S codecs such as ES8311)
                     if 'mck' in self.i2s_pins:
                         try:

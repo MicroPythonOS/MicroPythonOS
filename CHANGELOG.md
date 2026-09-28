@@ -1,12 +1,16 @@
 Future release (next version)
 =====
 
-Builtin Apps:
-- Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
+Board Support:
+- Waveshare ESP32-S3-Touch-LCD-3.5: keep the ES8311 speaker output warm for 30 s after a clip (warm_ms) so rapid back-to-back clips play without a click
 
 Frameworks:
+- AudioManager/WAVStream: opt-in warm output (Output(warm_ms=N)) keeps the I2S clocks running and the codec unmuted between clips so back-to-back playback doesn't click on codecs such as the ES8311; released after N ms idle, by WAVStream.release_warm(), or before I2S recording
 - InputActivity: optional `selected_callback(value)` setting key for radiobuttons/dropdown, fired on every pick before Save (re-tapping the active radio fires again) so pickers can preview a choice live, e.g. play a sound effect. `changed_callback` semantics unchanged
 - SettingsActivity: fix a TypeError ("can't convert 'int' object to str implicitly", surfaced as the "app threw an exception" dialog) when a setting's stored value is a number instead of a string
+
+Builtin Apps:
+- Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
 
 OS:
 - uaiowebsocket: stop trying to send a second pong on incoming pings (aiohttp already replies; the call raised and logged "Failed to send pong" on every relay ping, #299)
