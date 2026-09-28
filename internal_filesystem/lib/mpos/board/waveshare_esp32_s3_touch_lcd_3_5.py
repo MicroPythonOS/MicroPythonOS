@@ -58,7 +58,7 @@ i2c_bus = i2c.I2C.Bus(host=0, scl=I2C_SCL, sda=I2C_SDA, freq=400000, use_locks=F
 expander = PCA9554(i2c_bus, EXPANDER_ADDR)
 expander.set_output(EXIO_LCD_CS, False)    # CS low = selected (sole SPI device)
 expander.set_output(EXIO_LCD_RESET, False) # pulse reset
-time.sleep_ms(10)
+time.sleep_ms(50)                          # generous: 10 ms left some cold boots un-reset
 expander.set_output(EXIO_LCD_RESET, True)
 time.sleep_ms(120)                         # ST7796 needs ~120ms after reset
 
@@ -198,6 +198,9 @@ if _es8311:
             },
             on_open=_audio_on_open,
             on_close=_audio_on_close,
+            # The ES8311 clicks on every MCLK/I2S restart and DAC unmute: keep the
+            # output warm for 30 s after a clip so back-to-back clips are silent.
+            warm_ms=30000,
         )
     )
 
@@ -293,5 +296,30 @@ CameraManager.add_camera(CameraManager.Camera(
     apply_settings=apply_cam_settings,
     rotation_degrees=90,  # tuned on hardware (was -90 for the _90 UI; flipped with the _270 orientation)
 ))
+
+# === PANEL INIT RETRY ===
+# Some cold boots leave the ST7796 uninitialised: backlight on, panel dark,
+# everything else (touch, PMU, codec, SPI flushes) healthy, and the very same
+# init sequence sent again a moment later brings the picture up every time.
+# So run it once more a few seconds after boot, via a one-shot LVGL timer so
+# the launcher keeps rendering meanwhile. The panel blinks briefly when this
+# fires; that is the cost of never booting dark.
+def _panel_init_retry(timer):
+    try:
+        from drivers.display.st7796 import _st7796_init as panel_init
+        display = mpos.ui.main_display
+        expander.set_output(EXIO_LCD_RESET, False)
+        time.sleep_ms(50)
+        expander.set_output(EXIO_LCD_RESET, True)
+        time.sleep_ms(150)
+        expander.set_output(EXIO_LCD_CS, False)
+        panel_init.init(display)
+        display.set_rotation(display.get_rotation())  # MADCTL again after the reset
+        lv.screen_active().invalidate()
+    except Exception as e:
+        logger.error("panel init retry failed: %s", e)
+
+_panel_retry_timer = lv.timer_create(_panel_init_retry, 3000, None)
+_panel_retry_timer.set_repeat_count(1)
 
 if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_3_5.py finished")
