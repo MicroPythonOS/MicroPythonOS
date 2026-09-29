@@ -193,6 +193,24 @@ if _es8311:
             )
         )
 
+# === BATTERY ===
+# From the vendor power manager (bsp_power_manager.c): battery voltage is
+# sampled on GPIO1 (ADC1_CH0) through a 1/3 divider (voltage x3.0), GPIO3 is
+# the charging status input, and GPIO2 is the battery/peripheral power
+# enable which must be driven high.
+try:
+    machine.Pin(2, machine.Pin.OUT, value=1)  # hold the battery rail on
+
+    def _adc_to_voltage(raw_adc):
+        # TODO: switch to adc.read_uv() for per-chip factory calibration.
+        return raw_adc * (3.3 / 4095) * 3.0
+
+    from mpos import BatteryManager
+
+    BatteryManager.init_adc(1, _adc_to_voltage)
+except Exception as e:
+    logger.error("Battery monitor init failed: %s" % (e))
+
 # === TF CARD ===
 # SDMMC 4-bit slot, pins from the vendor BSP. Initialized here so the file
 # manager and apps can mount it on demand via SDCardManager.mount().
