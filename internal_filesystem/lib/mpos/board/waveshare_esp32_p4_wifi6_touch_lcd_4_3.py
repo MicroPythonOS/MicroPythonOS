@@ -201,9 +201,9 @@ if _es8311:
             },
             on_open=_audio_on_open,
             on_close=_audio_on_close,
-            # Like the other ES8311 boards this one clicks on every MCLK/I2S
-            # restart; once the opt-in warm output (PR #301) lands, add
-            # warm_ms=30000 here so back-to-back clips stay silent.
+            # The ES8311 clicks on every MCLK/I2S restart and DAC unmute: keep the
+            # output warm for 30 s after a clip so back-to-back clips are silent.
+            warm_ms=30000,
         )
     )
 
