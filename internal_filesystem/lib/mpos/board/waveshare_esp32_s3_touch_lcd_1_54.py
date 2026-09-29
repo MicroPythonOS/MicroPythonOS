@@ -211,6 +211,46 @@ try:
 except Exception as e:
     logger.error("Battery monitor init failed: %s" % (e))
 
+
+def power_off():
+    """Called by the launcher before deep sleep: arm the PWR button (GPIO5)
+    as a wake source and make sure the battery boost stays enabled. The
+    charger IC (ETA6098) auto-cuts the boost after ~30s of light load, so on
+    battery the device transitions to a true off shortly after; on USB it
+    simply stands by. Either way, pressing PWR boots the device."""
+    machine.Pin(2, machine.Pin.OUT, value=1)
+    try:
+        import esp32
+
+        esp32.wake_on_ext0(pin=_pwr_pin, level=0)
+    except Exception as e:
+        logger.error("PWR wake config failed: %s" % (e))
+
+
+# === PWR BUTTON (GPIO5, active-low, shared with the ETA6098 key input) ===
+_pwr_pin = machine.Pin(5, machine.Pin.IN, machine.Pin.PULL_UP)
+
+try:
+    import _thread
+
+    def _pwr_watch():
+        """Deep sleep when PWR is held for 2+ seconds (factory behavior)."""
+        while True:
+            if _pwr_pin.value() == 0:
+                start = time.ticks_ms()
+                while _pwr_pin.value() == 0:
+                    if time.ticks_diff(time.ticks_ms(), start) >= 2000:
+                        machine.Pin(2, machine.Pin.OUT, value=1)
+                        _arm_pwr_wake = power_off
+                        _arm_pwr_wake()
+                        machine.deepsleep()
+                    time.sleep_ms(20)
+            time.sleep_ms(50)
+
+    _thread.start_new_thread(_pwr_watch, ())
+except Exception as e:
+    logger.error("PWR button watcher init failed: %s" % (e))
+
 # === TF CARD ===
 # SDMMC 4-bit slot, pins from the vendor BSP. Initialized here so the file
 # manager and apps can mount it on demand via SDCardManager.mount().
