@@ -93,7 +93,7 @@ def init(self):
     param_buf[0] = 0x35
     self.set_params(_GCTRL, param_mv[:1])
 
-    param_buf[0] = 0x32 # 1.35 (0x32) instead of the old 1.1V (0x28)
+    param_buf[0] = 0x3C # 1.5V — tuned on Waveshare ESP32-S3-Touch-LCD-1.54 (0x32 was washed out)
     self.set_params(_VCOMS, param_mv[:1])
 
     param_buf[0] = 0x0C

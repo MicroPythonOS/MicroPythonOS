@@ -74,6 +74,7 @@ mpos.ui.main_display = st7789.ST7789(
     display_width=240,
     display_height=240,
     reset_pin=LCD_RST,
+    reset_state=st7789.STATE_LOW,  # RST is active-low: idle HIGH, pulse LOW
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_RGB,
     rgb565_byte_swap=True,
@@ -82,7 +83,7 @@ mpos.ui.main_display = st7789.ST7789(
 )  # triggers lv.init()
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
-mpos.ui.main_display.set_backlight(100)
+mpos.ui.main_display.set_backlight(70)  # 100 washes out colors on this panel
 
 # Touch handling: the CST816S sits on the shared I2C bus, with dedicated
 # reset (GPIO47) and interrupt (GPIO48) lines.
