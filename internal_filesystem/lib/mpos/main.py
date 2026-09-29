@@ -239,6 +239,12 @@ def detect_board():
                 # together with a QMI8658 IMU instead of the codec.
                 if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x18):
                     return "waveshare_esp32_s3_touch_lcd_1_54"
+                # Some units come out of reset with the touch controller
+                # unresponsive (held in reset by the LCD-2 probe above, which
+                # drives GPIO47, the touch reset line): the ES8311 codec +
+                # ES7210 mic ADC pair is still unique to this board.
+                if single_address_i2c_scan(i2c0, 0x18) and single_address_i2c_scan(i2c0, 0x40):
+                    return "waveshare_esp32_s3_touch_lcd_1_54"
                 restore_i2c(sda=42, scl=41)
 
             if __debug__: logger.debug("freenove_esp32s3_display ?")
