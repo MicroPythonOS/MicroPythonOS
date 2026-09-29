@@ -86,6 +86,19 @@ class TestWifiServiceConnect(unittest.TestCase):
 class TestWifiServiceAttemptConnecting(unittest.TestCase):
     """Test WifiService.attempt_connecting() method."""
 
+    def setUp(self):
+        # A hotspot restore left pending by another test would disconnect the
+        # station on the failure paths and skew the disconnect() counts here.
+        WifiService._needs_hotspot_restore = False
+
+    def _without_hotspot(self):
+        """MockNetwork's AP interface reads as active, which makes
+        attempt_connecting() restore a 'hotspot' (and disconnect the station)
+        on failure. Tests counting disconnect() calls pretend there is none."""
+        original = WifiService.is_hotspot_enabled
+        WifiService.is_hotspot_enabled = staticmethod(lambda network_module=None: False)
+        self.addCleanup(lambda: setattr(WifiService, 'is_hotspot_enabled', original))
+
     def test_successful_connection(self):
         """Test successful WiFi connection."""
         mock_network = MockNetwork(connected=False)
@@ -229,6 +242,142 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
 
         self.assertEqual(call_order, ["disconnect", "connect"],
                          "Must disconnect from current network before connecting to new one")
+
+    def test_connect_cancels_pending_reconnect_first(self):
+        """A retry loop left by a dropped or failed connection must be cancelled
+        before connect(), even when not connected (connect() fails otherwise)."""
+        mock_network = MockNetwork(connected=False)
+        mock_time = MockTime()
+
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        call_order = []
+
+        def mock_connect(ssid, password):
+            call_order.append("connect")
+            mock_wlan._connected = True
+
+        def mock_disconnect():
+            call_order.append("disconnect")
+            mock_wlan._connected = False
+
+        mock_wlan.connect = mock_connect
+        mock_wlan.disconnect = mock_disconnect
+
+        result = WifiService.attempt_connecting(
+            "TestSSID",
+            "testpass",
+            network_module=mock_network,
+            time_module=mock_time
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(call_order, ["disconnect", "connect"])
+        # no settle delay needed when there was no connection to leave
+        self.assertFalse(0.5 in mock_time.get_sleep_calls())
+
+    def test_connect_timeout_stops_background_retries(self):
+        """After a timed-out attempt the driver must not be left retrying,
+        or the next scan and connect are refused."""
+        self._without_hotspot()
+        mock_network = MockNetwork(connected=False)
+        mock_time = MockTime()
+
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        call_order = []
+
+        def mock_connect(ssid, password):
+            call_order.append("connect")  # never connects
+
+        def mock_disconnect():
+            call_order.append("disconnect")
+
+        mock_wlan.connect = mock_connect
+        mock_wlan.disconnect = mock_disconnect
+
+        result = WifiService.attempt_connecting(
+            "TestSSID",
+            "testpass",
+            network_module=mock_network,
+            time_module=mock_time
+        )
+
+        self.assertFalse(result)
+        self.assertEqual(call_order, ["disconnect", "connect", "disconnect"])
+
+    def test_connect_error_stops_background_retries(self):
+        """A connect() that raises must not leave a retry loop running either."""
+        self._without_hotspot()
+        mock_network = MockNetwork(connected=False)
+        mock_time = MockTime()
+
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        disconnects = [0]
+
+        def raise_error(ssid, password):
+            raise OSError("Wifi Internal Error")
+
+        def mock_disconnect():
+            disconnects[0] += 1
+
+        mock_wlan.connect = raise_error
+        mock_wlan.disconnect = mock_disconnect
+
+        result = WifiService.attempt_connecting(
+            "TestSSID",
+            "testpass",
+            network_module=mock_network,
+            time_module=mock_time
+        )
+
+        self.assertFalse(result)
+        self.assertEqual(disconnects[0], 2)  # before connect() and after the error
+
+    def test_scan_cancels_pending_reconnect(self):
+        """While the driver is still retrying a lost connection it refuses to
+        scan (the ESP32-P4's hosted radio returns an empty list), so a scan
+        must cancel that loop first."""
+        mock_network = MockNetwork(connected=False)
+
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        call_order = []
+        retrying = [True]
+
+        def mock_disconnect():
+            call_order.append("disconnect")
+            retrying[0] = False
+
+        def mock_scan():
+            call_order.append("scan")
+            return [] if retrying[0] else [(b"Net", b"", 6, -60, 3, False)]
+
+        mock_wlan.disconnect = mock_disconnect
+        mock_wlan.scan = mock_scan
+
+        networks = WifiService._scan_networks_raw(network_module=mock_network)
+
+        self.assertEqual(call_order, ["disconnect", "scan"])
+        self.assertEqual(len(networks), 1)
+
+    def test_scan_keeps_an_established_connection(self):
+        """Scanning while connected must not drop the connection."""
+        mock_network = MockNetwork(connected=True)
+
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        call_order = []
+
+        def mock_disconnect():
+            call_order.append("disconnect")
+
+        def mock_scan():
+            call_order.append("scan")
+            return []
+
+        mock_wlan.disconnect = mock_disconnect
+        mock_wlan.scan = mock_scan
+
+        WifiService._scan_networks_raw(network_module=mock_network)
+
+        self.assertEqual(call_order, ["scan"])
 
 
 class TestWifiServiceAutoConnect(unittest.TestCase):

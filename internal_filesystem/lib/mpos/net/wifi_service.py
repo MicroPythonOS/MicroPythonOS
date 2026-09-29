@@ -287,8 +287,12 @@ class WifiService:
         try:
             wlan = WifiService._get_sta_wlan(net)
 
-            if wlan.isconnected():
-                wlan.disconnect()
+            # Leave the current network, or cancel a retry loop still running
+            # from a dropped or failed connection: connect() fails while one is
+            # active (see _stop_connecting).
+            was_connected = wlan.isconnected()
+            WifiService._stop_connecting(wlan)
+            if was_connected:
                 time_mod.sleep(0.5)
 
             wlan.connect(ssid, password)
@@ -317,11 +321,18 @@ class WifiService:
                 time_mod.sleep(1)
 
             logger.info("Connection timeout for '%s'", ssid)
+            # The driver would otherwise keep retrying in the background and
+            # block the next scan and connect.
+            WifiService._stop_connecting(wlan)
             WifiService._restore_hotspot_if_needed(network_module=network_module)
             return False
 
         except Exception as e:
             logger.info("Connection error: %s", e)
+            try:
+                WifiService._stop_connecting(WifiService._get_sta_wlan(net))
+            except Exception:
+                pass
             WifiService._restore_hotspot_if_needed(network_module=network_module)
             return False
 
@@ -626,6 +637,22 @@ class WifiService:
         return list(WifiService.access_points.keys())
 
     @staticmethod
+    def _stop_connecting(wlan):
+        """Cancel whatever (re)connection attempt the Wi-Fi driver still runs.
+
+        MicroPython retries a dropped or failed connection forever by default
+        (config('reconnects') == -1). While that retry loop runs the driver
+        refuses scans (ESP-IDF answers ESP_ERR_WIFI_STATE; on the ESP32-P4,
+        whose radio is a hosted ESP32-C6, scan() then returns an empty list)
+        and a new connect() fails with "Wifi Internal Error". disconnect()
+        ends the loop; on an idle interface it is harmless.
+        """
+        try:
+            wlan.disconnect()
+        except Exception as e:
+            if __debug__: logger.debug("disconnect() to stop connecting: %s", e)
+
+    @staticmethod
     def _scan_networks_raw(network_module=None):
         """
         Internal method to scan for available WiFi networks and return raw data.
@@ -647,6 +674,9 @@ class WifiService:
         if not wlan.isconnected():
             wlan.active(False)
             wlan.active(True)
+            # A radio restart does not end a pending (re)connection loop, which
+            # would make the scan come back empty (see _stop_connecting).
+            WifiService._stop_connecting(wlan)
 
         return wlan.scan()
 
