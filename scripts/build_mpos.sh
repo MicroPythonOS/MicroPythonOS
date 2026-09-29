@@ -348,6 +348,24 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_country_japan.patch
 	echo "Applying lvgl_micropython esp32 network wlan config country patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_config_country.patch
+	# Guarded: older pinned lvgl_micropython SHAs don't ship these patches yet.
+	# Absolute USER_C_MODULES path in builder/esp32.py, so a build from a git
+	# worktree whose lib/ is symlinked compiles its own ext_mod (applied in the
+	# lvgl_micropython repo itself, like the SDL builder patch).
+	usercmod_patch="$codebasedir"/lvgl_micropython/esp32_user_c_modules_abspath.patch
+	if [ -f "$usercmod_patch" ]; then
+		echo "Applying lvgl_micropython esp32 USER_C_MODULES absolute path patch..."
+		apply_patch "$codebasedir"/lvgl_micropython "$usercmod_patch"
+	fi
+	# Frozen @micropython.native / viper code on RISC-V ESP32s (C3/C6/P4):
+	# 4-byte aligned machine-code arrays assembled without relaxation, so no
+	# function starts at an odd address (illegal instruction on first call).
+	# No effect on Xtensa targets.
+	riscv_native_patch="$codebasedir"/lvgl_micropython/esp32_riscv_frozen_native_align.patch
+	if [ -f "$riscv_native_patch" ]; then
+		echo "Applying lvgl_micropython esp32 RISC-V frozen native alignment patch..."
+		apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$riscv_native_patch"
+	fi
 
 	partition_size=3670016 # 3.5MiB is enough and is the maximum for the Fri3d 2024/2026 devices due to the partition table
 	flash_size="16"
