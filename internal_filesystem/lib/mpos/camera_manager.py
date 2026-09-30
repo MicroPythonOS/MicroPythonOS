@@ -304,10 +304,10 @@ class CameraManager:
             exposure_ctrl = prefs.get_bool("exposure_ctrl")
             if exposure_ctrl is not None:
                 cam.set_exposure_ctrl(exposure_ctrl)
-            else:
-                aec_value = prefs.get_int("aec_value")
-                if aec_value is not None:
-                    cam.set_aec_value(aec_value)
+                if not exposure_ctrl:
+                    aec_value = prefs.get_int("aec_value")
+                    if aec_value is not None:
+                        cam.set_aec_value(aec_value)
 
             # Mode-specific default comes from constructor
             ae_level = prefs.get_int("ae_level")
@@ -322,10 +322,10 @@ class CameraManager:
             gain_ctrl = prefs.get_bool("gain_ctrl")
             if gain_ctrl is not None:
                 cam.set_gain_ctrl(gain_ctrl)
-            else:
-                agc_gain = prefs.get_int("agc_gain")
-                if agc_gain is None:
-                    cam.set_agc_gain(agc_gain)
+                if not gain_ctrl:
+                    agc_gain = prefs.get_int("agc_gain")
+                    if agc_gain is not None:
+                        cam.set_agc_gain(agc_gain)
 
             gainceiling = prefs.get_int("gainceiling")
             if gainceiling is not None:
@@ -335,10 +335,10 @@ class CameraManager:
             whitebal = prefs.get_bool("whitebal")
             if whitebal is not None:
                 cam.set_whitebal(whitebal)
-            else:
-                wb_mode = prefs.get_int("wb_mode")
-                if wb_mode is not None:
-                    cam.set_wb_mode(wb_mode)
+                if not whitebal:
+                    wb_mode = prefs.get_int("wb_mode")
+                    if wb_mode is not None:
+                        cam.set_wb_mode(wb_mode)
 
             awb_gain = prefs.get_bool("awb_gain")
             if awb_gain is not None:
