@@ -156,6 +156,81 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
         # Should have slept 13 times
         self.assertEqual(len(mock_time.get_sleep_calls()), 13)
 
+    def test_connection_timeout_follows_connect_timeout_s(self):
+        """A board can lengthen the connection wait via CONNECT_TIMEOUT_S."""
+        mock_network = MockNetwork(connected=False)
+        mock_time = MockTime()
+
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        mock_wlan.isconnected = lambda: False
+
+        original = WifiService.CONNECT_TIMEOUT_S
+        WifiService.CONNECT_TIMEOUT_S = 25
+        try:
+            result = WifiService.attempt_connecting(
+                "TestSSID",
+                "testpass",
+                network_module=mock_network,
+                time_module=mock_time
+            )
+        finally:
+            WifiService.CONNECT_TIMEOUT_S = original
+
+        self.assertFalse(result)
+        self.assertEqual(len(mock_time.get_sleep_calls()), 25)
+
+    def test_slow_connection_succeeds_within_longer_timeout(self):
+        """A connection that only comes up after 18 s fails with the default
+        13 s wait but succeeds once the timeout is raised to 25 s."""
+        for timeout_s, expected in ((13, False), (25, True)):
+            mock_network = MockNetwork(connected=False)
+            mock_time = MockTime()
+
+            mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+            checks = [0]
+
+            def slow_isconnected():
+                checks[0] += 1
+                return checks[0] > 18  # up after ~18 one-second checks
+
+            mock_wlan.isconnected = slow_isconnected
+            mock_wlan.connect = lambda ssid, password: None
+
+            original = WifiService.CONNECT_TIMEOUT_S
+            WifiService.CONNECT_TIMEOUT_S = timeout_s
+            try:
+                result = WifiService.attempt_connecting(
+                    "TestSSID",
+                    "testpass",
+                    network_module=mock_network,
+                    time_module=mock_time
+                )
+            finally:
+                WifiService.CONNECT_TIMEOUT_S = original
+
+            self.assertEqual(result, expected, "timeout %s s" % timeout_s)
+
+    def test_connection_up_at_end_of_wait_is_kept(self):
+        """A connection that comes up during the last second of the wait
+        succeeds instead of being reported as a timeout and torn down."""
+        mock_network = MockNetwork(connected=False)
+        mock_time = MockTime()
+
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        timeout_s = WifiService.CONNECT_TIMEOUT_S
+        # Up once the full wait has been slept
+        mock_wlan.isconnected = lambda: len(mock_time.get_sleep_calls()) >= timeout_s
+
+        result = WifiService.attempt_connecting(
+            "TestSSID",
+            "testpass",
+            network_module=mock_network,
+            time_module=mock_time
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(len(mock_time.get_sleep_calls()), timeout_s)
+
     def test_connection_aborted_when_wifi_disabled(self):
         """Test connection aborts if WiFi is disabled during attempt."""
         mock_network = MockNetwork(connected=False)

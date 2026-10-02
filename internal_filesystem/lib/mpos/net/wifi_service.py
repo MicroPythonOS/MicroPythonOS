@@ -60,6 +60,12 @@ class WifiService:
     _temp_disable_state = None
     _needs_hotspot_restore = False
 
+    # Seconds attempt_connecting() waits for the connection before giving up.
+    # Boards whose radio can need longer raise it from their board file (e.g.
+    # the Waveshare ESP32-P4-WIFI6-Touch-LCD-4.3, whose ESP32-C6 can need up
+    # to 30 s to join on channel 6).
+    CONNECT_TIMEOUT_S = 13
+
     @staticmethod
     def _is_desktop_mode(network_module=None):
         return not HAS_NETWORK_MODULE and network_module is None
@@ -297,8 +303,9 @@ class WifiService:
 
             wlan.connect(ssid, password)
 
-            # Wait up to 13 seconds for connection
-            for i in range(13):
+            # Wait up to CONNECT_TIMEOUT_S seconds for the connection
+            timeout_s = WifiService.CONNECT_TIMEOUT_S
+            for i in range(timeout_s + 1):
                 if wlan.isconnected():
                     if __debug__: logger.debug("Connected to '%s' after %s seconds with IP: %s", ssid, i+1, wlan.ipconfig('addr4'))
 
@@ -317,8 +324,9 @@ class WifiService:
                     WifiService._restore_hotspot_if_needed(network_module=network_module)
                     return False
 
-                if __debug__: logger.debug("Waiting for connection, attempt %s/10", i+1)
-                time_mod.sleep(1)
+                if i < timeout_s:
+                    if __debug__: logger.debug("Waiting for connection, attempt %s/%s", i+1, timeout_s)
+                    time_mod.sleep(1)
 
             logger.info("Connection timeout for '%s'", ssid)
             # The driver would otherwise keep retrying in the background and
