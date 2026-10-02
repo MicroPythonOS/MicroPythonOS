@@ -207,4 +207,10 @@ if _es8311:
         )
     )
 
+# === WI-FI (ESP32-C6 co-processor over SDIO) ===
+# The C6 can need up to 30 s to join on channel 6, more than WifiService's
+# default 13 s (waveshareteam/ESP32-P4-WIFI6-Touch-LCD-4.3#7).
+from mpos import WifiService
+WifiService.CONNECT_TIMEOUT_S = 30
+
 if __debug__: logger.debug("waveshare_esp32_p4_wifi6_touch_lcd_4_3.py finished")
