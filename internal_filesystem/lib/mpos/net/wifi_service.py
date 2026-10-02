@@ -60,6 +60,12 @@ class WifiService:
     _temp_disable_state = None
     _needs_hotspot_restore = False
 
+    # Seconds attempt_connecting() waits for the connection before giving up.
+    # Boards whose radio can need longer raise it from their board file (e.g.
+    # the Waveshare ESP32-P4-WIFI6-Touch-LCD-4.3, whose ESP32-C6 can need up
+    # to 30 s to join on channel 6).
+    CONNECT_TIMEOUT_S = 13
+
     @staticmethod
     def _is_desktop_mode(network_module=None):
         return not HAS_NETWORK_MODULE and network_module is None
@@ -287,14 +293,19 @@ class WifiService:
         try:
             wlan = WifiService._get_sta_wlan(net)
 
-            if wlan.isconnected():
-                wlan.disconnect()
+            # Leave the current network, or cancel a retry loop still running
+            # from a dropped or failed connection: connect() fails while one is
+            # active (see _stop_connecting).
+            was_connected = wlan.isconnected()
+            WifiService._stop_connecting(wlan)
+            if was_connected:
                 time_mod.sleep(0.5)
 
             wlan.connect(ssid, password)
 
-            # Wait up to 13 seconds for connection
-            for i in range(13):
+            # Wait up to CONNECT_TIMEOUT_S seconds for the connection
+            timeout_s = WifiService.CONNECT_TIMEOUT_S
+            for i in range(timeout_s + 1):
                 if wlan.isconnected():
                     if __debug__: logger.debug("Connected to '%s' after %s seconds with IP: %s", ssid, i+1, wlan.ipconfig('addr4'))
 
@@ -313,15 +324,23 @@ class WifiService:
                     WifiService._restore_hotspot_if_needed(network_module=network_module)
                     return False
 
-                if __debug__: logger.debug("Waiting for connection, attempt %s/10", i+1)
-                time_mod.sleep(1)
+                if i < timeout_s:
+                    if __debug__: logger.debug("Waiting for connection, attempt %s/%s", i+1, timeout_s)
+                    time_mod.sleep(1)
 
             logger.info("Connection timeout for '%s'", ssid)
+            # The driver would otherwise keep retrying in the background and
+            # block the next scan and connect.
+            WifiService._stop_connecting(wlan)
             WifiService._restore_hotspot_if_needed(network_module=network_module)
             return False
 
         except Exception as e:
             logger.info("Connection error: %s", e)
+            try:
+                WifiService._stop_connecting(WifiService._get_sta_wlan(net))
+            except Exception:
+                pass
             WifiService._restore_hotspot_if_needed(network_module=network_module)
             return False
 
@@ -626,6 +645,22 @@ class WifiService:
         return list(WifiService.access_points.keys())
 
     @staticmethod
+    def _stop_connecting(wlan):
+        """Cancel whatever (re)connection attempt the Wi-Fi driver still runs.
+
+        MicroPython retries a dropped or failed connection forever by default
+        (config('reconnects') == -1). While that retry loop runs the driver
+        refuses scans (ESP-IDF answers ESP_ERR_WIFI_STATE; on the ESP32-P4,
+        whose radio is a hosted ESP32-C6, scan() then returns an empty list)
+        and a new connect() fails with "Wifi Internal Error". disconnect()
+        ends the loop; on an idle interface it is harmless.
+        """
+        try:
+            wlan.disconnect()
+        except Exception as e:
+            if __debug__: logger.debug("disconnect() to stop connecting: %s", e)
+
+    @staticmethod
     def _scan_networks_raw(network_module=None):
         """
         Internal method to scan for available WiFi networks and return raw data.
@@ -647,6 +682,9 @@ class WifiService:
         if not wlan.isconnected():
             wlan.active(False)
             wlan.active(True)
+            # A radio restart does not end a pending (re)connection loop, which
+            # would make the scan come back empty (see _stop_connecting).
+            WifiService._stop_connecting(wlan)
 
         return wlan.scan()
 
