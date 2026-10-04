@@ -609,6 +609,32 @@ class TestFontManagerFlagEmoji(GraphicalTestCase):
         self.assertIsInstance(src, lv.image_dsc_t)
         self.assertEqual(int(src.header.w), 1)
 
+    def test_imgfont_flag_sharing_first_letter_does_not_render_el_salvador(self):
+        """A flag that starts with S but is not SV does not render the El Salvador image."""
+        font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
+        sv_src = FontManager._imgfont_path_cb(
+            font, 0x1F1F8, 0x1F1FB, self._fake_offset_y_ptr(), None
+        )
+        self.assertTrue(int(sv_src.header.w) > 1)
+
+        for second_cp in (0x1F1EA, 0x1F1EC, 0x1F1E6, 0x1F1F0, 0x1F1F3):
+            src = FontManager._imgfont_path_cb(
+                font, 0x1F1F8, second_cp, self._fake_offset_y_ptr(), None
+            )
+            self.assertIsNotNone(src)
+            self.assertIsNot(
+                src,
+                sv_src,
+                "flag S{} rendered as SV".format(chr(ord("A") + second_cp - 0x1F1E6)),
+            )
+
+    def test_unpaired_regional_indicator_has_no_emoji_src(self):
+        """A lone regional indicator does not resolve to a flag image."""
+        self.assertIsNone(FontManager._get_emoji_src(0x1F1F8, 16))
+        self.assertTrue(
+            FontManager._lookup_emoji_src_by_key("1F1F8-1F1FB").endswith("/1F1F8-1F1FB.png")
+        )
+
     def test_el_salvador_flag_renders_in_label(self):
         """A label containing the El Salvador flag renders without crashing."""
         font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
