@@ -15,6 +15,9 @@ Builtin Apps:
 OS:
 - uaiowebsocket: stop trying to send a second pong on incoming pings (aiohttp already replies; the call raised and logged "Failed to send pong" on every relay ping, #299)
 
+Testing:
+- mpos_controller: on Linux, really kill orphaned lvgl_micropy_unix processes when a test run starts. The kernel cuts /proc/<pid>/comm to 15 characters ("lvgl_micropy_un"), so the exact name match never hit; a truncated comm is now confirmed against argv[0] from /proc/<pid>/cmdline
+
 0.19.0
 ======
 
