@@ -715,14 +715,15 @@ class WifiService:
         Scan for available WiFi networks.
 
         This method manages the wifi_busy flag internally. If WiFi is already busy,
-        returns an empty list. The busy flag is automatically cleared when scanning
+        returns None. The busy flag is automatically cleared when scanning
         completes (even on error).
 
         Args:
             network_module: Network module for dependency injection (testing)
 
         Returns:
-            list: List of SSIDs found, empty list if busy, or mock data on desktop
+            list: List of SSIDs found, or mock data on desktop
+            None: if another WiFi operation is in progress (nothing was scanned)
         """
         # Desktop mode - return mock SSIDs (no busy flag needed)
         if WifiService._is_desktop_mode(network_module):
@@ -730,11 +731,10 @@ class WifiService:
             return ["Home WiFi", "Pretty Fly for a Wi Fi", "Winternet is coming", "The Promised LAN"]
 
         # Check if already busy
-        if WifiService.wifi_busy:
-            if __debug__: logger.debug("scan_networks() - WiFi is busy, returning empty list")
-            return []
+        if not WifiService._acquire_busy():
+            if __debug__: logger.debug("scan_networks() - WiFi is busy, returning None")
+            return None
 
-        WifiService.wifi_busy = True
         try:
             networks = WifiService._scan_networks_raw(network_module)
             # Return unique SSIDs, filtering out empty ones and invalid lengths

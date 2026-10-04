@@ -1433,3 +1433,50 @@ class TestWifiServiceBusyFlag(unittest.TestCase):
         self.assertTrue(ap_wlan.active())
         self.assertTrue(WifiService.hotspot_enabled)
         self.assertFalse(WifiService.is_busy())
+
+    def test_scan_networks_returns_none_while_busy(self):
+        """scan_networks() reports busy as None, distinct from an empty scan."""
+        WifiService.wifi_busy = True
+        mock_network = MockNetwork(connected=False)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        scans = []
+
+        def mock_scan():
+            scans.append(True)
+            return [(b"Home", b"", 1, -50, 3, False)]
+
+        mock_wlan.scan = mock_scan
+
+        result = WifiService.scan_networks(network_module=mock_network)
+
+        self.assertIsNone(result)
+        self.assertEqual(scans, [])
+        self.assertTrue(WifiService.wifi_busy, "Must not release a flag another operation holds")
+
+    def test_scan_networks_returns_empty_list_when_nothing_found(self):
+        """scan_networks() returns [] when the scan finds no networks."""
+        mock_network = MockNetwork(connected=False)
+        mock_network.WLAN(mock_network.STA_IF)._scan_results = []
+
+        result = WifiService.scan_networks(network_module=mock_network)
+
+        self.assertEqual(result, [])
+        self.assertFalse(WifiService.is_busy())
+
+    def test_scan_networks_holds_busy_flag_while_scanning(self):
+        """scan_networks() claims wifi_busy for the scan and releases it."""
+        mock_network = MockNetwork(connected=False)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        busy_during_scan = []
+
+        def mock_scan():
+            busy_during_scan.append(WifiService.is_busy())
+            return [(b"Home", b"", 1, -50, 3, False)]
+
+        mock_wlan.scan = mock_scan
+
+        result = WifiService.scan_networks(network_module=mock_network)
+
+        self.assertEqual(result, ["Home"])
+        self.assertEqual(busy_during_scan, [True])
+        self.assertFalse(WifiService.is_busy())

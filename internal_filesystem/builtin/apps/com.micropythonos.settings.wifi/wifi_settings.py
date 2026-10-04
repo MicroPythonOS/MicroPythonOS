@@ -86,8 +86,12 @@ class WiFiSettings(Activity):
     def scan_networks_thread(self):
         if __debug__: logger.debug("scanning for Wi-Fi networks")
         try:
-            self.scanned_ssids = WifiService.scan_networks()
-            if __debug__: logger.debug("found networks: %s", self.scanned_ssids)
+            ssids = WifiService.scan_networks()
+            if ssids is None:
+                self.show_error(self.wifi_busy_text)
+            else:
+                self.scanned_ssids = ssids
+                if __debug__: logger.debug("found networks: %s", self.scanned_ssids)
         except Exception as e:
             logger.warning("scan failed: %s", e)
             self.show_error("Wi-Fi scan failed")

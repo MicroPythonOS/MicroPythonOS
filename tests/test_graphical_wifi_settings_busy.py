@@ -14,6 +14,8 @@ import mpos.ui
 from mpos import (
     AppManager,
     WifiService,
+    click_button,
+    verify_text_present,
     wait_for_render,
     wait_for_widget,
 )
@@ -101,6 +103,27 @@ class TestGraphicalWifiSettingsBusy(unittest.TestCase):
         self.assertNotEqual(self.activity.last_tried_ssid, "Office")
         self.assertTrue(WifiService.wifi_busy, "Must not release a flag another operation holds")
         self.assertFalse(self.activity.busy_connecting)
+        self._assert_scan_button_ready()
+
+    def test_rescan_while_busy_keeps_list_and_shows_busy(self):
+        """Rescan while busy keeps the networks on screen and says why."""
+        previous = list(self.activity.scanned_ssids)
+        WifiService.scan_networks = lambda network_module=None: None
+
+        self.assertTrue(click_button("Rescan"), "Could not find Rescan button")
+        self.assertTrue(
+            wait_for_widget(lambda: not self.activity.busy_scanning, timeout=10),
+            "Rescan did not finish",
+        )
+        wait_for_render(10)
+
+        self.assertEqual(self.activity.scanned_ssids, previous)
+        for ssid in previous:
+            self.assertTrue(
+                verify_text_present(lv.screen_active(), ssid),
+                "Network '%s' disappeared from the list" % ssid,
+            )
+        self._assert_busy_message_shown()
         self._assert_scan_button_ready()
 
 
