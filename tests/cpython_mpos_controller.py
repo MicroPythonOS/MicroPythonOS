@@ -18,8 +18,14 @@ Usage:
 """
 
 import sys
+import errno
 import os
+import pty
+import shutil
 import time
+import tempfile
+import threading
+import tty
 import argparse
 import subprocess
 
@@ -27,7 +33,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from scripts.mpos_controller import (
     MPOSController,
     AIOREPLClient,
+    ProcessBackend,
     END_MARKER,
+    _PTYStream,
     _count_usb_serial_devices,
     _mpremote_cmd,
 )
@@ -76,6 +84,7 @@ def run_tests(mpos, only=None, is_serial=False, cli_binary=None, serial_port=Non
         "appmanagement": test_app_management,
         "helpers": test_controller_helpers,
         "readuntil": test_read_until,
+        "timeouts": test_timeouts,
         "mpremoteport": test_mpremote_port,
         "assertguard": test_assert_guard,
     }
@@ -147,6 +156,196 @@ def test_read_until(mpos, is_serial=False, cli_binary=None, serial_port=None):
     check(
         out == b"no sentinel here\r\n",
         f"missing sentinel: timeout still returns the data: {out!r}",
+    )
+
+
+def _finishes_within(limit, fn):
+    box = {}
+
+    def run():
+        try:
+            box["result"] = fn()
+        except BaseException as e:
+            box["error"] = e
+
+    worker = threading.Thread(target=run, daemon=True)
+    t0 = time.monotonic()
+    worker.start()
+    worker.join(limit)
+    return not worker.is_alive(), box, time.monotonic() - t0
+
+
+class _ChattyStream:
+    def __init__(self, interval=0.001):
+        self.rfd, self.wfd = os.pipe()
+        self._stop = threading.Event()
+        self._feeder = threading.Thread(
+            target=self._feed, args=(interval,), daemon=True
+        )
+        self._feeder.start()
+
+    def _feed(self, interval):
+        while not self._stop.is_set():
+            try:
+                os.write(self.wfd, b"." * 4096)
+            except OSError:
+                return
+            time.sleep(interval)
+
+    def fileno(self):
+        return self.rfd
+
+    def read(self, n):
+        return os.read(self.rfd, n)
+
+    def write(self, data):
+        pass
+
+    def close(self):
+        self._stop.set()
+        self._feeder.join(1)
+        rfd, self.rfd = self.rfd, -1
+        os.close(rfd)
+        os.close(self.wfd)
+
+
+def _dying_pty(script):
+    master, slave = pty.openpty()
+    tty.setraw(slave)
+    child = subprocess.Popen(
+        ["sh", "-c", script],
+        stdin=slave, stdout=slave, stderr=slave, close_fds=True,
+    )
+    os.close(slave)
+    return _PTYStream(master), child
+
+
+def _close_pty(stream, child):
+    child.wait()
+    fd, stream.fd = stream.fd, -1
+    os.close(fd)
+
+
+def test_timeouts(mpos, is_serial=False, cli_binary=None, serial_port=None):
+    section("exec deadlines: a dead or never-quiet target cannot hang the runner")
+
+    def ignore_line(line):
+        pass
+
+    def is_crash(err):
+        return isinstance(err, OSError) and err.errno == errno.EIO
+
+    stream, child = _dying_pty("sleep 1.5")
+    try:
+        done, box, elapsed = _finishes_within(
+            10, lambda: AIOREPLClient(stream).read_until(b"never", timeout=5)
+        )
+    finally:
+        _close_pty(stream, child)
+    check(done and elapsed < 4, f"read_until returns once the process exits ({elapsed:.1f}s)")
+    check(is_crash(box.get("error")), f"read_until raises EIO on PTY EOF: {box!r}")
+
+    stream, child = _dying_pty("sleep 1.5")
+    try:
+        done, box, elapsed = _finishes_within(
+            10,
+            lambda: AIOREPLClient(stream).exec_streaming(
+                "pass", timeout=5, line_callback=ignore_line
+            ),
+        )
+    finally:
+        _close_pty(stream, child)
+    check(done and elapsed < 4, f"exec_streaming returns once the process exits ({elapsed:.1f}s)")
+    check(is_crash(box.get("error")), f"exec_streaming raises EIO on PTY EOF: {box!r}")
+
+    stream = _ChattyStream()
+    try:
+        done, box, elapsed = _finishes_within(
+            10, lambda: AIOREPLClient(stream).read_until(b"never", timeout=1)
+        )
+    finally:
+        stream.close()
+    check(done and elapsed < 6, f"read_until honours its timeout while output keeps arriving ({elapsed:.1f}s)")
+    check(
+        box.get("result", b"").startswith(b"."),
+        f"read_until still returns the data it read: {box!r}"[:200],
+    )
+
+    stream = _ChattyStream()
+    try:
+        done, box, elapsed = _finishes_within(
+            10,
+            lambda: AIOREPLClient(stream).exec_streaming(
+                "pass", timeout=1, line_callback=ignore_line
+            ),
+        )
+    finally:
+        stream.close()
+    check(done and elapsed < 6, f"exec_streaming honours its timeout while output keeps arriving ({elapsed:.1f}s)")
+    check(isinstance(box.get("error"), TimeoutError), f"exec_streaming raises TimeoutError: {box!r}")
+
+    workdir = tempfile.mkdtemp()
+    test_file = os.path.join(workdir, "test_hang.py")
+    with open(test_file, "w") as f:
+        f.write("import unittest\n")
+    backend = ProcessBackend(binary=sys.executable, cwd=workdir)
+
+    stream = _ChattyStream()
+    backend.repl = AIOREPLClient(stream)
+    try:
+        done, box, elapsed = _finishes_within(
+            10,
+            lambda: backend.run_test_file(
+                test_file, timeout=1, line_callback=ignore_line
+            ),
+        )
+    finally:
+        stream.close()
+    passed, timed_out_out = box.get("result", (True, b""))
+    check(done and elapsed < 6, f"run_test_file returns after its timeout ({elapsed:.1f}s)")
+    check(
+        not passed and b"TEST TIMED OUT" in timed_out_out,
+        f"run_test_file reports the timeout: {box!r}",
+    )
+
+    stream, child = _dying_pty("sleep 1.5; kill -SEGV $$")
+    backend.repl = AIOREPLClient(stream)
+    backend.proc = child
+    try:
+        done, box, elapsed = _finishes_within(
+            10,
+            lambda: backend.run_test_file(
+                test_file, timeout=5, line_callback=ignore_line
+            ),
+        )
+    finally:
+        backend.proc = None
+        _close_pty(stream, child)
+    passed, out = box.get("result", (True, b""))
+    check(done and elapsed < 4, f"run_test_file returns once the process dies ({elapsed:.1f}s)")
+    check(
+        not passed and b"PROCESS CRASHED" in out and b"SIGSEGV" in out,
+        f"run_test_file reports the crash and its signal: {box!r}",
+    )
+    shutil.rmtree(workdir)
+
+    from scripts import test_runner
+
+    attempts = []
+
+    def fake_run_one_test(*args, **kwargs):
+        attempts.append(args)
+        return False, timed_out_out
+
+    orig_run_one_test = test_runner._run_one_test
+    test_runner._run_one_test = fake_run_one_test
+    try:
+        ok, _ = test_runner._run_with_retry(test_file, "process", None, 1, None)
+    finally:
+        test_runner._run_one_test = orig_run_one_test
+    check(
+        not ok and len(attempts) == 1,
+        f"a timed-out test file fails without a retry ({len(attempts)} attempt(s))",
     )
 
 
@@ -585,7 +784,7 @@ for a in AppManager.get_app_list():
 def main():
     parser = argparse.ArgumentParser(description="Test MPOSController backends")
     parser.add_argument("--serial", help="Serial port for device backend")
-    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement,helpers,readuntil,mpremoteport")
+    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement,helpers,readuntil,timeouts,mpremoteport")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
     args = parser.parse_args()
 
