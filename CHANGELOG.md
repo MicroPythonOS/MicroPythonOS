@@ -16,6 +16,9 @@ Builtin Apps:
 OS:
 - uaiowebsocket: stop trying to send a second pong on incoming pings (aiohttp already replies; the call raised and logged "Failed to send pong" on every relay ping, #299)
 
+Testing:
+- mpos_controller: on macOS, only kill orphaned MPOS desktop processes (parent gone or reparented to launchd) when a test run starts, instead of `killall -9` on every lvgl_micropy_macOS, which crashed concurrent test runs and open desktop apps
+
 0.19.0
 ======
 
