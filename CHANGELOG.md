@@ -19,6 +19,7 @@ OS:
 
 Testing:
 - mpos_controller: on macOS, only kill orphaned MPOS desktop processes (parent gone or reparented to launchd) when a test run starts, instead of `killall -9` on every lvgl_micropy_macOS, which crashed concurrent test runs and open desktop apps
+- mpos_controller: on Linux, really kill orphaned lvgl_micropy_unix processes when a test run starts. The kernel cuts /proc/<pid>/comm to 15 characters ("lvgl_micropy_un"), so the exact name match never hit; a truncated comm is now confirmed against argv[0] from /proc/<pid>/cmdline
 
 0.19.0
 ======

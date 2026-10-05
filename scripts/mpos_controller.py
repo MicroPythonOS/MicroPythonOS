@@ -663,6 +663,8 @@ class AIOREPLClient:
 class ProcessBackend:
     """Spawn ``lvgl_micropy_unix`` via PTY and control through aioREPL."""
 
+    _PROC_COMM_LEN = 15
+
     def __init__(self, binary=None, heapsize="32M", cwd=None, boot_module="main"):
         self.binary = binary or _resolve_binary()
         self.heapsize = heapsize
@@ -738,8 +740,16 @@ class ProcessBackend:
                     comm = f.read().strip()
             except Exception:
                 continue
-            if comm != name:
+            if comm != name[:ProcessBackend._PROC_COMM_LEN]:
                 continue
+            if comm != name:
+                try:
+                    with open("/proc/{}/cmdline".format(pid), "rb") as f:
+                        argv0 = f.read().split(b"\0", 1)[0]
+                except Exception:
+                    continue
+                if os.path.basename(os.fsdecode(argv0)) != name:
+                    continue
             try:
                 ppid = None
                 with open("/proc/{}/status".format(pid), "r") as f:
