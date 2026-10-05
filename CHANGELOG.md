@@ -8,6 +8,7 @@ Frameworks:
 - AudioManager/WAVStream: opt-in warm output (Output(warm_ms=N)) keeps the I2S clocks running and the codec unmuted between clips so back-to-back playback doesn't click on codecs such as the ES8311; released after N ms idle, by WAVStream.release_warm(), or before I2S recording
 - InputActivity: optional `selected_callback(value)` setting key for radiobuttons/dropdown, fired on every pick before Save (re-tapping the active radio fires again) so pickers can preview a choice live, e.g. play a sound effect. `changed_callback` semantics unchanged
 - SettingsActivity: fix a TypeError ("can't convert 'int' object to str implicitly", surfaced as the "app threw an exception" dialog) when a setting's stored value is a number instead of a string
+- CameraManager: apply the Manual Exposure, Manual Gain and WB Mode camera settings when their Auto switch is turned off. They were never applied, because the Auto switches always have a value (defaults), and the manual gain check was also inverted
 
 Builtin Apps:
 - Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
@@ -16,6 +17,7 @@ OS:
 - uaiowebsocket: stop trying to send a second pong on incoming pings (aiohttp already replies; the call raised and logged "Failed to send pong" on every relay ping, #299)
 
 Testing:
+- mpos_controller: on macOS, only kill orphaned MPOS desktop processes (parent gone or reparented to launchd) when a test run starts, instead of `killall -9` on every lvgl_micropy_macOS, which crashed concurrent test runs and open desktop apps
 - mpos_controller: on Linux, really kill orphaned lvgl_micropy_unix processes when a test run starts. The kernel cuts /proc/<pid>/comm to 15 characters ("lvgl_micropy_un"), so the exact name match never hit; a truncated comm is now confirmed against argv[0] from /proc/<pid>/cmdline
 
 0.19.0

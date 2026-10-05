@@ -674,17 +674,47 @@ class ProcessBackend:
             return False
 
     @staticmethod
+    def _ps(*args):
+        try:
+            return subprocess.run(
+                ["ps"] + list(args),
+                capture_output=True, text=True, timeout=5,
+            ).stdout
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _orphaned_pids_ps(name):
+        own_pid = os.getpid()
+        pids = []
+        for line in ProcessBackend._ps("-axo", "pid=,ppid=,comm=").splitlines():
+            parts = line.split(None, 2)
+            if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit():
+                continue
+            pid, ppid = int(parts[0]), int(parts[1])
+            comm = os.path.basename(parts[2].strip())
+            is_shell = comm in ("sh", "bash", "zsh", "dash")
+            if pid == own_pid or (comm != name and not is_shell):
+                continue
+            if ppid != 1 and ProcessBackend._is_alive(ppid):
+                continue
+            if is_shell:
+                argv = ProcessBackend._ps("-o", "args=", "-p", str(pid)).split()
+                comm = os.path.basename(argv[1]) if len(argv) > 1 else ""
+            if comm == name:
+                pids.append(pid)
+        return pids
+
+    @staticmethod
     def _kill_orphaned(name):
-        """Kill processes called `name` whose parent no longer exists (Linux)."""
+        """Kill processes called `name` whose parent no longer exists."""
         if not os.path.isdir("/proc"):
-            # Non-Linux fallback: kill by name
-            try:
-                subprocess.run(
-                    ["killall", "-9", name],
-                    capture_output=True, timeout=5,
-                )
-            except Exception:
-                pass
+            # Non-Linux fallback: read the process table from ps
+            for pid in ProcessBackend._orphaned_pids_ps(name):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except Exception:
+                    pass
             return
         own_pid = os.getpid()
         for entry in os.listdir("/proc"):
