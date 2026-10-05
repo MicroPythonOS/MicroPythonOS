@@ -848,8 +848,13 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
 
         if passed:
             return True, out
+        if "TEST TIMED OUT" in out_str:
+            print(out_str.strip())
+            return False, out
         if "TEST WAS A FAILURE" in out_str:
             return False, out
+        if "PROCESS CRASHED" in out_str:
+            print(out_str.strip())
         print("Test crashed — retrying...")
     return False, out
 

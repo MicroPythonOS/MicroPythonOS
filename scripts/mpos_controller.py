@@ -14,6 +14,7 @@ Usage:
 
 import ast
 import atexit
+import errno
 import os
 import pty
 import select
@@ -387,7 +388,10 @@ class _PTYStream:
         self.fd = fd
 
     def read(self, n=1):
-        return os.read(self.fd, n)
+        data = os.read(self.fd, n)
+        if not data:
+            raise OSError(errno.EIO, "PTY closed: the MicroPython process exited")
+        return data
 
     def write(self, data):
         os.write(self.fd, data)
@@ -416,6 +420,12 @@ class _SerialStream:
 
 SENTINEL = "~~~MPOS~~~"
 END_MARKER = "~~~MPOS_END~~~"
+
+
+def _timed_out_message(timeout):
+    return ("\nTEST TIMED OUT — no result within {}s (--timeout): the test "
+            "hung. The last output line above shows where it stopped.\n"
+            .format(timeout))
 
 
 class AIOREPLClient:
@@ -465,9 +475,9 @@ class AIOREPLClient:
         while True:
             if data.endswith(endings):
                 break
+            if timeout is not None and time.monotonic() - t0 > timeout:
+                break
             if not self._data_waiting(0.01):
-                if timeout is not None and time.monotonic() - t0 > timeout:
-                    break
                 continue
             chunk = self.stream.read(1)
             if not chunk:
@@ -603,9 +613,11 @@ class AIOREPLClient:
         while True:
             if data.endswith(endings):
                 break
+            if timeout is not None and time.monotonic() - t0 > timeout:
+                raise TimeoutError(
+                    "{} not seen within {}s".format(END_MARKER, timeout)
+                )
             if not self._data_waiting(0.01):
-                if timeout is not None and time.monotonic() - t0 > timeout:
-                    break
                 continue
             chunk = self.stream.read(1)
             if not chunk:
@@ -897,6 +909,20 @@ class ProcessBackend:
                 pass
             self.master_fd = None
 
+    def _exit_status(self):
+        if self.proc is None:
+            return "exit status unknown"
+        try:
+            returncode = self.proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            return "process still running"
+        if returncode < 0:
+            try:
+                return "killed by {}".format(signal.Signals(-returncode).name)
+            except ValueError:
+                return "killed by signal {}".format(-returncode)
+        return "exit status {}".format(returncode)
+
     def restart(self):
         """Stop and restart the backend."""
         self.stop()
@@ -1134,8 +1160,11 @@ for s in t:
             out_str = out.decode("utf-8", errors="replace")
             passed = "TEST WAS A SUCCESS" in out_str
             return passed, out
+        except TimeoutError:
+            return False, _timed_out_message(timeout).encode()
         except OSError:
-            msg = ("\nPROCESS CRASHED — MicroPython binary died (PTY closed). "
+            msg = ("\nPROCESS CRASHED — MicroPython binary died (PTY closed, "
+                   "{}). ".format(self._exit_status()) +
                    "Check for segfault (exit 139), "
                    "import error, or LVGL misuse (passing non-LVGL object "
                    "to widget constructor). "
@@ -1619,6 +1648,8 @@ for s in t:
                 out_str = out.decode("utf-8", errors="replace")
                 passed = "TEST WAS A SUCCESS" in out_str
                 return passed, out
+            except TimeoutError:
+                return False, _timed_out_message(timeout).encode()
             except Exception as e:
                 last_err = e
                 time.sleep(2)
