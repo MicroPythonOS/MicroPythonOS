@@ -13,6 +13,7 @@ import lvgl as lv
 import mpos.ui
 from mpos import (
     AppManager,
+    AudioManager,
     click_label,
     wait_for_text,
 )
@@ -52,6 +53,7 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
 
     def tearDown(self):
         """Go back to the launcher and remove the temporary files."""
+        AudioManager.stop()
         # Give each screen transition time to finish: the LVGL screen animations
         # are 500ms, so 300ms is too tight on slow CI runners. Use a deadline
         # loop and wait 600ms after each back_screen() so the next one starts

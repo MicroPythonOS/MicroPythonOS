@@ -365,21 +365,18 @@ class DesktopRTTTLStream(RTTTLStream):
             file.write((16).to_bytes(2, "little"))
             file.write(b"data\x00\x00\x00\x00")
 
-            iteration = 0
-            while self._keep_running and iteration < self._repeat_count:
-                iteration += 1
-                self.tune_idx = 0
-                for frequency, duration_ms in self._notes():
-                    if not self._keep_running:
-                        break
-                    tone_samples = int(sample_rate * duration_ms * 0.9 / 1000)
-                    silence_samples = int(sample_rate * duration_ms * 0.1 / 1000)
-                    if frequency > 0:
-                        self._write_samples(file, frequency, tone_samples, sample_rate)
-                    else:
-                        self._write_silence(file, tone_samples)
-                    self._write_silence(file, silence_samples)
-                    data_size += (tone_samples + silence_samples) * 2
+            self.tune_idx = 0
+            for frequency, duration_ms in self._notes():
+                if not self._keep_running:
+                    break
+                tone_samples = int(sample_rate * duration_ms * 0.9 / 1000)
+                silence_samples = int(sample_rate * duration_ms * 0.1 / 1000)
+                if frequency > 0:
+                    self._write_samples(file, frequency, tone_samples, sample_rate)
+                else:
+                    self._write_silence(file, tone_samples)
+                self._write_silence(file, silence_samples)
+                data_size += (tone_samples + silence_samples) * 2
 
             file.seek(4)
             file.write((data_size + 36).to_bytes(4, "little"))
@@ -392,18 +389,16 @@ class DesktopRTTTLStream(RTTTLStream):
         self._is_playing = True
         try:
             self._render()
-            if not self._keep_running:
-                if self.on_complete:
-                    self.on_complete("Finished: %s" % self.name)
-                return
             self._wav_stream = WAVStream(
                 file_path=self._temp_path,
                 stream_type=self.stream_type,
                 volume=self.volume,
                 i2s_pins={"ws": 0, "sd": 0},
                 on_complete=None,
+                repeat_count=self._repeat_count,
             )
-            self._wav_stream.play()
+            if self._keep_running:
+                self._wav_stream.play()
             if self.on_complete:
                 self.on_complete("Finished: %s" % self.name)
         except Exception as e:
@@ -426,3 +421,8 @@ class DesktopRTTTLStream(RTTTLStream):
         self.volume = vol
         if self._wav_stream:
             self._wav_stream.set_volume(vol)
+
+    def set_repeat(self, count):
+        super().set_repeat(count)
+        if self._wav_stream:
+            self._wav_stream.set_repeat(self._repeat_count)
