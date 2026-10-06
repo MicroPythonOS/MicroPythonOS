@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+0.20.0
+======
+
 Board Support:
 - Add Waveshare ESP32-P4-WIFI6-Touch-LCD-4.3: first esp32p4 target, MIPI-DSI display, touch, speaker
 - Add Waveshare ESP32-S3-Touch-LCD-1.54: 1.54" 240x240 ST7789, CST816S touch, ES8311 speaker + ES7210 microphone, TF card slot
@@ -14,7 +17,7 @@ Frameworks:
 - CameraManager: apply the Manual Exposure, Manual Gain and WB Mode camera settings when their Auto switch is turned off. They were never applied, because the Auto switches always have a value (defaults), and the manual gain check was also inverted
 
 Builtin Apps:
-- Optimize all PNG icon sizes
+- Optimize PNGs to reduce build size by 7KiB
 - Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
 
 OS:
