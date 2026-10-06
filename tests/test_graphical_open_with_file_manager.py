@@ -13,6 +13,7 @@ import lvgl as lv
 import mpos.ui
 from mpos import (
     AppManager,
+    AudioManager,
     click_label,
     wait_for_text,
 )
@@ -33,6 +34,11 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
 
     def setUp(self):
         """Create a temporary directory with sample files."""
+        import mpos.audio.stream_wav as stream_wav_module
+
+        self._stream_wav_module = stream_wav_module
+        self._orig_detect = stream_wav_module._detect_desktop_player
+        stream_wav_module._detect_desktop_player = lambda: None
         self.test_path = TEST_DIR
         # Be robust against leftover directories from interrupted runs.
         try:
@@ -52,6 +58,8 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
 
     def tearDown(self):
         """Go back to the launcher and remove the temporary files."""
+        AudioManager.stop()
+        self._stream_wav_module._detect_desktop_player = self._orig_detect
         # Give each screen transition time to finish: the LVGL screen animations
         # are 500ms, so 300ms is too tight on slow CI runners. Use a deadline
         # loop and wait 600ms after each back_screen() so the next one starts

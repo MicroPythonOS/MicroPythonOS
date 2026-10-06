@@ -1,4 +1,5 @@
 # Unit tests for RTTTL parser (RTTTLStream)
+import os
 import unittest
 import sys
 
@@ -238,3 +239,116 @@ class TestRTTTL(unittest.TestCase):
             self.assertEqual(len(tone_calls), expected_tones)
         finally:
             stream_module.time = real_time
+
+
+@unittest.skipIf(sys.platform == "esp32", "DesktopRTTTLStream is the desktop renderer")
+class TestDesktopRTTTLStream(unittest.TestCase):
+    """DesktopRTTTLStream renders one pass and lets WAVStream repeat it."""
+
+    TUNE = "Test:d=16,o=5,b=240:c,e,g"
+
+    def setUp(self):
+        import mpos.audio.stream_wav as stream_wav
+        from mpos.audio.stream_rtttl import DesktopRTTTLStream
+
+        self.stream_wav = stream_wav
+        self.real_wav_stream = stream_wav.WAVStream
+        self.wav_streams = []
+        self.on_construct = None
+        self.on_play = None
+        test = self
+
+        class _FakeWAVStream:
+            def __init__(self, file_path, repeat_count=1, **kwargs):
+                self.file_path = file_path
+                self.repeat_count = repeat_count
+                self.file_size = os.stat(file_path)[6]
+                self.played = False
+                self.stopped = False
+                test.wav_streams.append(self)
+                if test.on_construct:
+                    test.on_construct()
+
+            def play(self):
+                self.played = True
+                if test.on_play:
+                    test.on_play()
+
+            def stop(self):
+                self.stopped = True
+
+            def set_repeat(self, count):
+                self.repeat_count = count
+
+            def set_volume(self, vol):
+                pass
+
+        class _BoundedDesktopRTTTLStream(DesktopRTTTLStream):
+            max_render_bytes = 50_000
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.rendered_bytes = 0
+
+            def _count(self, sample_count):
+                self.rendered_bytes += sample_count * 2
+                if self.rendered_bytes > self.max_render_bytes:
+                    self.stop()
+
+            def _write_samples(self, file, frequency, sample_count, sample_rate):
+                DesktopRTTTLStream._write_samples(file, frequency, sample_count, sample_rate)
+                self._count(sample_count)
+
+            def _write_silence(self, file, sample_count):
+                DesktopRTTTLStream._write_silence(file, sample_count)
+                self._count(sample_count)
+
+        stream_wav.WAVStream = _FakeWAVStream
+        self.stream_class = _BoundedDesktopRTTTLStream
+
+    def tearDown(self):
+        self.stream_wav.WAVStream = self.real_wav_stream
+
+    def _play(self, repeat_count):
+        messages = []
+        stream = self.stream_class(self.TUNE, 0, 50, messages.append)
+        stream.set_repeat(repeat_count)
+        stream.play()
+        return stream, messages
+
+    def test_endless_repeat_renders_one_pass(self):
+        """An endless repeat count renders one pass and hands the count to WAVStream."""
+        self._play(1)
+        self.assertEqual(len(self.wav_streams), 1)
+        one_pass_size = self.wav_streams[0].file_size
+
+        stream, messages = self._play(1_000_000)
+
+        self.assertEqual(len(self.wav_streams), 2, "WAVStream never started: the whole repeat was rendered first")
+        wav = self.wav_streams[1]
+        self.assertEqual(wav.file_size, one_pass_size)
+        self.assertEqual(wav.repeat_count, 1_000_000)
+        self.assertTrue(wav.played)
+        self.assertEqual(messages, ["Finished: Test"])
+
+    def test_set_repeat_forwards_to_wav_stream(self):
+        """Unchecking Repeat while playing must reach the WAVStream doing the repeating."""
+        streams = []
+        self.on_play = lambda: streams[0].set_repeat(1)
+        streams.append(self.stream_class(self.TUNE, 0, 50, None))
+        streams[0].set_repeat(1_000_000)
+        streams[0].play()
+
+        self.assertEqual(len(self.wav_streams), 1)
+        self.assertEqual(self.wav_streams[0].repeat_count, 1)
+
+    def test_stop_before_wav_stream_plays(self):
+        """A stop() that lands while the WAVStream is being created must stop playback."""
+        streams = []
+        self.on_construct = lambda: streams[0].stop()
+        streams.append(self.stream_class(self.TUNE, 0, 50, None))
+        streams[0].set_repeat(1_000_000)
+        streams[0].play()
+
+        self.assertEqual(len(self.wav_streams), 1)
+        self.assertFalse(self.wav_streams[0].played)

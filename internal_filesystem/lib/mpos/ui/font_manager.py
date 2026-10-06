@@ -433,7 +433,7 @@ lips,🫦
 
             # Also register under the base key (without trailing modifiers)
             # so a plain codepoint lookup (e.g. U+203C) finds "203C-FE0F.png".
-            if base_key not in emoji_map:
+            if base_key not in emoji_map and not cls._is_regional_indicator(codepoints[0]):
                 emoji_map[base_key] = _EMOJI_SRC_PREFIX + name
 
         if __debug__: logger.debug("loaded %s emoji png mappings from %s", len(emoji_map), _EMOJI_DIR_PATH)
@@ -593,7 +593,7 @@ lips,🫦
                 if candidate_key in cls._emoji_sequence_lookup_cache:
                     src = cls._emoji_sequence_lookup_cache[candidate_key]
                 else:
-                    src = cls._lookup_emoji_src_by_key(candidate_key)
+                    src = (cls._emoji_map or {}).get(candidate_key)
                     cls._emoji_sequence_lookup_cache[candidate_key] = src
 
                 if src is not None:

@@ -24,7 +24,8 @@ To keep it easy to manage/sync with upsteam lvgl_micropython, we keep the change
 
 **Run:** `./scripts/test_runner.py tests/<test_file> tests/<other_test_file> [--ondevice] [--port <port>] [--reset]` 
 **All tests:** `make tests` (20–35 min). CI runs them on push. **Syntax:** `make syntax-tests`  
-**CPython controller tests:** `python3 tests/cpython_mpos_controller.py` (not run by test_runner.py).  
+**CPython controller tests:** `python3 tests/cpython_mpos_controller.py`, `python3 tests/cpython_kill_orphaned.py`, `python3 tests/cpython_kill_orphaned_linux.py` (not run by test_runner.py).  
+**Prefs wipe:** `test_runner.py` deletes `internal_filesystem/prefs/` (all app settings) in the checkout it runs from (`_cleanup_config`). Run tests from a worktree if that checkout holds settings you need.  
 **Details:** `tests/README.md`
 
 **Options:**  
