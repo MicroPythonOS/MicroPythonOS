@@ -2,6 +2,7 @@ Future release (next version)
 =====
 
 Board Support:
+- Add Waveshare ESP32-P4-WIFI6-Touch-LCD-4.3: first esp32p4 target, MIPI-DSI display, touch, speaker
 - Waveshare ESP32-S3-Touch-LCD-3.5: keep the ES8311 speaker output warm for 30 s after a clip (warm_ms) so rapid back-to-back clips play without a click
 
 Frameworks:
@@ -12,6 +13,7 @@ Frameworks:
 - CameraManager: apply the Manual Exposure, Manual Gain and WB Mode camera settings when their Auto switch is turned off. They were never applied, because the Auto switches always have a value (defaults), and the manual gain check was also inverted
 
 Builtin Apps:
+- Optimize all PNG icon sizes
 - Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
 
 OS:
