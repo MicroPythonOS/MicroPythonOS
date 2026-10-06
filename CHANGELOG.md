@@ -2,18 +2,27 @@ Future release (next version)
 =====
 
 Board Support:
-- ESP32-S3: new board definition for the Waveshare ESP32-S3-Touch-LCD-1.54 (1.54" 240x240 ST7789, CST816S touch, ES8311 speaker + ES7210 microphone, TF card slot), with automatic board detection
-- New `drivers/codec/es7210.py` driver for the ES7210 4-channel microphone ADC
-
-Builtin Apps:
-- Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
+- Add Waveshare ESP32-P4-WIFI6-Touch-LCD-4.3: first esp32p4 target, MIPI-DSI display, touch, speaker
+- Add Waveshare ESP32-S3-Touch-LCD-1.54: 1.54" 240x240 ST7789, CST816S touch, ES8311 speaker + ES7210 microphone, TF card slot
+- Waveshare ESP32-S3-Touch-LCD-3.5: keep the ES8311 speaker output warm for 30 s after a clip (warm_ms) so rapid back-to-back clips play without a click
 
 Frameworks:
+- AudioManager (desktop): RTTTL playback renders one pass of the tune and lets WAVStream repeat it, so a .rtttl file opened in the Music Player (Repeat is on by default) plays straight away instead of silently pre-rendering 1,000,000 repeats into /tmp at ~10 MB/s; set_repeat() now reaches the playing stream
+- AudioManager/WAVStream: opt-in warm output (Output(warm_ms=N)) keeps the I2S clocks running and the codec unmuted between clips so back-to-back playback doesn't click on codecs such as the ES8311; released after N ms idle, by WAVStream.release_warm(), or before I2S recording
 - InputActivity: optional `selected_callback(value)` setting key for radiobuttons/dropdown, fired on every pick before Save (re-tapping the active radio fires again) so pickers can preview a choice live, e.g. play a sound effect. `changed_callback` semantics unchanged
 - SettingsActivity: fix a TypeError ("can't convert 'int' object to str implicitly", surfaced as the "app threw an exception" dialog) when a setting's stored value is a number instead of a string
+- CameraManager: apply the Manual Exposure, Manual Gain and WB Mode camera settings when their Auto switch is turned off. They were never applied, because the Auto switches always have a value (defaults), and the manual gain check was also inverted
+
+Builtin Apps:
+- Optimize all PNG icon sizes
+- Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
 
 OS:
 - uaiowebsocket: stop trying to send a second pong on incoming pings (aiohttp already replies; the call raised and logged "Failed to send pong" on every relay ping, #299)
+
+Testing:
+- mpos_controller: on macOS, only kill orphaned MPOS desktop processes (parent gone or reparented to launchd) when a test run starts, instead of `killall -9` on every lvgl_micropy_macOS, which crashed concurrent test runs and open desktop apps
+- mpos_controller: on Linux, really kill orphaned lvgl_micropy_unix processes when a test run starts. The kernel cuts /proc/<pid>/comm to 15 characters ("lvgl_micropy_un"), so the exact name match never hit; a truncated comm is now confirmed against argv[0] from /proc/<pid>/cmdline
 
 0.19.0
 ======

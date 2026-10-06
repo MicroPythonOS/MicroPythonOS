@@ -129,6 +129,17 @@ jobs:
         run: |
           ./scripts/test_runner.py --timeout 600
 
+      - name: Upload MicroPythonOS crash reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos-crash-reports
+          path: |
+            ~/Library/Logs/DiagnosticReports/lvgl_micropy_macOS*
+            /Library/Logs/DiagnosticReports/lvgl_micropy_macOS*
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Restore native/viper decorators
         if: always()
         run: |

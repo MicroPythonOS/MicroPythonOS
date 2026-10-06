@@ -305,3 +305,14 @@ class TestAudioManagerFindMethods(unittest.TestCase):
 
     def test_find_input_by_kind_not_found(self):
         self.assertIsNone(AudioManager.find_input_by_kind("pdmi2s"))
+
+
+class TestOutputWarmMs(unittest.TestCase):
+
+    def test_default_is_zero(self):
+        out = AudioManager.Output(name="spk", kind="i2s", i2s_pins={"ws": 1, "sd": 2})
+        self.assertEqual(out.warm_ms, 0)
+
+    def test_value_is_stored(self):
+        out = AudioManager.Output(name="spk", kind="i2s", i2s_pins={"ws": 1, "sd": 2}, warm_ms=30000)
+        self.assertEqual(out.warm_ms, 30000)

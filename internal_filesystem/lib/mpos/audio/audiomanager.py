@@ -48,7 +48,13 @@ class AudioManager:
             preferred_sample_rate=None,
             on_open=None,
             on_close=None,
+            warm_ms=0,
         ):
+            """warm_ms: keep the I2S clocks running and the codec unmuted for this
+            many ms after a clip ends, so back-to-back clips start click-free
+            (codecs such as the ES8311 click on every clock restart / unmute).
+            0 (default) closes the output after every clip. The warm output is
+            also released by WAVStream.release_warm() and before recording."""
             if kind not in ("i2s", "buzzer"):
                 raise ValueError("Output.kind must be 'i2s' or 'buzzer'")
             if channels not in (1, 2):
@@ -60,6 +66,7 @@ class AudioManager:
             self.preferred_sample_rate = preferred_sample_rate
             self.on_open = on_open
             self.on_close = on_close
+            self.warm_ms = int(warm_ms or 0)
 
             if kind == "i2s":
                 if not i2s_pins:
@@ -820,6 +827,7 @@ class Player:
             requested_sample_rate=self.sample_rate,
             on_open=getattr(self.output, "on_open", None),
             on_close=getattr(self.output, "on_close", None),
+            warm_ms=getattr(self.output, "warm_ms", 0),
             repeat_count=self._repeat_count,
         )
         self._stream.play()

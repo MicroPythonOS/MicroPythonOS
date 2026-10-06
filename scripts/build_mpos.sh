@@ -113,6 +113,7 @@ if [ -z "$target" ]; then
     echo "Example: $0 esp32-small"
     echo "Example: $0 esp32s3"
     echo "Example: $0 esp32s3 --usb (USB host support: display adapters + HID, ESP32-S3 USB host)"
+    echo "Example: $0 esp32p4 (ESP32-P4 + ESP32-C6 Wi-Fi co-processor, e.g. Waveshare ESP32-P4-WIFI6-Touch-LCD boards)"
     echo "Example: $0 unphone"
     echo "Example: $0 lilygo_t4"
     echo "Example: $0 clean"
@@ -154,6 +155,17 @@ if ! grep adc_mic "$idfile"; then
         echo '  espressif/adc_mic: "*"' >> "$idfile"
 else
 	echo "No need to add adc_mic to $idfile"
+fi
+
+echo "Check need to add esp_new_jpeg to $idfile"
+if ! grep esp_new_jpeg "$idfile"; then
+	echo "Adding esp_new_jpeg to $idfile"
+        echo '  espressif/esp_new_jpeg:
+    rules:
+      - if: "target in [esp32, esp32s2, esp32s3, esp32p4]"
+    version: "*"' >> "$idfile"
+else
+	echo "No need to add esp_new_jpeg to $idfile"
 fi
 
 echo "Resulting $idfile file:"
@@ -300,8 +312,9 @@ if [ ! -f "$codebasedir"/lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cr
 fi
 
 echo "Refreshing freezefs..."
-if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" -o "$target" == "esp32p4" ]; then
 	builtin_march="xtensawin"
+	[ "$target" == "esp32p4" ] && builtin_march="rv32imc"  # ESP32-P4 is RISC-V
 else
 	case "$(uname -m)" in
 		x86_64|i686|i386|armv6l|riscv64) builtin_march="host" ;;
@@ -324,10 +337,11 @@ if [ "$target" != "web" ]; then
 	reset_web_port_changes
 fi
 
-if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" -o "$target" == "esp32p4" ]; then
 	# Cleanup compiled .py files, otherwise if one from lib/ gets delected, the old .mpy might be used
 	rm -r lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/frozen_mpy 2>/dev/null
 	rm -r lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/frozen_mpy 2>/dev/null
+	rm -r lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_P4-C6_WIFI/frozen_mpy 2>/dev/null
 
 	echo "Applying lvgl_micropython esp32 inisetup warning patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_inisetup_warn_and_format.patch
@@ -337,6 +351,24 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_country_japan.patch
 	echo "Applying lvgl_micropython esp32 network wlan config country patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_config_country.patch
+	# Guarded: older pinned lvgl_micropython SHAs don't ship these patches yet.
+	# Absolute USER_C_MODULES path in builder/esp32.py, so a build from a git
+	# worktree whose lib/ is symlinked compiles its own ext_mod (applied in the
+	# lvgl_micropython repo itself, like the SDL builder patch).
+	usercmod_patch="$codebasedir"/lvgl_micropython/esp32_user_c_modules_abspath.patch
+	if [ -f "$usercmod_patch" ]; then
+		echo "Applying lvgl_micropython esp32 USER_C_MODULES absolute path patch..."
+		apply_patch "$codebasedir"/lvgl_micropython "$usercmod_patch"
+	fi
+	# Frozen @micropython.native / viper code on RISC-V ESP32s (C3/C6/P4):
+	# 4-byte aligned machine-code arrays assembled without relaxation, so no
+	# function starts at an odd address (illegal instruction on first call).
+	# No effect on Xtensa targets.
+	riscv_native_patch="$codebasedir"/lvgl_micropython/esp32_riscv_frozen_native_align.patch
+	if [ -f "$riscv_native_patch" ]; then
+		echo "Applying lvgl_micropython esp32 RISC-V frozen native alignment patch..."
+		apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$riscv_native_patch"
+	fi
 
 	partition_size=3670016 # 3.5MiB is enough and is the maximum for the Fri3d 2024/2026 devices due to the partition table
 	flash_size="16"
@@ -359,6 +391,21 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		partition_size=3737600 # esp32 builds are ~65 KiB bigger than esp32s3 builds
 		flash_size="4"
 		otasupport="" # too small for 2 OTA partitions + internal storage
+	elif [ "$target" == "esp32p4" ]; then
+		# ESP32-P4 (RISC-V) with an ESP32-C6 Wi-Fi/BLE co-processor over SDIO
+		# (esp_hosted + esp_wifi_remote, pulled in by MicroPython's C6_WIFI
+		# variant). Boards so far ship 32 MB flash and 32 MB PSRAM, so the
+		# app partitions get 4 MiB each instead of the 3.5 MiB legacy size.
+		BOARD=ESP32_GENERIC_P4
+		BOARD_VARIANT=C6_WIFI
+		partition_size=4194304
+		flash_size="32"
+		# PSRAM at 200 MHz (ESP-IDF 5.5 still labels that speed experimental)
+		# and the 256 KB L2 cache with 128-byte lines, as in Waveshare's and
+		# Espressif's P4 display examples: the MIPI-DSI panel is scanned out
+		# of PSRAM continuously (480x800 RGB565 at 60 Hz is 46 MB/s) and
+		# MicroPython's default 20 MHz PSRAM clock cannot feed it.
+		extra_configs="CONFIG_IDF_EXPERIMENTAL_FEATURES=y CONFIG_SPIRAM_SPEED_200M=y CONFIG_CACHE_L2_CACHE_256KB=y CONFIG_CACHE_L2_CACHE_LINE_128B=y"
 	else # esp32s3 or unphone
         if [ "$target" == "unphone" ]; then
             flash_size="8"
@@ -446,6 +493,20 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		usb_usermod=""
 	fi
 	set -x
+	# ESP-IDF features no MicroPythonOS board or app uses, dropped from every
+	# ESP32-family image to keep the OTA app partitions from overflowing (the
+	# native JPEG decoder alone costs ~75 KB):
+	# - PPP (network.PPP): no board has a cellular modem or a serial PPP link
+	# - DTLS: MicroPython's ssl module never speaks TLS over UDP
+	# - TLS server side: nothing serves HTTPS; ssl stays fully functional as a
+	#   client, client certificates included
+	# - BLE 5 controller features (extended/periodic advertising, 2M/coded PHY):
+	#   MicroPython's bluetooth module only does legacy advertising and scanning
+	extra_configs="$extra_configs CONFIG_LWIP_PPP_SUPPORT=n CONFIG_LWIP_PPP_PAP_SUPPORT=n CONFIG_LWIP_PPP_CHAP_SUPPORT=n CONFIG_MBEDTLS_SSL_PROTO_DTLS=n CONFIG_MBEDTLS_TLS_SERVER_AND_CLIENT=n CONFIG_MBEDTLS_TLS_CLIENT_ONLY=y CONFIG_BT_NIMBLE_50_FEATURE_SUPPORT=n"
+	# - IPv6: the one trim users could notice (sockets are IPv4 only afterwards);
+	#   everything the OS and its apps talk to is reachable over IPv4, and it is
+	#   worth ~23 KB of flash plus the neighbour-discovery tables in RAM
+	extra_configs="$extra_configs CONFIG_LWIP_IPV6=n"
 	python3 make.py $ccache_arg $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \

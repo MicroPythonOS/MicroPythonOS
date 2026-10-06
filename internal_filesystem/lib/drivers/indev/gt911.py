@@ -91,8 +91,9 @@ class GT911(pointer_framework.PointerDriver):
 
         if isinstance(interrupt_pin, int) and _USE_INTERRUPTS:
             interrupt_pin = machine.Pin(interrupt_pin, machine.Pin.IN)
-        else:
+        elif isinstance(interrupt_pin, int):
             interrupt_pin = machine.Pin(interrupt_pin, machine.Pin.OUT)
+        # else: INT not wired to the MCU (e.g. Waveshare ESP32-P4 4.3), leave it None
 
         self._reset_pin = reset_pin
         self._interrupt_pin = interrupt_pin

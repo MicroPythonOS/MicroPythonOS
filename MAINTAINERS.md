@@ -21,6 +21,7 @@ This table tracks board definitions from `internal_filesystem/lib/mpos/board/`.
 | `unihiker_k10.py`                                    | DFRobot UniHiker K10                            | Brandon Woodward         | @woodhead-tech   | Unknown       |
 | `waveshare_esp32_s3_touch_lcd_1_54.py`               | Waveshare ESP32-S3-Touch-LCD-1.54               | Flavio Coelho            | @fccoelho        | Unknown       |
 | `waveshare_esp32_s3_touch_lcd_2.py`                  | Waveshare ESP32-S3-Touch-LCD-2                  | Thomas Farstrike         | @ThomasFarstrike | @ThomasF7e    |
+| `waveshare_esp32_p4_wifi6_touch_lcd_4_3.py`          | Waveshare ESP32-P4-WIFI6-Touch-LCD-4.3          | Richard                  | @bitcoin3us      | Unknown       |
 | `lilygo_t4.py`                                       | LilyGo T4                                       | yusuhua                  | @yusuhua         | Unknown       |
 
 If you know missing contact handles, update this table.

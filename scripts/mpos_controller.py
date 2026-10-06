@@ -14,6 +14,7 @@ Usage:
 
 import ast
 import atexit
+import errno
 import os
 import pty
 import select
@@ -387,7 +388,10 @@ class _PTYStream:
         self.fd = fd
 
     def read(self, n=1):
-        return os.read(self.fd, n)
+        data = os.read(self.fd, n)
+        if not data:
+            raise OSError(errno.EIO, "PTY closed: the MicroPython process exited")
+        return data
 
     def write(self, data):
         os.write(self.fd, data)
@@ -416,6 +420,12 @@ class _SerialStream:
 
 SENTINEL = "~~~MPOS~~~"
 END_MARKER = "~~~MPOS_END~~~"
+
+
+def _timed_out_message(timeout):
+    return ("\nTEST TIMED OUT — no result within {}s (--timeout): the test "
+            "hung. The last output line above shows where it stopped.\n"
+            .format(timeout))
 
 
 class AIOREPLClient:
@@ -465,9 +475,9 @@ class AIOREPLClient:
         while True:
             if data.endswith(endings):
                 break
+            if timeout is not None and time.monotonic() - t0 > timeout:
+                break
             if not self._data_waiting(0.01):
-                if timeout is not None and time.monotonic() - t0 > timeout:
-                    break
                 continue
             chunk = self.stream.read(1)
             if not chunk:
@@ -603,9 +613,11 @@ class AIOREPLClient:
         while True:
             if data.endswith(endings):
                 break
+            if timeout is not None and time.monotonic() - t0 > timeout:
+                raise TimeoutError(
+                    "{} not seen within {}s".format(END_MARKER, timeout)
+                )
             if not self._data_waiting(0.01):
-                if timeout is not None and time.monotonic() - t0 > timeout:
-                    break
                 continue
             chunk = self.stream.read(1)
             if not chunk:
@@ -651,6 +663,8 @@ class AIOREPLClient:
 class ProcessBackend:
     """Spawn ``lvgl_micropy_unix`` via PTY and control through aioREPL."""
 
+    _PROC_COMM_LEN = 15
+
     def __init__(self, binary=None, heapsize="32M", cwd=None, boot_module="main"):
         self.binary = binary or _resolve_binary()
         self.heapsize = heapsize
@@ -672,17 +686,47 @@ class ProcessBackend:
             return False
 
     @staticmethod
+    def _ps(*args):
+        try:
+            return subprocess.run(
+                ["ps"] + list(args),
+                capture_output=True, text=True, timeout=5,
+            ).stdout
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _orphaned_pids_ps(name):
+        own_pid = os.getpid()
+        pids = []
+        for line in ProcessBackend._ps("-axo", "pid=,ppid=,comm=").splitlines():
+            parts = line.split(None, 2)
+            if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit():
+                continue
+            pid, ppid = int(parts[0]), int(parts[1])
+            comm = os.path.basename(parts[2].strip())
+            is_shell = comm in ("sh", "bash", "zsh", "dash")
+            if pid == own_pid or (comm != name and not is_shell):
+                continue
+            if ppid != 1 and ProcessBackend._is_alive(ppid):
+                continue
+            if is_shell:
+                argv = ProcessBackend._ps("-o", "args=", "-p", str(pid)).split()
+                comm = os.path.basename(argv[1]) if len(argv) > 1 else ""
+            if comm == name:
+                pids.append(pid)
+        return pids
+
+    @staticmethod
     def _kill_orphaned(name):
-        """Kill processes called `name` whose parent no longer exists (Linux)."""
+        """Kill processes called `name` whose parent no longer exists."""
         if not os.path.isdir("/proc"):
-            # Non-Linux fallback: kill by name
-            try:
-                subprocess.run(
-                    ["killall", "-9", name],
-                    capture_output=True, timeout=5,
-                )
-            except Exception:
-                pass
+            # Non-Linux fallback: read the process table from ps
+            for pid in ProcessBackend._orphaned_pids_ps(name):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except Exception:
+                    pass
             return
         own_pid = os.getpid()
         for entry in os.listdir("/proc"):
@@ -696,8 +740,16 @@ class ProcessBackend:
                     comm = f.read().strip()
             except Exception:
                 continue
-            if comm != name:
+            if comm != name[:ProcessBackend._PROC_COMM_LEN]:
                 continue
+            if comm != name:
+                try:
+                    with open("/proc/{}/cmdline".format(pid), "rb") as f:
+                        argv0 = f.read().split(b"\0", 1)[0]
+                except Exception:
+                    continue
+                if os.path.basename(os.fsdecode(argv0)) != name:
+                    continue
             try:
                 ppid = None
                 with open("/proc/{}/status".format(pid), "r") as f:
@@ -866,6 +918,20 @@ class ProcessBackend:
             except OSError:
                 pass
             self.master_fd = None
+
+    def _exit_status(self):
+        if self.proc is None:
+            return "exit status unknown"
+        try:
+            returncode = self.proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            return "process still running"
+        if returncode < 0:
+            try:
+                return "killed by {}".format(signal.Signals(-returncode).name)
+            except ValueError:
+                return "killed by signal {}".format(-returncode)
+        return "exit status {}".format(returncode)
 
     def restart(self):
         """Stop and restart the backend."""
@@ -1104,8 +1170,11 @@ for s in t:
             out_str = out.decode("utf-8", errors="replace")
             passed = "TEST WAS A SUCCESS" in out_str
             return passed, out
+        except TimeoutError:
+            return False, _timed_out_message(timeout).encode()
         except OSError:
-            msg = ("\nPROCESS CRASHED — MicroPython binary died (PTY closed). "
+            msg = ("\nPROCESS CRASHED — MicroPython binary died (PTY closed, "
+                   "{}). ".format(self._exit_status()) +
                    "Check for segfault (exit 139), "
                    "import error, or LVGL misuse (passing non-LVGL object "
                    "to widget constructor). "
@@ -1589,6 +1658,8 @@ for s in t:
                 out_str = out.decode("utf-8", errors="replace")
                 passed = "TEST WAS A SUCCESS" in out_str
                 return passed, out
+            except TimeoutError:
+                return False, _timed_out_message(timeout).encode()
             except Exception as e:
                 last_err = e
                 time.sleep(2)
