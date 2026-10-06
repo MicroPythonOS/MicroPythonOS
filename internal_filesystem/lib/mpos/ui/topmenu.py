@@ -635,6 +635,18 @@ def create_drawer():
         import sys
         if sys.platform == "esp32":
             import machine
+            # Give the board definition a chance to cut its own power
+            # (e.g. release a battery power latch) before deep sleep.
+            try:
+                import importlib
+                from .. import DeviceInfo
+                board_mod = importlib.import_module(
+                    "mpos.board." + DeviceInfo.get_hardware_id()
+                )
+                if hasattr(board_mod, "power_off"):
+                    board_mod.power_off()
+            except Exception as ex:
+                if __debug__: logger.debug("board power_off hook: %s", ex)
             if __debug__: logger.debug("Entering deep sleep...")
             machine.deepsleep()
         else:

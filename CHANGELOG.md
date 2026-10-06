@@ -3,6 +3,7 @@ Future release (next version)
 
 Board Support:
 - Add Waveshare ESP32-P4-WIFI6-Touch-LCD-4.3: first esp32p4 target, MIPI-DSI display, touch, speaker
+- Add Waveshare ESP32-S3-Touch-LCD-1.54: 1.54" 240x240 ST7789, CST816S touch, ES8311 speaker + ES7210 microphone, TF card slot
 - Waveshare ESP32-S3-Touch-LCD-3.5: keep the ES8311 speaker output warm for 30 s after a clip (warm_ms) so rapid back-to-back clips play without a click
 
 Frameworks:
