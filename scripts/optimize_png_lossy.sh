@@ -8,7 +8,7 @@ if [ -f "$dir" ]; then
 	file="$dir"
 	ls -al "$file"
 	echo =========
-	~/software/pngquant --speed 1 --strip --ext .png --skip-if-larger --force "$file"
+	~/software/pngquant --speed 1 --strip --ext .png --skip-if-larger --force --nofs --quality=0-70 "$file"
 	result=$?
 	echo "pngquant result is $result"
 	ls -al "$file"
@@ -22,7 +22,7 @@ cd "$dir"
 find -L . -iname "*.png" -print0 | while IFS= read -r -d '' file; do
 	ls -al "$file"
 	echo =========
-	~/software/pngquant --speed 1 --strip --ext .png --skip-if-larger --force "$file"
+	~/software/pngquant --speed 1 --strip --ext .png --skip-if-larger --force --nofs --quality=0-70 "$file"
 	result=$?
 	echo "pngquant result is $result"
 	ls -al "$file"
