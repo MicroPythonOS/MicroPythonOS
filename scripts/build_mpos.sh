@@ -283,7 +283,7 @@ echo "Minifying and inlining HTML..."
 pushd "$codebasedir"/webrepl/
 python3 inline_minify_webrepl.py
 result=$?
-if [ $? -ne 0 ]; then
+if [ $result -ne 0 ]; then
 	echo "ERROR: webrepl/inline_minify_webrepl.py failed with exit code $result, webrepl won't work"
 else
 	mv webrepl_inlined_minified.html.gz ../internal_filesystem/builtin/html/
@@ -514,10 +514,16 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		CONFIG_ADC_MIC_TASK_CORE=1 \
 		$extra_configs \
 		"$frozenmanifest"
+	build_status=$?
     set +x
     unset CFLAGS_EXTRA
     unset MPOS_NO_USBDEV
 	popd
+
+	if [ $build_status -ne 0 ]; then
+		echo "ERROR: $target build failed (make.py esp32 exit code $build_status)."
+		exit $build_status
+	fi
 
 	# Report firmware size vs the OTA partition budget so headroom erosion is
 	# visible on every build, not only when the esp-idf size check finally
@@ -662,6 +668,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_SNDIO=OFF -DSDL_LIBSAMPLERATE=OFF" \
 		MPY_CROSS_FLAGS="\"$mpy_cross_flags\"" \
 		"$frozenmanifest"
+	build_status=$?
 
 	popd
 
@@ -669,6 +676,11 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	if [ -f "$unix_makefile".backup ]; then
 		echo "Restoring unix Makefile CWARN..."
 		mv "$unix_makefile".backup "$unix_makefile"
+	fi
+
+	if [ $build_status -ne 0 ]; then
+		echo "ERROR: $target build failed (make.py $target exit code $build_status)."
+		exit $build_status
 	fi
 elif [ "$target" == "web" ]; then
 	# WebAssembly / Emscripten build.
@@ -935,5 +947,6 @@ elif [ "$target" == "web" ]; then
 	fi
 else
 	echo "invalid target $target"
+	exit 1
 fi
 
