@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+OS:
+- ESP32: fix hard resets (stack overflow panics) when an app is started with AppManager.start_app() from the REPL, mpremote, an asyncio task or auto_start_app at boot, seen with BlockTV on the Waveshare ESP32-S3-Touch-LCD-3.5. The LVGL task handler runs as a scheduled callback on top of whatever Python code is executing, so a pass that started while an app built its UI deep in onCreate/onResume overflowed the 16 KB mp_task stack (a redraw needs up to 7.3 KB measured). A pass is now skipped, and retried on the next tick, when less than 9 KB of stack is left (mpos.ui.render_guard)
+
 0.20.0
 ======
 
