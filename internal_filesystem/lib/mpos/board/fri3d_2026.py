@@ -81,7 +81,7 @@ else:
 
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
-    freq=40000000, # 40 Mhz
+    freq=80000000, # 80 Mhz
     dc=4,
     cs=5
 )
