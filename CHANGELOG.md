@@ -9,6 +9,7 @@ Board Support:
 - Add Waveshare ESP32-S3-Touch-LCD-1.54: 1.54" 240x240 ST7789, CST816S touch, ES8311 speaker + ES7210 microphone, TF card slot
 - Waveshare ESP32-S3-Touch-LCD-3.5: keep the ES8311 speaker output warm for 30 s after a clip (warm_ms) so rapid back-to-back clips play without a click
 - Fri3d 2024/2026: increase display SPI frequency from 40Mhz to 80Mhz (like Waveshare ESP32-S3-Touch-LCD-3.5) for higher framerate
+- ESP32-S3-Touch-LCD-2: increase display SPI frequency from 40Mhz to 80Mhz (like Waveshare ESP32-S3-Touch-LCD-3.5) for higher framerate
 
 Frameworks:
 - AudioManager (desktop): RTTTL playback renders one pass of the tune and lets WAVStream repeat it, so a .rtttl file opened in the Music Player (Repeat is on by default) plays straight away instead of silently pre-rendering 1,000,000 repeats into /tmp at ~10 MB/s; set_repeat() now reaches the playing stream
