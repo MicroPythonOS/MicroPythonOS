@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+OS:
+- Displays (ESP32): tell LVGL a flush is done directly from C in the DMA-done interrupt (new lcd_bus.FlushReadyCallback) instead of running a Python callback inside that interrupt after every flush. Python callbacks that still run there, such as Breakout's, get a zeroed thread state and a stack limit taken from the real interrupt stack, now 2560 bytes, so running out of stack raises RecursionError instead of silently overwriting memory
+
 0.20.0
 ======
 
