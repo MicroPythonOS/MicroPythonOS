@@ -19,6 +19,7 @@ class WiFiSettings(Activity):
 
     scan_button_scan_text = "Rescan"
     scan_button_scanning_text = "Scanning..."
+    wifi_busy_text = "Wifi is busy, please try again later."
 
     scanned_ssids = []
     busy_scanning = False
@@ -69,7 +70,7 @@ class WiFiSettings(Activity):
             if not WifiService.is_busy():
                 self.start_scan_networks()
             else:
-                self.show_error("Wifi is busy, please try again later.")
+                self.show_error(self.wifi_busy_text)
 
     def show_error(self, message):
         # Schedule UI updates because different thread
@@ -85,8 +86,12 @@ class WiFiSettings(Activity):
     def scan_networks_thread(self):
         if __debug__: logger.debug("scanning for Wi-Fi networks")
         try:
-            self.scanned_ssids = WifiService.scan_networks()
-            if __debug__: logger.debug("found networks: %s", self.scanned_ssids)
+            ssids = WifiService.scan_networks()
+            if ssids is None:
+                self.show_error(self.wifi_busy_text)
+            else:
+                self.scanned_ssids = ssids
+                if __debug__: logger.debug("found networks: %s", self.scanned_ssids)
         except Exception as e:
             logger.warning("scan failed: %s", e)
             self.show_error("Wi-Fi scan failed")
@@ -198,7 +203,11 @@ class WiFiSettings(Activity):
         if __debug__: logger.debug("attempting to connect to SSID '%s'", ssid)
         result = "connected"
         try:
-            if WifiService.attempt_connecting(ssid, password):
+            connected = WifiService.attempt_connecting(ssid, password)
+            if connected is None:
+                result = None
+                self.show_error(self.wifi_busy_text)
+            elif connected:
                 result = "connected"
             else:
                 result = "timeout"
@@ -208,8 +217,9 @@ class WiFiSettings(Activity):
             self.show_error(f"Connecting to {ssid} failed!")
         
         if __debug__: logger.debug("connecting to %s got result: %s", ssid, result)
-        self.last_tried_ssid = ssid
-        self.last_tried_result = result
+        if result is not None:
+            self.last_tried_ssid = ssid
+            self.last_tried_result = result
         
         # Note: Time sync is handled by WifiService.attempt_connecting()
         
