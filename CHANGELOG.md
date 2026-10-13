@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Testing:
+- unittest: an exception raised in setUp, tearDown, a cleanup, setUpClass or tearDownClass, including self.skipTest() or raise unittest.SkipTest, is now reported as a skip or an error instead of aborting the whole test file, which was then reported as failed with its later tests and classes never run. As in CPython, a failed setUp skips the test body and tearDown, a failed setUpClass skips the class's tests and tearDownClass, and cleanups always run, each one even if an earlier one raised
+
 0.20.0
 ======
 
