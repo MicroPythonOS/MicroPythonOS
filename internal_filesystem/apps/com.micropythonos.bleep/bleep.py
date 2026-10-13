@@ -4,42 +4,16 @@ import time
 
 import lvgl as lv
 from micropython import const
-from mpos import Activity, DisplayMetrics, Intent, SettingActivity, SharedPreferences, TaskManager
+from mpos import Activity, BLEManager, DisplayMetrics, Intent, SettingActivity, SharedPreferences, TaskManager
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-try:
-    import bluetooth as _bt
-except ImportError:
-    _bt = None
-    from mpos.testing.mocks import MockBluetooth, _encode_bleep_advertisement
 
 _BLEEP_ADV_UUID = const(0xB1E3)
 _BLEEP_GATT_SVC_VAL = 0xB2E4
 _BLEEP_GATT_CHAR_VAL = 0xB2E5
 
 SCAN_DURATION_MS = const(10000)
-
-_IRQ_CENTRAL_CONNECT = const(1)
-_IRQ_CENTRAL_DISCONNECT = const(2)
-_IRQ_GATTS_WRITE = const(3)
-_IRQ_SCAN_RESULT = const(5)
-_IRQ_SCAN_DONE = const(6)
-_IRQ_PERIPHERAL_CONNECT = const(7)
-_IRQ_PERIPHERAL_DISCONNECT = const(8)
-_IRQ_GATTC_SERVICE_RESULT = const(9)
-_IRQ_GATTC_SERVICE_DONE = const(10)
-_IRQ_GATTC_CHARACTERISTIC_RESULT = const(11)
-_IRQ_GATTC_CHARACTERISTIC_DONE = const(12)
-_IRQ_GATTC_WRITE_DONE = const(17)
-
-_FLAG_WRITE = const(0x0008)
-_FLAG_WRITE_NO_RESPONSE = const(0x0004)
-
-_ADV_TYPE_COMPLETE_UUID_16 = const(0x03)
-_ADV_TYPE_SVC_DATA_16 = const(0x16)
-_ADV_TYPE_SHORT_NAME = const(0x08)
 
 _REL_STRANGER = const(0)
 _REL_OUTGOING_REQUEST = const(1)
@@ -59,69 +33,22 @@ _MSG_FA = "fa"
 _MSG_FD = "fd"
 _MSG_UF = "uf"
 
-_GATT_IDLE = const(0)
-_GATT_CONNECTING = const(1)
-_GATT_DISCOVERING = const(2)
-_GATT_CHAR_DISCOVERING = const(3)
-_GATT_WRITING = const(4)
-
-_ble = None
-_simulation_mode = False
 _devices = {}
 _friends = {}
 _queue = {}
 _nickname = ""
 _own_mac = "00:00:00:00:00:00"
 _scanning = False
-_msg_handle = None
 _gatt_connections = {}
 _prefs = None
 
-_gatt_state = _GATT_IDLE
-_gatt_conn_handle = None
-_gatt_target_addr = None
-_gatt_target_addr_type = None
-_gatt_start_handle = None
-_gatt_end_handle = None
-_gatt_value_handle = None
-
 _list_refresh = None
 _info_refresh = None
-_ble_initialized = False
-_gatt_busy = False
 _scan_start_ticks = 0
-_irq_depth = 0
 
 
 def _random_nickname():
     return "Happy%d" % (time.ticks_ms() % 900 + 100)
-
-
-def _decode_field(data, field_type):
-    i = 0
-    end = len(data)
-    while i < end:
-        length = data[i]
-        if length == 0 or i + length >= end:
-            break
-        if data[i + 1] == field_type:
-            return data[i + 2:i + length + 1]
-        i += length + 1
-    return None
-
-
-def _mac_str(addr_bytes):
-    return ":".join("%02x" % b for b in addr_bytes)
-
-
-def _mac_bytes(addr_str):
-    return bytes(int(b, 16) for b in addr_str.split(":"))
-
-
-def _uuid(val):
-    if _simulation_mode or _bt is None:
-        return val
-    return _bt.UUID(val)
 
 
 def _load_friends():
@@ -179,72 +106,6 @@ def _dequeue_messages(addr):
         _save_queue()
 
 
-def _is_bleep_device(adv_data):
-    svc_data = _decode_field(adv_data, _ADV_TYPE_COMPLETE_UUID_16)
-    if svc_data and len(svc_data) >= 2:
-        uuid = svc_data[0] | (svc_data[1] << 8)
-        return uuid == _BLEEP_ADV_UUID
-    return False
-
-
-def _decode_adv_friend_count(adv_data):
-    svc_data = _decode_field(adv_data, _ADV_TYPE_SVC_DATA_16)
-    if svc_data and len(svc_data) >= 3:
-        uuid = svc_data[0] | (svc_data[1] << 8)
-        if uuid == _BLEEP_ADV_UUID:
-            return svc_data[2]
-    return 0
-
-
-def _decode_adv_nickname(adv_data):
-    name_data = _decode_field(adv_data, _ADV_TYPE_SHORT_NAME)
-    if name_data:
-        return str(name_data, "utf-8")
-    return "Unknown"
-
-
-def _build_adv_data():
-    payload = bytearray()
-    payload.append(3)
-    payload.append(_ADV_TYPE_COMPLETE_UUID_16)
-    payload.append(_BLEEP_ADV_UUID & 0xFF)
-    payload.append((_BLEEP_ADV_UUID >> 8) & 0xFF)
-    payload.append(4)
-    payload.append(_ADV_TYPE_SVC_DATA_16)
-    payload.append(_BLEEP_ADV_UUID & 0xFF)
-    payload.append((_BLEEP_ADV_UUID >> 8) & 0xFF)
-    payload.append(len(_friends) & 0xFF)
-    nickname_bytes = bytes(_nickname, "utf-8")
-    max_name = 31 - len(payload) - 2
-    if len(nickname_bytes) > max_name:
-        nickname_bytes = nickname_bytes[:max_name]
-    payload.append(len(nickname_bytes) + 1)
-    payload.append(_ADV_TYPE_SHORT_NAME)
-    payload.extend(nickname_bytes)
-    return bytes(payload)
-
-
-def _start_advertising():
-    adv_data = _build_adv_data()
-    if __debug__: logger.debug("_start_advertising: len=%s", len(adv_data))
-    _ble.gap_advertise(100000, adv_data=adv_data)
-
-
-def _stop_advertising():
-    _ble.gap_advertise(None)
-
-
-def _init_gatt_server():
-    global _msg_handle
-    svc_uuid = _uuid(_BLEEP_GATT_SVC_VAL)
-    char_uuid = _uuid(_BLEEP_GATT_CHAR_VAL)
-    svc = (svc_uuid, ((char_uuid, _FLAG_WRITE),))
-    ((_msg_handle,),) = _ble.gatts_register_services((svc,))
-    if not _simulation_mode and _bt is not None:
-        _ble.gatts_set_buffer(_msg_handle, 128, False)
-    if __debug__: logger.debug("_init_gatt_server: msg_handle=%s", _msg_handle)
-
-
 def _process_incoming_message(sender_addr, msg):
     t = msg.get("t", "")
     old_rel = _devices.get(sender_addr, {}).get("relation_state", _REL_STRANGER)
@@ -282,50 +143,14 @@ def _process_incoming_message(sender_addr, msg):
         if __debug__: logger.debug("  unfriended: %s", sender_addr)
 
 
-def _ble_irq_handler(event, data):
-    global _irq_depth
-    _irq_depth += 1
-    if _irq_depth > 8:
-        _irq_depth -= 1
-        return
-    try:
-        if event == _IRQ_SCAN_RESULT:
-            _on_scan_result(data)
-        elif event == _IRQ_SCAN_DONE:
-            _on_scan_done()
-        elif event == _IRQ_CENTRAL_CONNECT:
-            _on_central_connect(data)
-        elif event == _IRQ_CENTRAL_DISCONNECT:
-            _on_central_disconnect(data)
-        elif event == _IRQ_GATTS_WRITE:
-            _on_gatts_write(data)
-        elif event == _IRQ_PERIPHERAL_CONNECT:
-            _on_client_connect(data)
-        elif event == _IRQ_PERIPHERAL_DISCONNECT:
-            _on_client_disconnect(data)
-        elif event == _IRQ_GATTC_SERVICE_RESULT:
-            _on_service_result(data)
-        elif event == _IRQ_GATTC_SERVICE_DONE:
-            _on_service_done(data)
-        elif event == _IRQ_GATTC_CHARACTERISTIC_RESULT:
-            _on_char_result(data)
-        elif event == _IRQ_GATTC_CHARACTERISTIC_DONE:
-            _on_char_done(data)
-        elif event == _IRQ_GATTC_WRITE_DONE:
-            _on_write_done(data)
-    except Exception as e:
-        logger.error("BLE IRQ error: %s", e)
-    _irq_depth -= 1
-
-
 def _on_scan_result(data):
     addr_type, addr, adv_type, rssi, adv_data = data
-    addr_str = _mac_str(addr)
-    #if __debug__: logger.debug("scan_result: %s rssi=%s", addr_str, rssi)
-    if not _is_bleep_device(adv_data):
-        return
-    friend_count = _decode_adv_friend_count(adv_data)
-    nickname = _decode_adv_nickname(adv_data)
+    addr_str = BLEManager.mac_str(addr)
+    parsed = BLEManager.ad_parse(adv_data)
+    friend_count_raw = parsed.get(BLEManager.AD_TYPE_SERVICE_DATA_16, b"\x00\x00")
+    friend_count = friend_count_raw[2] if len(friend_count_raw) >= 3 else 0
+    nickname_bytes = parsed.get(BLEManager.AD_TYPE_SHORT_NAME, b"Unknown")
+    nickname = str(nickname_bytes, "utf-8") if nickname_bytes else "Unknown"
     if nickname == "Unknown":
         return
     old = _devices.get(addr_str, {})
@@ -359,136 +184,80 @@ def _on_scan_done():
 def _on_central_connect(data):
     conn_handle, addr_type, addr = data
     _gatt_connections[conn_handle] = (addr_type, bytes(addr))
-    if __debug__: logger.debug("central_connect: conn=%s addr=%s", conn_handle, _mac_str(addr))
+    if __debug__: logger.debug("central_connect: conn=%s addr=%s", conn_handle, BLEManager.mac_str(addr))
 
 
 def _on_central_disconnect(data):
     conn_handle, addr_type, addr = data
     _gatt_connections.pop(conn_handle, None)
     if __debug__: logger.debug("central_disconnect: conn=%s", conn_handle)
-    _start_advertising()
 
 
-def _on_gatts_write(data):
-    conn_handle, value_handle = data
-    if conn_handle not in _gatt_connections:
+def _on_gatts_write(conn_handle, value_handle, value):
+    if __debug__: logger.debug("gatts_write: conn=%s", conn_handle)
+    _, addr_bytes = _gatt_connections.get(conn_handle, (None, None))
+    if addr_bytes is None:
         return
-    if value_handle != _msg_handle:
-        return
-    _, addr_bytes = _gatt_connections[conn_handle]
-    addr = _mac_str(addr_bytes)
-    msg_data = _ble.gatts_read(_msg_handle)
-    if __debug__: logger.debug("gatts_write: from=%s data=%s", addr, msg_data)
+    addr = BLEManager.mac_str(addr_bytes)
     try:
-        msg = json.loads(msg_data)
+        msg = json.loads(value)
     except Exception:
-        logger.error("invalid gatt message: %s", msg_data)
+        logger.error("invalid gatt message: %s", value)
         return
     _process_incoming_message(addr, msg)
 
 
-def _on_client_connect(data):
-    global _gatt_state, _gatt_conn_handle
-    conn_handle, addr_type, addr = data
-    addr_str = _mac_str(addr)
-    if addr_str != _mac_str(_gatt_target_addr):
-        return
-    _gatt_conn_handle = conn_handle
-    _gatt_state = _GATT_DISCOVERING
-    if __debug__: logger.debug("client_connect: conn=%s addr=%s", conn_handle, addr_str)
-    _ble.gattc_discover_services(_gatt_conn_handle)
-
-
-def _on_client_disconnect(data):
-    global _gatt_state, _gatt_conn_handle, _gatt_start_handle, _gatt_end_handle, _gatt_value_handle, _gatt_busy
-    conn_handle, _, _ = data
-    if conn_handle == _gatt_conn_handle:
-        if __debug__: logger.debug("client_disconnect: conn=%s", conn_handle)
-        _gatt_state = _GATT_IDLE
-        _gatt_conn_handle = None
-        _gatt_start_handle = None
-        _gatt_end_handle = None
-        _gatt_value_handle = None
-        _gatt_busy = False
-        _start_advertising()
-
-
-def _on_service_result(data):
-    global _gatt_start_handle, _gatt_end_handle
-    conn_handle, start_handle, end_handle, uuid = data
-    if conn_handle == _gatt_conn_handle and uuid == _uuid(_BLEEP_GATT_SVC_VAL):
-        if __debug__: logger.debug("service_result: start=%s end=%s", start_handle, end_handle)
-        _gatt_start_handle = start_handle
-        _gatt_end_handle = end_handle
-
-
-def _on_service_done(data):
-    if _gatt_start_handle and _gatt_end_handle:
-        _ble.gattc_discover_characteristics(_gatt_conn_handle, _gatt_start_handle, _gatt_end_handle)
-    else:
-        logger.error("GATT service not found")
-        _ble.gap_disconnect(_gatt_conn_handle)
-
-
-def _on_char_result(data):
-    global _gatt_value_handle
-    conn_handle, def_handle, value_handle, properties, uuid = data
-    if conn_handle == _gatt_conn_handle and uuid == _uuid(_BLEEP_GATT_CHAR_VAL):
-        if __debug__: logger.debug("char_result: value_handle=%s", value_handle)
-        _gatt_value_handle = value_handle
-
-
-def _on_char_done(data):
-    global _gatt_state
-    if _gatt_value_handle:
-        _gatt_state = _GATT_WRITING
-        target_addr_str = _mac_str(_gatt_target_addr)
-        if target_addr_str not in _queue or not _queue[target_addr_str]:
-            _ble.gap_disconnect(_gatt_conn_handle)
-            return
-        msg = _queue[target_addr_str][0]
-        msg_json = json.dumps(msg)
-        if __debug__: logger.debug("char_done: writing msg=%s", msg_json)
-        _ble.gattc_write(_gatt_conn_handle, _gatt_value_handle, msg_json, 1)
-    else:
-        logger.error("GATT characteristic not found")
-        _ble.gap_disconnect(_gatt_conn_handle)
-
-
-def _on_write_done(data):
-    global _gatt_state
-    conn_handle, value_handle, status = data
-    if conn_handle != _gatt_conn_handle:
-        return
-    target_addr_str = _mac_str(_gatt_target_addr)
-    if __debug__: logger.debug("write_done: to=%s status=%s queue_was=%s", target_addr_str, status, len(_queue.get(target_addr_str, [])))
+def _on_gatt_client_write_done(client):
+    target_addr_str = client.gatt_target_addr_str
+    if __debug__: logger.debug("write_done: to=%s queue_was=%s", target_addr_str, len(_queue.get(target_addr_str, [])))
     if target_addr_str in _queue and _queue[target_addr_str]:
         _queue[target_addr_str].pop(0)
         if not _queue[target_addr_str]:
             del _queue[target_addr_str]
         _save_queue()
-    _ble.gap_disconnect(_gatt_conn_handle)
+    client.disconnect()
     if _info_refresh:
         _info_refresh()
 
 
 def _process_gatt_queue():
-    global _gatt_state, _gatt_target_addr, _gatt_target_addr_type, _gatt_busy
-    if _gatt_busy or _gatt_state != _GATT_IDLE:
-        return
-    _gatt_busy = True
     for addr_str, msgs in list(_queue.items()):
         if not msgs:
             continue
         if addr_str not in _devices:
             continue
-        _gatt_state = _GATT_CONNECTING
-        _gatt_target_addr = _mac_bytes(addr_str)
-        _gatt_target_addr_type = _devices[addr_str]["addr_type"]
+        client = BLEManager.create_gatt_client()
+        client.target_service_uuid = _BLEEP_GATT_SVC_VAL
+        client.target_char_uuid = _BLEEP_GATT_CHAR_VAL
+        client.on_write_done = _on_gatt_client_write_done
+        client.gatt_target_addr_str = addr_str
+        client.addr_type = _devices[addr_str]["addr_type"]
+        client.addr = BLEManager.mac_bytes(addr_str)
         if __debug__: logger.debug("_process_gatt_queue: connecting to %s msgs=%s", addr_str, len(msgs))
-        _ble.gap_connect(_gatt_target_addr_type, _gatt_target_addr)
+        msg = msgs[0]
+        msg_json = json.dumps(msg)
+        client._pending_write_data = msg_json
+        client.connect(client.addr_type, client.addr)
         return
-    _gatt_busy = False
+
+
+def _on_gatt_char_done(client):
+    if client._pending_write_data and client._value_handle:
+        client.write(client._value_handle, client._pending_write_data, response=True)
+
+
+def _on_gatt_service_done(client):
+    if client._svc_start:
+        client.discover_characteristics(client._svc_start, client._svc_end)
+
+
+def _build_adv_data():
+    fields = [
+        (BLEManager.AD_TYPE_SERVICE_UUID_16_COMPLETE, bytes([_BLEEP_ADV_UUID & 0xFF, (_BLEEP_ADV_UUID >> 8) & 0xFF])),
+        (BLEManager.AD_TYPE_SERVICE_DATA_16, bytes([_BLEEP_ADV_UUID & 0xFF, (_BLEEP_ADV_UUID >> 8) & 0xFF, len(_friends) & 0xFF])),
+        (BLEManager.AD_TYPE_SHORT_NAME, bytes(_nickname, "utf-8")[:29]),
+    ]
+    return BLEManager.ad_build(fields)
 
 
 async def _ble_scan_loop():
@@ -496,54 +265,52 @@ async def _ble_scan_loop():
     while _scanning:
         if __debug__: logger.debug("_ble_scan_loop: starting scan")
         _scan_start_ticks = time.ticks_ms()
-        _ble.gap_scan(SCAN_DURATION_MS, 30000, 30000, True)
+        BLEManager.start_scan(SCAN_DURATION_MS, 30000, 30000, True)
         await TaskManager.sleep_ms(SCAN_DURATION_MS + 500)
 
 
 def _ble_init():
-    global _ble, _simulation_mode, _scanning, _prefs, _ble_initialized
-    if _ble_initialized:
-        return
+    global _scanning, _prefs
     _prefs = SharedPreferences("com.micropythonos.bleep")
-    _simulation_mode = _bt is None
-    if _simulation_mode:
-        bleep_results = [
-            (0, b"\x11\x22\x33\x44\x55\x01", 0, -42, _encode_bleep_advertisement(5, "HappyCamper")),
-            (0, b"\x11\x22\x33\x44\x55\x02", 0, -55, _encode_bleep_advertisement(3, "SunnyDay")),
-            (0, b"\x11\x22\x33\x44\x55\x03", 0, -68, _encode_bleep_advertisement(7, "BraveFox")),
-        ]
-        _ble = MockBluetooth(scan_results=bleep_results).BLE()
-    else:
-        _ble = _bt.BLE()
     _load_friends()
     _load_queue()
-    _ble.irq(_ble_irq_handler)
-    _ble.active(True)
-    _init_gatt_server()
+
+    BLEManager.activate()
+    BLEManager.register_irq(_ble_irq_handler)
+    BLEManager.add_scan_filter(service_uuid=bytes([_BLEEP_ADV_UUID & 0xFF, (_BLEEP_ADV_UUID >> 8) & 0xFF]))
+
+    gatt_server = BLEManager.create_gatt_server()
+    gatt_server.add_service(_BLEEP_GATT_SVC_VAL, [(_BLEEP_GATT_CHAR_VAL, 0x0008)])
+    gatt_server.on_write(_on_gatts_write)
+    gatt_server.register()
+
     _scanning = True
-    _start_advertising()
+    BLEManager.start_advertising(adv_data=_build_adv_data())
     TaskManager.create_task(_ble_scan_loop())
-    _ble_initialized = True
-    if __debug__: logger.debug("_ble_init: started, simulation=%s friends=%s queue=%s", _simulation_mode, len(_friends), len(_queue))
+    if __debug__: logger.debug("_ble_init: started, simulation=%s friends=%s queue=%s", BLEManager.is_simulation(), len(_friends), len(_queue))
 
 
 def _ble_deinit():
-    global _scanning, _ble_initialized, _gatt_state, _gatt_conn_handle, _gatt_busy
-    global _gatt_start_handle, _gatt_end_handle, _gatt_value_handle
+    global _scanning
     if __debug__: logger.debug("_ble_deinit")
     _scanning = False
-    _ble.gap_scan(None)
-    _stop_advertising()
-    _ble.active(False)
+    BLEManager.stop_scan()
+    BLEManager.stop_advertising()
+    BLEManager.deactivate()
+    BLEManager.clear_scan_filters()
     _devices.clear()
     _gatt_connections.clear()
-    _gatt_state = _GATT_IDLE
-    _gatt_busy = False
-    _gatt_conn_handle = None
-    _gatt_start_handle = None
-    _gatt_end_handle = None
-    _gatt_value_handle = None
-    _ble_initialized = False
+
+
+def _ble_irq_handler(event, data):
+    if event == BLEManager.IRQ_SCAN_RESULT:
+        _on_scan_result(data)
+    elif event == BLEManager.IRQ_SCAN_DONE:
+        _on_scan_done()
+    elif event == BLEManager.IRQ_CENTRAL_CONNECT:
+        _on_central_connect(data)
+    elif event == BLEManager.IRQ_CENTRAL_DISCONNECT:
+        _on_central_disconnect(data)
 
 
 class BLEepDetail(Activity):
@@ -693,9 +460,9 @@ class BLEep(Activity):
 
         _ble_init()
 
-        _, mac_bytes = _ble.config("mac")
+        _, mac_bytes = BLEManager.get_ble().config("mac")
         global _own_mac
-        _own_mac = _mac_str(mac_bytes)
+        _own_mac = BLEManager.mac_str(mac_bytes)
 
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -739,8 +506,6 @@ class BLEep(Activity):
         if nickname_saved:
             global _nickname
             _nickname = nickname_saved
-        if len(_gatt_connections):
-            _ble.irq(_ble_irq_handler)
         self._refresh_list()
 
     def onPause(self, screen):
