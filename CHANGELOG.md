@@ -1,6 +1,10 @@
 Future release (next version)
 =====
 
+Testing:
+- unittest: raise AssertionError explicitly instead of using `assert` statements, which mpy-cross -O3 strips. The desktop build freezes lib/ with -O3, so self.fail() and expectedFailure() did nothing there and a test that called self.fail() passed under test_runner, whose self-check only repaired the assert* methods
+- test_runner: the unittest self-check also checks self.fail(), and when the frozen unittest's asserts don't work it copies a working fail() from lib/unittest along with the assert methods, so binaries built before this fix also report self.fail() calls
+
 0.20.0
 ======
 
