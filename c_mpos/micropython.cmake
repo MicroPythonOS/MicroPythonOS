@@ -46,6 +46,8 @@ target_compile_definitions(usermod_c_mpos INTERFACE
     # force quirc to use single precision floating point math
     -DQUIRC_FLOAT_TYPE=float
     -DQUIRC_USE_TGMATH=1
+    # quirc's ps_malloc() prefers PSRAM (quirc_internal.h), on Xtensa and RISC-V alike
+    -DQUIRC_PS_MALLOC_HEAP_CAPS=1
 )
 
 # Be sure to set the -O2 "optimize" flag!!
