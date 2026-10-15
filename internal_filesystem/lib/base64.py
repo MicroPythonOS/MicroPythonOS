@@ -155,7 +155,7 @@ def urlsafe_b64encode(s):
 
 
 def urlsafe_b64decode(s):
-    """Decode a byte string encoded with the standard Base64 alphabet.
+    """Decode a byte string encoded with the url-safe Base64 alphabet.
 
     s is the byte string to decode.  The decoded byte string is
     returned.  binascii.Error is raised if the input is incorrectly
@@ -164,10 +164,9 @@ def urlsafe_b64decode(s):
 
     The alphabet uses '-' instead of '+' and '_' instead of '/'.
     """
-    #    s = _bytes_from_decode_data(s)
+    s = _bytes_from_decode_data(s)
     #    s = s.translate(_urlsafe_decode_translation)
-    #    return b64decode(s)
-    raise NotImplementedError()
+    return b64decode(s, b"-_")
 
 
 # Base32 encoding/decoding must be done in Python
