@@ -56,6 +56,15 @@ int quirc_resize(struct quirc *q, int w, int h);
 uint8_t *quirc_begin(struct quirc *q, int *w, int *h);
 void quirc_end(struct quirc *q);
 
+/* Does the same as quirc_begin(), copying the image into the buffer and
+ * quirc_end(), without the copy: the image is read from src, which must
+ * hold w * h bytes (the size given to quirc_resize()). src may be quirc's
+ * own buffer, as returned by quirc_begin(), which is then overwritten as by
+ * quirc_end(). Otherwise src must not overlap that buffer, and it is not
+ * modified.
+ */
+void quirc_end_from(struct quirc *q, const uint8_t *src);
+
 /* This structure describes a location in the input image buffer. */
 struct quirc_point {
 	int	x;
