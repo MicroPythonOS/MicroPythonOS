@@ -6,13 +6,14 @@ import unittest
 sys.path.append("apps")
 
 from com_micropythonos_nostr.chat_model import (
+    apply_nip17_subject,
+    Chat,
+    chat_id_for_event,
+    dm_chat_id,
     KIND_DM,
     KIND_NIP17_CHAT,
     MAX_GROUP_MEMBERS,
-    Chat,
-    apply_nip17_subject,
-    chat_id_for_event,
-    dm_chat_id,
+    MAX_GROUP_PARTICIPANTS,
     nip17_group_chat_id,
     normalize_group_members,
     participants_from_nip17_event,
@@ -141,8 +142,20 @@ class TestGroupMemberNormalisation(unittest.TestCase):
         hexes = [("%02x" % i) * 32 for i in range(1, MAX_GROUP_MEMBERS + 2)]
         members, error = normalize_group_members(",".join(hexes), self.own)
         self.assertEqual(members, None)
-        self.assertIn(str(MAX_GROUP_MEMBERS), error)
+        # NIP-17: "more than 10 participants" counts the sender, so the cap is
+        # explained in participants (you included) and in other members.
+        self.assertIn("at most %d people" % MAX_GROUP_PARTICIPANTS, error)
+        self.assertIn("%d others" % MAX_GROUP_MEMBERS, error)
         members, error = normalize_group_members(",".join(hexes[:MAX_GROUP_MEMBERS]), self.own)
+        self.assertEqual(error, None)
+        self.assertEqual(len(members), MAX_GROUP_MEMBERS)
+
+    def test_cap_keeps_the_room_within_ten_participants(self):
+        self.assertEqual(MAX_GROUP_PARTICIPANTS, 10)
+        self.assertEqual(MAX_GROUP_MEMBERS + 1, MAX_GROUP_PARTICIPANTS)
+        # The user's own key does not count against the cap.
+        hexes = [("%02x" % i) * 32 for i in range(1, MAX_GROUP_MEMBERS + 1)]
+        members, error = normalize_group_members(",".join(hexes + [self.own]), self.own)
         self.assertEqual(error, None)
         self.assertEqual(len(members), MAX_GROUP_MEMBERS)
 
@@ -180,6 +193,36 @@ class TestChatSubject(unittest.TestCase):
         title = chat.display_title()
         self.assertTrue(title.startswith("npub1"))
         self.assertIn(", npub1", title)
+
+    def test_display_title_keeps_a_legacy_first_message_subject(self):
+        # Rooms stored before subjects were tracked have the subject of their
+        # first message as the title and no "subject" field.
+        legacy = Chat.from_dict(
+            nip17_group_chat_id(["b" * 64, "c" * 64]),
+            {"kind": KIND_NIP17_CHAT, "participants": ["b" * 64, "c" * 64], "title": "Weekend"},
+        )
+        self.assertEqual(legacy.subject, None)
+        self.assertEqual(legacy.display_title(), "Weekend")
+
+    def test_display_title_ignores_a_stored_member_list_title(self):
+        # The default title of an old room was the member list of the time;
+        # show the live member names instead of that snapshot.
+        stale = Chat.from_dict(
+            nip17_group_chat_id(["b" * 64, "c" * 64]),
+            {
+                "kind": KIND_NIP17_CHAT,
+                "participants": ["b" * 64, "c" * 64],
+                "title": "npub1zzzzzzz, npub1yyyyyyy",
+            },
+        )
+        title = stale.display_title()
+        self.assertTrue(title.startswith("npub1"))
+        self.assertFalse("zzzz" in title)
+        truncated = Chat.from_dict(
+            nip17_group_chat_id(["b" * 64, "c" * 64]),
+            {"kind": KIND_NIP17_CHAT, "participants": ["b" * 64, "c" * 64], "title": "deadbeef..., ?"},
+        )
+        self.assertTrue(truncated.display_title().startswith("npub1"))
 
     def test_apply_subject_only_from_newest_message(self):
         store = _FakeStore()

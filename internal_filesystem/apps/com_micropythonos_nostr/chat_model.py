@@ -27,8 +27,10 @@ CHAT_ID_NIP17_PREFIX = "nip17_"
 
 # NIP-17 private groups. "Members" are the other participants of a room:
 # NIP-17 says "Group chats with more than 10 participants should find a more
-# suitable messaging scheme", and a room with a single other member is a DM.
-MAX_GROUP_MEMBERS = 10
+# suitable messaging scheme", and the room's participants are you plus the
+# members, so 9 members. A room with a single other member is a DM.
+MAX_GROUP_PARTICIPANTS = 10
+MAX_GROUP_MEMBERS = MAX_GROUP_PARTICIPANTS - 1
 MIN_GROUP_MEMBERS = 2
 
 # Auto-joined public channel (#MicroPythonOS, NIP-28).
@@ -129,9 +131,9 @@ def normalize_group_members(raw, own_pubkey, resolve_name=None, max_members=MAX_
             continue
         members.append(hex_pubkey)
     if len(members) > max_members:
-        return None, "Too many members: %d (NIP-17 groups hold at most %d)" % (
-            len(members),
-            max_members,
+        return None, (
+            "Too many members: %d. A NIP-17 room holds at most %d people, "
+            "you and %d others" % (len(members), max_members + 1, max_members)
         )
     if len(members) < MIN_GROUP_MEMBERS:
         return None, "A group needs at least %d other members (use DM for one)" % MIN_GROUP_MEMBERS
@@ -445,6 +447,11 @@ class Chat:
         if self.kind == KIND_NIP17_CHAT and len(self.participants) > 1:
             if self.subject:
                 return self.subject
+            if self.title and not _looks_like_member_list(self.title, self.participants):
+                # A room stored before subjects were tracked kept the subject
+                # of its first message as the title; keep showing it (it is
+                # not re-sent as the room subject, only an incoming one is).
+                return self.title
             return ", ".join(_short_name(p) for p in self.participants)
         return _display_title(self.title)
 
@@ -464,6 +471,23 @@ class Chat:
         if self.kind == KIND_DM:
             return _short_name(self.peer_pubkey)
         return _short_name(message.pubkey)
+
+
+def _looks_like_member_list(title, participants):
+    """True when `title` is the default member-name title of a group: every
+    comma-separated part is a member's current name, an npub prefix or a
+    truncated hex key (as _short_name renders them)."""
+    names = set(_short_name(p) for p in participants or [])
+    for part in title.split(", "):
+        part = part.strip()
+        if part in names or part == "?":
+            continue
+        if part.startswith("npub1") and len(part) == 12:
+            continue
+        if part.endswith("...") and len(part) == 11:
+            continue
+        return False
+    return True
 
 
 def _default_title(kind, peer_pubkey, channel_id, participants=None):

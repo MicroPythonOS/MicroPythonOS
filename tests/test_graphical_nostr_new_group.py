@@ -163,10 +163,33 @@ class TestNostrNewGroupChat(unittest.TestCase):
         self.assertTrue(click_label("Create group", timeout=10), "should tap Create group")
         wait_for_render(10)
         self.assertTrue(
-            wait_for_text("at most %d" % MAX_GROUP_MEMBERS, timeout=10),
+            wait_for_text("at most %d people" % (MAX_GROUP_MEMBERS + 1), timeout=10),
             "the member cap should be explained on screen",
         )
         self.assertIsNotNone(find_label_with_text(lv.screen_active(), "New chat"))
+
+    def test_switching_fields_does_not_stack_keyboard_handlers(self):
+        # MposKeyboard.set_textarea() hooks a textarea's CLICKED once; tapping
+        # members, subject and members again must not add handlers (each
+        # extra one would show the keyboard again per tap).
+        members, subject = self._open_group_mode()
+        # First taps: the keyboard hooks each field once.
+        for ta in (members, subject, members):
+            ta.send_event(lv.EVENT.CLICKED, None)
+            wait_for_render(3)
+        members_before = members.get_event_count()
+        subject_before = subject.get_event_count()
+        for ta in (subject, members, subject, members):
+            ta.send_event(lv.EVENT.CLICKED, None)
+            wait_for_render(3)
+        self.assertEqual(members.get_event_count(), members_before)
+        self.assertEqual(subject.get_event_count(), subject_before)
+        # And the mode switch that re-targets the keyboard does not either.
+        self.assertTrue(click_label("DM", timeout=10))
+        wait_for_render(5)
+        self.assertTrue(click_label("Group", timeout=10))
+        wait_for_render(5)
+        self.assertEqual(members.get_event_count(), members_before)
 
 
 if __name__ == "__main__":
