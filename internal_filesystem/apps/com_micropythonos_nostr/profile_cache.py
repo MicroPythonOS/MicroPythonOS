@@ -142,6 +142,23 @@ class ProfileCache:
         self._maybe_subscribe(hex_pubkey)
         return None
 
+    def find_pubkeys_by_name(self, name):
+        """Hex pubkeys whose cached name or display name equals `name` (case-insensitive)."""
+        wanted = (name or "").strip().lower()
+        if not wanted:
+            return []
+        matches = []
+        candidates = [(MAINTAINER_HEX, MAINTAINER_PROFILE)] + list(self._profiles.items())
+        for hex_pubkey, profile in candidates:
+            if hex_pubkey in matches:
+                continue
+            for key in ("display_name", "name"):
+                value = profile.get(key)
+                if value and value.strip().lower() == wanted:
+                    matches.append(hex_pubkey)
+                    break
+        return matches
+
     def _maybe_subscribe(self, hex_pubkey):
         if hex_pubkey in self._pending_subscriptions:
             return
