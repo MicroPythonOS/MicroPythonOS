@@ -8,6 +8,12 @@ Frameworks:
 - qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
 - Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
 
+Builtin Apps:
+- Nostr Chat: private group chats (NIP-17 chat rooms). "New chat" gets a "Group" mode: up to 10 members (npubs, hex keys or names from the profile cache, comma or newline separated; your own key is dropped and duplicates merged) plus an optional subject. The subject is sent with every message, the newest incoming subject renames the chat, and group rows and headers show the subject or, failing that, the members' names
+- Nostr Chat: every NIP-17 message (DMs too) is now also gift-wrapped to yourself, as NIP-17 requires, so your other Nostr clients see what you sent from the device; the local copy is keyed on that wrap so its relay echo doesn't duplicate. With the matching micropython-nostr update the rumor carries the `id` NIP-17 requires and seal/wrap timestamps are backdated independently (NIP-59); the app computes the id itself on the older library
+- Nostr Chat: a group send yields between recipients instead of starving the relay connections, the Send button shows "Encrypting 2/5" meanwhile, and a gift wrap that fails to publish is logged instead of aborting the rest. Offline-queued group messages keep their subject
+- Nostr Chat: a chat opened from "New chat" (DM, group or channel) stays open. The new-chat screen finished itself after starting the chat, which popped the chat off the activity stack and left an empty screen
+
 0.20.0
 ======
 
