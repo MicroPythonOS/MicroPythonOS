@@ -335,13 +335,15 @@ class EventStore:
                             logger.debug("Skipping bad chat line: %s", e)
         except OSError:
             return []
-        # Deduplicate by id; keep the latest occurrence.
+        # Deduplicate by id; keep the latest occurrence. Sort by time, then by
+        # position in the file: MicroPython's sort is not stable, so two
+        # messages with the same second would otherwise swap at random.
         by_id = {}
-        for msg in messages:
+        for index, msg in enumerate(messages):
             existing = by_id.get(msg.event_id)
-            if existing is None or msg.ts > existing.ts:
-                by_id[msg.event_id] = msg
-        messages = sorted(by_id.values(), key=lambda m: m.ts)
+            if existing is None or msg.ts > existing[1].ts:
+                by_id[msg.event_id] = (index, msg)
+        messages = [m for _, m in sorted(by_id.values(), key=lambda im: (im[1].ts, im[0]))]
         if len(messages) > limit:
             messages = messages[-limit:]
         return messages
