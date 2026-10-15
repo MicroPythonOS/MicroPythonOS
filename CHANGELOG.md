@@ -1,6 +1,13 @@
 Future release (next version)
 =====
 
+Frameworks:
+- qrdecode: faster QR scanning with bit-identical results. quirc rounds perspective-mapped points without a rintf() library call where there is no rounding instruction (ESP32) and scans for finder patterns run by run; the decoder (about 400 KB at 640x640) is kept between frames instead of being allocated and freed for every frame, and the camera frame is read in place instead of copied. New qrdecode.release() frees the decoder; the Camera activity calls it when QR scanning stops or the activity is paused
+- qrdecode: exceptions from qrdecode_rgb565() are now caught by the caller's except clause; they used to skip it (and could leave the caller's frame in a broken state) because the error path popped the caller's exception handler as well as its own
+- qrdecode: the decoder kept while QR scanning is on comes entirely from PSRAM. quirc's flood-fill stack (about 7 KB at 640x640) used to come from internal RAM, which the display and camera DMA buffers also need. quirc's ps_malloc() passed its capability flags where heap_caps_malloc_prefer() expects their count, and it now prefers PSRAM on every ESP32 target, not only on Xtensa
+- qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
+- Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
+
 OS:
 - Displays (ESP32): tell LVGL a flush is done directly from C in the DMA-done interrupt (new lcd_bus.FlushReadyCallback) instead of running a Python callback inside that interrupt after every flush. Python callbacks that still run there, such as Breakout's, get a zeroed thread state and a stack limit taken from the real interrupt stack, now 2560 bytes, so running out of stack raises RecursionError instead of silently overwriting memory
 

@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include "quirc_internal.h"
@@ -61,6 +62,8 @@ int quirc_resize(struct quirc *q, int w, int h)
 	 */
 	if (w < 0 || h < 0)
 		goto fail;
+	if (h != 0 && w > INT_MAX / h)
+		goto fail; /* w * h overflows */
 
 	/*
 	 * alloc a new buffer for q->image. We avoid realloc(3) because we want
@@ -113,7 +116,7 @@ int quirc_resize(struct quirc *q, int w, int h)
 	if (vars_byte_size / sizeof(*vars) != num_vars) {
 		goto fail; /* size_t overflow */
 	}
-	vars = malloc(vars_byte_size);
+	vars = ps_malloc(vars_byte_size);
 	if (!vars)
 		goto fail;
 
