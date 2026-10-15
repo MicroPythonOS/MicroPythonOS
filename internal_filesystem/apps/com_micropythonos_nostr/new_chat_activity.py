@@ -355,8 +355,10 @@ class NewChatActivity(Activity):
             intent.putExtra("peer_pubkey", chat.peer_pubkey or (chat.participants[0] if chat.participants else ""))
         else:
             intent.putExtra("peer_pubkey", chat.peer_pubkey)
-        self.startActivity(intent)
+        # finish() pops the top of the activity stack, so it must run before
+        # the chat is started or it would close the chat screen just opened.
         self.finish()
+        self.startActivity(intent)
 
     def _cleanup_search(self):
         if self._search_sub_name:
