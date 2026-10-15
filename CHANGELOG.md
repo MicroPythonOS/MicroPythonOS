@@ -8,6 +8,9 @@ Frameworks:
 - qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
 - Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
 
+OS:
+- binascii/base64: lib/binascii.py no longer shadows the C ubinascii b2a_base64/a2b_base64 with the pure-Python copies from micropython-lib, which were O(n²) and frozen into every firmware. A 3000-byte base64 round-trip takes 0.026 ms instead of 13.6 ms on the desktop build, and everything that base64-encodes benefits: NIP-44/NIP-17 DMs, NWC, aiohttp websockets, webrepl. Incorrect padding now raises ValueError instead of a bare Exception, and str input is accepted
+
 0.20.0
 ======
 
