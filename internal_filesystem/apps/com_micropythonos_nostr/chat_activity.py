@@ -451,8 +451,14 @@ class ChatActivity(Activity):
             return None
         return getattr(chat, "subject", None) or None
 
+    def _ui_alive(self):
+        """False once the chat screen was paused or destroyed, e.g. by a back
+        press while a multi-second group send was still encrypting."""
+        return getattr(self, "_has_foreground", True) is not False
+
     def _on_encrypt_progress(self, done, total):
-        self._set_sending_state("Encrypting %d/%d" % (done, total), True)
+        if self._ui_alive():
+            self._set_sending_state("Encrypting %d/%d" % (done, total), True)
 
     async def _send_async(self, text):
         try:
@@ -464,7 +470,8 @@ class ChatActivity(Activity):
             logger.error("Send failed: %s", e)
             result = None
         finally:
-            self._set_sending_state("Send", False)
+            if self._ui_alive():
+                self._set_sending_state("Send", False)
 
         if result is None:
             return
@@ -478,8 +485,9 @@ class ChatActivity(Activity):
             outgoing=True,
             queued=False,
         )
+        # A NIP-17 send already stored this under the sender's wrap id before
+        # publishing (see _register_local_copy); then this is a no-op.
         self._store.add_message(self._chat_id, message, mark_unread=False)
-        self._append_message_row(message)
 
         if event_id:
             self._sent_event_ids.add(event_id)
@@ -487,10 +495,36 @@ class ChatActivity(Activity):
             for eid in event_ids:
                 self._sent_event_ids.add(eid)
 
+        if not self._ui_alive():
+            # The user left the chat during the send; the message is persisted
+            # and onResume re-renders from the store. The widgets are gone.
+            return
+        if self._rendered_ids is None or message.event_id not in self._rendered_ids:
+            self._append_message_row(message)
         self._input_textarea.set_text("")
         self._request_scroll_to_bottom()
         if not self._keyboard.has_flag(lv.obj.FLAG.HIDDEN):
             self._keyboard.hide_keyboard()
+
+    def _register_local_copy(self, gift_id, text, own, send_ts):
+        """Store the outgoing message under the sender's own gift wrap id.
+
+        Called by publish_nip17_message_async before the first wrap goes out:
+        the relay echoes that wrap back while the send is still yielding
+        between the other wraps, and _on_event must already know the id or
+        the message is stored and rendered twice.
+        """
+        self._sent_event_ids.add(gift_id)
+        message = Message(
+            event_id=gift_id,
+            ts=send_ts,
+            pubkey=own,
+            content=text,
+            kind=KIND_NIP17_CHAT,
+            outgoing=True,
+            queued=False,
+        )
+        self._store.add_message(self._chat_id, message, mark_unread=False)
 
     async def _do_send_nip17(self, text):
         """Publish a NIP-17 message (group or DM), yielding between gift wraps.
@@ -508,6 +542,12 @@ class ChatActivity(Activity):
             self._input_textarea.set_text("")
             self._keyboard.hide_keyboard()
             return None
+        local = {"id": None}
+
+        def on_local_id(gift_id):
+            local["id"] = gift_id
+            self._register_local_copy(gift_id, text, own, send_ts)
+
         try:
             result = await self._manager.publish_nip17_message_async(
                 text,
@@ -515,12 +555,19 @@ class ChatActivity(Activity):
                 subject=self._nip17_subject(),
                 created_at=send_ts,
                 progress=self._on_encrypt_progress,
+                on_local_id=on_local_id,
             )
         except Exception as e:
             logger.error("Send failed: %s", e)
+            if local["id"]:
+                # Nothing was published: drop the optimistic copy, the queued
+                # placeholder below is the message's only record now.
+                self._store.remove_message(self._chat_id, local["id"])
+                self._sent_event_ids.discard(local["id"])
             self._queue_local_message(text, own)
-            self._input_textarea.set_text("")
-            self._keyboard.hide_keyboard()
+            if self._ui_alive():
+                self._input_textarea.set_text("")
+                self._keyboard.hide_keyboard()
             return None
         if result.failed:
             logger.warning(
@@ -529,7 +576,7 @@ class ChatActivity(Activity):
                 len(result.published) + len(result.failed),
                 result.failed,
             )
-        return (result.local_id, result.ids, KIND_NIP17_CHAT, own, send_ts)
+        return (result.local_id or result.ids[0], result.ids, KIND_NIP17_CHAT, own, send_ts)
 
     def _do_send_sync(self, text):
         online = ConnectivityManager.get().is_online() and self._manager.is_connected()
@@ -610,7 +657,7 @@ class ChatActivity(Activity):
                 KIND_CHANNEL_MESSAGE,
                 channel_id=self._channel_id,
             )
-        if message is not None:
+        if message is not None and self._ui_alive():
             self._append_message_row(message)
 
     def _on_event(self, nostr_event):
