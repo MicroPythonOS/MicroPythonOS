@@ -17,10 +17,17 @@ from nostr.key import PrivateKey
 logger = logging.getLogger(__name__)
 
 try:
-    from nostr.nip17 import decrypt_gift_wrap_to_rumor, make_nip17_messages
+    from nostr.nip17 import (
+        decrypt_gift_wrap_to_rumor,
+        make_gift_wrap,
+        make_rumor,
+        make_seal,
+    )
 except ImportError:
     decrypt_gift_wrap_to_rumor = None
-    make_nip17_messages = None
+    make_gift_wrap = None
+    make_rumor = None
+    make_seal = None
 
 KIND_SET_METADATA = 0
 
@@ -211,6 +218,20 @@ def _normalize_relays(relays):
             seen.add(url)
             out.append(url)
     return out
+
+
+class Nip17SendResult:
+    """Outcome of publish_nip17_message_async: which gift wraps went out."""
+
+    def __init__(self):
+        self.ids = []  # published kind 1059 ids, the sender's own copy first
+        self.published = []  # (target pubkey hex, gift wrap id)
+        self.failed = []  # target pubkey hex of wraps that could not be published
+
+    @property
+    def local_id(self):
+        """Id to store the local copy of the message under (the sender's wrap)."""
+        return self.ids[0] if self.ids else None
 
 
 def _pubkey_to_hex(pubkey_or_npub):
@@ -675,12 +696,11 @@ class NostrManager:
         logger.info("NostrManager: published DM to %s", recipient_hex[:16])
         return dm_id
 
-    def publish_nip17_message(
-        self, content, recipients, subject=None, reply_to=None, created_at=None
-    ):
-        """Sign and publish a NIP-17 gift-wrapped chat message (kind 14).
+    def _prepare_nip17_message(self, content, recipients, subject, reply_to, created_at):
+        """Validate a NIP-17 send and return (rumor, gift-wrap targets).
 
-        Returns a list of the published kind 1059 event ids.
+        Targets are the sender's own pubkey first (NIP-17: wrapped "to each
+        receiver and the sender individually"), then each recipient once.
         """
         if self._nostr_private_key is None:
             raise RuntimeError("Identity must be configured before publishing messages")
@@ -690,16 +710,20 @@ class NostrManager:
             raise RuntimeError("Relay manager is not ready yet")
         if not recipients:
             raise ValueError("Recipients cannot be empty")
-        if make_nip17_messages is None:
+        if make_rumor is None:
             raise RuntimeError("NIP-17 support is not available")
 
-        hex_recipients = [_pubkey_to_hex(r) for r in recipients]
+        hex_recipients = []
+        for r in recipients:
+            r = _pubkey_to_hex(r)
+            if r not in hex_recipients:
+                hex_recipients.append(r)
         # Capture the wall-clock timestamp once, before the pure-Python
         # ChaCha20 loop can starve the ESP32 scheduler and make time.time()
         # stale.
         if created_at is None:
             created_at = Event.epoch_seconds()
-        gift_events = make_nip17_messages(
+        rumor = make_rumor(
             self._nostr_private_key,
             content,
             hex_recipients,
@@ -707,23 +731,99 @@ class NostrManager:
             reply_to=reply_to,
             created_at=created_at,
         )
-        ids = []
-        for gift in gift_events:
-            event = Event(
-                content=gift["content"],
-                public_key=gift["pubkey"],
-                created_at=gift["created_at"],
-                kind=gift["kind"],
-                tags=gift["tags"],
-                signature=gift["sig"],
+        if not rumor.get("id"):
+            # Older nostr.nip17 builds leave out the id NIP-17 requires.
+            rumor["id"] = Event.compute_id(
+                rumor["pubkey"], rumor["created_at"], rumor["kind"], rumor["tags"], rumor["content"]
             )
-            self.relay_manager.publish_event(event)
-            ids.append(gift["id"])
+        own_hex = self._nostr_private_key.public_key.hex()
+        targets = [own_hex] + [r for r in hex_recipients if r != own_hex]
+        return rumor, targets
+
+    def _publish_nip17_wrap(self, rumor, target_hex):
+        """Seal and gift-wrap `rumor` for one pubkey, publish it, return the wrap id."""
+        seal = make_seal(self._nostr_private_key, dict(rumor), target_hex)
+        gift = make_gift_wrap(target_hex, seal)
+        event = Event(
+            content=gift["content"],
+            public_key=gift["pubkey"],
+            created_at=gift["created_at"],
+            kind=gift["kind"],
+            tags=gift["tags"],
+            signature=gift["sig"],
+        )
+        self.relay_manager.publish_event(event)
+        return gift["id"]
+
+    def publish_nip17_message(
+        self, content, recipients, subject=None, reply_to=None, created_at=None
+    ):
+        """Sign and publish a NIP-17 gift-wrapped chat message (kind 14).
+
+        One rumor is sealed and gift-wrapped for the sender and for each
+        recipient. Returns the published kind 1059 event ids, the sender's
+        own copy first, so a caller can store its local copy under ids[0]
+        and the relay echo of that copy deduplicates against it. Raises on
+        the first wrap that fails to publish.
+        """
+        rumor, targets = self._prepare_nip17_message(
+            content, recipients, subject, reply_to, created_at
+        )
+        ids = [self._publish_nip17_wrap(rumor, target) for target in targets]
         logger.info(
-            "NostrManager: published NIP-17 message to %s recipient(s)",
+            "NostrManager: published NIP-17 message as %s gift wrap(s)",
             len(ids)
         )
         return ids
+
+    async def publish_nip17_message_async(
+        self,
+        content,
+        recipients,
+        subject=None,
+        reply_to=None,
+        created_at=None,
+        progress=None,
+    ):
+        """Like publish_nip17_message, but yields to other tasks between wraps.
+
+        Each recipient costs a key generation, two ECDH, two NIP-44 encryptions
+        and two signatures, so a group send would otherwise starve the relay
+        websockets and every other task for seconds on an ESP32.
+        `progress(done, total)` is called before each wrap is built. A wrap
+        that fails to publish is recorded in the result instead of aborting
+        the rest; raises only when no wrap could be published.
+        """
+        rumor, targets = self._prepare_nip17_message(
+            content, recipients, subject, reply_to, created_at
+        )
+        result = Nip17SendResult()
+        total = len(targets)
+        for index, target in enumerate(targets):
+            if progress is not None:
+                try:
+                    progress(index + 1, total)
+                except Exception as e:
+                    logger.warning("NIP-17 progress callback failed: %s", e)
+            await TaskManager.sleep_ms(0)
+            try:
+                gift_id = self._publish_nip17_wrap(rumor, target)
+            except Exception as e:
+                logger.warning("NIP-17: gift wrap for %s failed: %s", target[:16], e)
+                result.failed.append(target)
+                continue
+            result.ids.append(gift_id)
+            result.published.append((target, gift_id))
+        if not result.ids:
+            raise RuntimeError("NIP-17 message could not be published to anyone")
+        if result.failed:
+            logger.warning(
+                "NIP-17: published %s of %s gift wraps; failed for: %s",
+                len(result.ids), total, [t[:16] for t in result.failed]
+            )
+        else:
+            logger.info("NostrManager: published NIP-17 message as %s gift wrap(s)", total)
+        return result
 
     def get_own_pubkey_hex(self):
         """Return the configured identity's public key in hex, or None."""
