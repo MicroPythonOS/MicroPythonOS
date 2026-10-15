@@ -34,10 +34,15 @@ DM_FETCH_LIMIT = 50
 GROUP_FETCH_SINCE_MINUTES = 10  # 10 minutes
 GROUP_FETCH_LIMIT = 10
 
-# NIP-17 gift-wraps randomize created_at within a 2-day window, so the
-# subscription window must be slightly wider than the DM window.
-NIP17_FETCH_SINCE_MINUTES = DM_FETCH_SINCE_MINUTES + 24 * 60  # 3 days
-NIP17_FETCH_LIMIT = 50
+# NIP-17 gift wraps are dated up to 2 days before the message they carry, so
+# to get every message of the DM window the subscription must reach a full
+# 2 days further back; with only 1 day of margin, half the messages that are
+# 2 days old were outside the window after a cache wipe or a long power-off.
+NIP17_FETCH_SINCE_MINUTES = DM_FETCH_SINCE_MINUTES + 2 * 24 * 60  # 4 days
+# Every message sent from this device comes back as a gift wrap addressed to
+# the user too (NIP-17), so the user's own copies share this limit with the
+# other members' messages.
+NIP17_FETCH_LIMIT = 100
 
 OVERLAP_SECONDS = 60  # margin when using since=last_known_ts
 

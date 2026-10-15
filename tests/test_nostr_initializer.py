@@ -115,8 +115,8 @@ class TestConfigureNostrManager(unittest.TestCase):
         return PrivateKey().bech32()
 
     def test_nip17_subscription_uses_wide_window_despite_recent_chat(self):
-        """Even with a very recent DM chat, NIP-17 gift-wraps need a 3-day window
-        because their created_at timestamps are randomized within a 2-day window.
+        """Even with a very recent DM chat, NIP-17 gift wraps need the wide fixed
+        window because their created_at is backdated by up to 2 days.
         """
         own = PrivateKey()
         peer = "a" * 64
@@ -136,7 +136,7 @@ class TestConfigureNostrManager(unittest.TestCase):
         self.assertEqual(dm_call[1]["since"], self.now - 120 - 60)
         self.assertEqual(dm_call[1]["limit"], nostr_initializer.DM_FETCH_LIMIT)
 
-        # NIP-17 subscription must use the fixed 3-day lookback, not the
+        # NIP-17 subscription must use the fixed wide lookback, not the
         # chat-history-driven dm_since.
         self.assertEqual(
             nip17_call[1]["since"],
@@ -144,7 +144,15 @@ class TestConfigureNostrManager(unittest.TestCase):
         )
         self.assertEqual(nip17_call[1]["limit"], nostr_initializer.NIP17_FETCH_LIMIT)
 
-    def test_nip17_subscription_uses_three_day_window_without_history(self):
+    def test_nip17_window_reaches_two_days_past_the_dm_window(self):
+        # A wrap of a message at the edge of the DM window may be dated 2 days
+        # earlier still; less margin loses half the 2-day-old messages.
+        self.assertTrue(
+            nostr_initializer.NIP17_FETCH_SINCE_MINUTES
+            >= nostr_initializer.DM_FETCH_SINCE_MINUTES + 2 * 24 * 60
+        )
+
+    def test_nip17_subscription_uses_wide_window_without_history(self):
         manager = _FakeManager()
         prefs = _FakePrefs(nsec=self._make_nsec(), relay="wss://relay.example")
 
