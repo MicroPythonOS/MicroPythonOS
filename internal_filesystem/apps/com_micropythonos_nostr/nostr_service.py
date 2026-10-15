@@ -1328,19 +1328,19 @@ class NostrManager:
             # shadow it for downstream code that reads event.id.
             decrypted_event.id = event.id
             event = decrypted_event
+            # Only the size: the content is end-to-end encrypted chat.
             logger.info(
-                "NostrManager: unwrapped NIP-17 message from %s: %s",
-                event.public_key[:16], event.content
+                "NostrManager: unwrapped NIP-17 message from %s (%s chars)",
+                event.public_key[:16], len(event.content or "")
             )
 
         # Build the shared wrapper once; decrypt DMs if a private key is set.
         nostr_event = NostrEvent(event, self._nostr_private_key)
 
-        # Log plaintext for DMs / NIP-17 chat messages so we can see what arrived.
         if event.kind in (4, KIND_NIP17_CHAT):
             logger.info(
-                "NostrManager: plaintext message from %s via %s: %s",
-                event.public_key[:16], relay_url, nostr_event.get_display_content()
+                "NostrManager: private message (kind %s) from %s via %s",
+                event.kind, event.public_key[:16], relay_url
             )
 
         # Route by kind to registered callbacks
