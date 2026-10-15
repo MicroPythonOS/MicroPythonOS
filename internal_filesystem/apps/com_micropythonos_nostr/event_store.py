@@ -46,6 +46,24 @@ def _sanitize_chat_id(chat_id):
     return "".join(c for c in chat_id if c in allowed)
 
 
+# File names are capped at 255 bytes on LittleFS, FAT and APFS alike. A NIP-17
+# room id is "nip17_" plus every member's 64-hex pubkey, so from 4 members on
+# (271 chars) the id cannot be the file name. Ids up to this length keep their
+# verbatim name (existing dm_/channel_/small-room files stay where they are);
+# longer ones are stored under a hash of the id.
+MAX_VERBATIM_CHAT_FILENAME = 200
+HASHED_CHAT_FILE_PREFIX = "nip17_h_"
+
+
+def _chat_file_stem(chat_id):
+    """The file name (without suffix) a chat's messages are stored under."""
+    if len(chat_id) <= MAX_VERBATIM_CHAT_FILENAME:
+        return _sanitize_chat_id(chat_id)
+    import hashlib
+
+    return HASHED_CHAT_FILE_PREFIX + hashlib.sha256(chat_id.encode()).digest().hex()
+
+
 class EventStore:
     """Persistent but lightweight cache for decrypted Nostr chat messages.
 
@@ -107,7 +125,7 @@ class EventStore:
         return f"{self._cache_dir}/{OUTBOX_FILENAME}"
 
     def _chat_path(self, chat_id):
-        return f"{self._cache_dir}/{_sanitize_chat_id(chat_id)}{CHAT_FILE_SUFFIX}"
+        return f"{self._cache_dir}/{_chat_file_stem(chat_id)}{CHAT_FILE_SUFFIX}"
 
     def _load_index(self):
         path = self._index_path()
@@ -136,17 +154,11 @@ class EventStore:
         may lag behind; rebuild summaries so the chat list shows DMs that have
         persisted history.
         """
-        try:
-            files = os.listdir(self._cache_dir)
-        except OSError:
-            return
         changed = False
-        for name in files:
-            if not name.endswith(CHAT_FILE_SUFFIX):
-                continue
-            chat_id = name[: -len(CHAT_FILE_SUFFIX)]
-            entry = self._index.get("chats", {}).get(chat_id)
-            if entry is None or entry.get("last_ts", 0):
+        # Walk the index rather than the cache directory: a long room id is
+        # stored under a hashed file name that cannot be mapped back.
+        for chat_id, entry in list(self._index.get("chats", {}).items()):
+            if entry.get("last_ts", 0):
                 continue
             messages = self.load_messages(chat_id)
             if not messages:
@@ -400,6 +412,12 @@ class EventStore:
         """
         ts = _current_nostr_ts()
         placeholder_id = f"out:{chat_id}:{ts}"
+        # Two messages queued within the same second must not share an id,
+        # or the second is deduplicated away and the flush replaces the wrong one.
+        n = 0
+        while placeholder_id in self._known_ids:
+            n += 1
+            placeholder_id = f"out:{chat_id}:{ts}:{n}"
         message = Message(
             event_id=placeholder_id,
             ts=ts,
@@ -452,6 +470,26 @@ class EventStore:
         except OSError:
             pass
 
+    def remove_outbox_item(self, placeholder_id):
+        """Drop one published item from the outbox, keeping the others.
+
+        Returns True if it was there. Called per item as a flush publishes it,
+        so a later failure does not re-send (and re-wrap) the earlier ones.
+        """
+        items = self.load_outbox()
+        kept = [item for item in items if item.get("placeholder_id") != placeholder_id]
+        if len(kept) == len(items):
+            return False
+        if not kept:
+            self.clear_outbox()
+            return True
+        self._ensure_dirs()
+        with open(self._outbox_path(), "w") as f:
+            for item in kept:
+                f.write(json.dumps(item))
+                f.write("\n")
+        return True
+
     def replace_message(self, chat_id, old_event_id, new_message):
         """Replace a placeholder message (e.g. queued) with a published one."""
         messages = self.load_messages(chat_id)
@@ -463,11 +501,26 @@ class EventStore:
                 break
         if found:
             self._rewrite_jsonl(self._chat_path(chat_id), messages)
+            # The published id is now stored, so the relay's echo of it (the
+            # sender's own gift wrap) must deduplicate like any known message.
+            self._known_ids.discard(old_event_id)
+            self._add_known_id(new_message.event_id)
             chat = self.get_chat(chat_id)
             if chat is not None and new_message.ts >= chat.last_ts:
                 chat.update_from_message(new_message)
                 self.update_chat(chat)
         return found
+
+    def remove_message(self, chat_id, event_id):
+        """Delete one stored message (e.g. an optimistic copy of a send that
+        never went out). Returns True if it was there."""
+        messages = self.load_messages(chat_id)
+        kept = [m for m in messages if m.event_id != event_id]
+        if len(kept) == len(messages):
+            return False
+        self._rewrite_jsonl(self._chat_path(chat_id), kept)
+        self._known_ids.discard(event_id)
+        return True
 
     def get_outgoing_placeholder_ids(self, chat_id):
         """Return queued placeholder ids for a chat."""
