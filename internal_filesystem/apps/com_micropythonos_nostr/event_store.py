@@ -276,12 +276,22 @@ class EventStore:
         entry["title"] = title
         self._save_index()
 
-    def get_or_create_nip17_group(self, participants, title=None):
+    def update_chat_subject(self, chat_id, subject, ts=0):
+        """Set a group chat's NIP-17 subject (also its title) and when it was set."""
+        entry = self._index.get("chats", {}).get(chat_id)
+        if entry is None:
+            return
+        entry["subject"] = subject
+        entry["subject_ts"] = int(ts or 0)
+        entry["title"] = subject
+        self._save_index()
+
+    def get_or_create_nip17_group(self, participants, title=None, subject=None):
         """Return or create a NIP-17 group chat for the given participants."""
         chat_id = nip17_group_chat_id(participants)
         chat = self.get_chat(chat_id)
         if chat is None:
-            chat = Chat.nip17_group(participants, title=title)
+            chat = Chat.nip17_group(participants, title=title, subject=subject)
             self._index["chats"][chat_id] = chat.to_dict()
             self._save_index()
         return chat
@@ -382,6 +392,7 @@ class EventStore:
         recipient_pubkey=None,
         channel_id=None,
         participants=None,
+        subject=None,
     ):
         """Store an outgoing message that cannot be published right now.
 
@@ -409,6 +420,7 @@ class EventStore:
             "recipient_pubkey": recipient_pubkey,
             "channel_id": channel_id,
             "participants": participants,
+            "subject": subject,
         }
         self._append_jsonl(self._outbox_path(), outbox_item)
         return message

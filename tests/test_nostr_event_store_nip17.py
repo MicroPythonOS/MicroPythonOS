@@ -67,6 +67,36 @@ class TestEventStoreNip17(unittest.TestCase):
         self.assertTrue(messages[0].outgoing)
         self.assertTrue(messages[0].queued)
 
+    def test_get_or_create_nip17_group_stores_subject(self):
+        store = EventStore(self.app_name)
+        chat = store.get_or_create_nip17_group(["a" * 64, "b" * 64], subject="Alpha")
+        self.assertEqual(chat.subject, "Alpha")
+        self.assertEqual(chat.title, "Alpha")
+        again = store.get_chat(chat.chat_id)
+        self.assertEqual(again.subject, "Alpha")
+
+    def test_update_chat_subject_sets_title_subject_and_ts(self):
+        store = EventStore(self.app_name)
+        chat = store.get_or_create_nip17_group(["a" * 64, "b" * 64])
+        store.update_chat_subject(chat.chat_id, "Renamed", ts=42)
+        again = store.get_chat(chat.chat_id)
+        self.assertEqual(again.subject, "Renamed")
+        self.assertEqual(again.title, "Renamed")
+        self.assertEqual(again.subject_ts, 42)
+
+    def test_queue_outgoing_stores_subject(self):
+        store = EventStore(self.app_name)
+        chat = store.get_or_create_nip17_group(["a" * 64, "b" * 64], subject="Alpha")
+        store.queue_outgoing(
+            chat.chat_id,
+            "queued with subject",
+            kind=KIND_NIP17_CHAT,
+            participants=["a" * 64, "b" * 64],
+            subject="Alpha",
+        )
+        outbox = store.load_outbox()
+        self.assertEqual(outbox[0]["subject"], "Alpha")
+
     def test_nip17_group_id_is_stable(self):
         store = EventStore(self.app_name)
         chat1 = store.get_or_create_nip17_group(["b" * 64, "a" * 64])
