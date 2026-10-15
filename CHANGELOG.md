@@ -8,6 +8,10 @@ Frameworks:
 - qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
 - Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
 
+Testing:
+- unittest: raise AssertionError explicitly instead of using `assert` statements, which mpy-cross -O3 strips. The desktop build freezes lib/ with -O3, so self.fail() and expectedFailure() did nothing there and a test that called self.fail() passed under test_runner, whose self-check only repaired the assert* methods
+- test_runner: the unittest self-check also checks self.fail(), and when the frozen unittest's asserts don't work it copies a working fail() from lib/unittest along with the assert methods, so binaries built before this fix also report self.fail() calls
+
 0.20.0
 ======
 
