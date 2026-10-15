@@ -8,6 +8,7 @@ Frameworks:
 - qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
 - Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
 - qrdecode: reads QR codes whose finder patterns have rounded corners, as some apps draw them (#313). quirc takes the extreme pixels of a finder pattern's ring as its corners, and on a rounded ring those lie on the arcs. When no grid decodes and there are three or more finder patterns, the new quirc_retry_rounded() fits the corners to the rings' straight edges and groups them again, so frames that decode today do the same work as before. qrdecode also tries every grid quirc finds instead of only the first, each one also mirrored
+- qrdecode: quirc's alignment pattern search never looks at more points than the frame has pixels. A bad finder pattern grouping could make it run for millions of steps (dlbeer/quirc#162)
 
 0.20.0
 ======

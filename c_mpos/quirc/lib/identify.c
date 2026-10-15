@@ -664,6 +664,7 @@ static void find_alignment_pattern(struct quirc *q, int index)
 	int size_estimate;
 	int step_size = 1;
 	int dir = 0;
+	int limit;
 	quirc_float_t u, v;
 
 	/* Grab our previous estimate of the alignment pattern corner */
@@ -680,11 +681,20 @@ static void find_alignment_pattern(struct quirc *q, int index)
 	size_estimate = abs((a.x - b.x) * -(c.y - b.y) +
 			    (a.y - b.y) * (c.x - b.x));
 
+	/* The spiral below looks about 5 modules each way, but never at
+	 * more points than the image has pixels: a bad capstone grouping can
+	 * make size_estimate huge, and the spiral would then run for
+	 * millions of steps (dlbeer/quirc#162).
+	 */
+	limit = q->w * q->h;
+	if (size_estimate <= limit / 100)
+		limit = size_estimate * 100;
+
 	/* Spiral outwards from the estimate point until we find something
 	 * roughly the right size. Don't look too far from the estimate
 	 * point.
 	 */
-	while (step_size * step_size < size_estimate * 100) {
+	while (step_size * step_size < limit) {
 		static const int dx_map[] = {1, 0, -1, 0};
 		static const int dy_map[] = {0, -1, 0, 1};
 		int i;
