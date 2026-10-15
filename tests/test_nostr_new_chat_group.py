@@ -18,9 +18,16 @@ from apps.com_micropythonos_nostr.new_chat_activity import NewChatActivity
 class _FakeLabel:
     def __init__(self):
         self.text = ""
+        self.hidden = True
 
     def set_text(self, text):
         self.text = text
+
+    def add_flag(self, flag):
+        self.hidden = True
+
+    def remove_flag(self, flag):
+        self.hidden = False
 
 
 class _FakeManager:

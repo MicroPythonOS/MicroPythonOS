@@ -85,14 +85,14 @@ class NewChatActivity(Activity):
         spacer.set_size(DisplayMetrics.pct_of_width(12), DisplayMetrics.pct_of_width(12))
         spacer.set_style_border_width(0, lv.PART.MAIN)
 
-        mode_label = lv.label(self._screen)
-        mode_label.set_text("Mode:")
-        mode_label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
-
+        # The mode buttons label themselves; no "Mode:" caption and no row
+        # padding, so the Group mode (members, subject, button) fits 240 px.
         mode_row = lv.obj(self._screen)
         mode_row.set_width(lv.pct(100))
         mode_row.set_height(lv.SIZE_CONTENT)
         mode_row.set_style_border_width(0, lv.PART.MAIN)
+        mode_row.set_style_pad_all(0, lv.PART.MAIN)
+        mode_row.set_style_pad_column(DisplayMetrics.pct_of_width(1), lv.PART.MAIN)
         mode_row.set_flex_flow(lv.FLEX_FLOW.ROW)
 
         self._make_mode_btn(mode_row, "DM", MODE_DM)
@@ -130,7 +130,8 @@ class NewChatActivity(Activity):
         self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
         self._error_label = lv.label(self._screen)
-        self._error_label.set_text("")
+        self._set_error("")
+        self._error_label.add_flag(lv.obj.FLAG.HIDDEN)  # shown by _set_error
         self._error_label.set_style_text_color(lv.color_hex(0xFF0000), lv.PART.MAIN)
         self._error_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self._error_label.set_width(lv.pct(95))
@@ -167,23 +168,39 @@ class NewChatActivity(Activity):
         self._mode = mode
         self._textarea.set_text("")
         self._subject_textarea.set_text("")
-        self._error_label.set_text("")
+        self._set_error("")
         self._results_list.add_flag(lv.obj.FLAG.HIDDEN)
         self._results_list.clean()
         self._update_for_mode()
+
+    def _set_error(self, text):
+        self._error_label.set_text(text)
+        if text:
+            self._error_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._error_label.add_flag(lv.obj.FLAG.HIDDEN)
+
+    def _set_hint(self, text):
+        self._hint_label.set_text(text)
+        if text:
+            self._hint_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._hint_label.add_flag(lv.obj.FLAG.HIDDEN)
 
     def _update_for_mode(self):
         group = self._mode == MODE_GROUP
         # The member list is multi-line and long; every other input is one line.
         self._textarea.set_one_line(not group)
         self._textarea.set_max_length(_MEMBERS_MAX_LENGTH if group else _INPUT_MAX_LENGTH)
-        self._textarea.set_height(DisplayMetrics.pct_of_height(22) if group else lv.SIZE_CONTENT)
+        # Two lines of members; the list scrolls inside the field.
+        self._textarea.set_height(DisplayMetrics.pct_of_height(18) if group else lv.SIZE_CONTENT)
         if group:
             self._subject_textarea.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             self._subject_textarea.add_flag(lv.obj.FLAG.HIDDEN)
-        # set_textarea() registers a click handler each time, so only re-attach
-        # when the keyboard targets the other input or the one-line mode changed.
+        # Re-target the keyboard (set_textarea also picks the one-line or
+        # multi-line key map) when it types into the other input or the
+        # one-line mode of this one changed.
         if (
             self._keyboard.get_textarea() is not self._textarea
             or self._keyboard_one_line != (not group)
@@ -191,25 +208,30 @@ class NewChatActivity(Activity):
             self._keyboard.set_textarea(self._textarea)
             self._keyboard_one_line = not group
         if self._mode == MODE_DM:
-            self._hint_label.set_text("Enter npub(s) comma-separated")
+            self._set_hint("Enter npub(s) comma-separated")
             self._textarea.set_placeholder_text("npub1...")
             self._action_btn_label.set_text("Start chat")
         elif group:
-            self._hint_label.set_text("Members: npubs, hex keys or names (comma or newline separated)")
-            self._textarea.set_placeholder_text("npub1..., npub1...")
+            # The members field explains itself; a hint row would push the
+            # Create button below a 240 px screen.
+            self._set_hint("")
+            self._textarea.set_placeholder_text(
+                "Members: npubs, hex keys or names,\ncomma or newline separated"
+            )
             self._action_btn_label.set_text("Create group")
         elif self._mode == MODE_JOIN_CHANNEL:
-            self._hint_label.set_text("Join a channel: name or hex id")
+            self._set_hint("Join a channel: name or hex id")
             self._textarea.set_placeholder_text("name or hex channel id")
             self._action_btn_label.set_text("Search")
         else:
-            self._hint_label.set_text("Create a channel: enter its name")
+            self._set_hint("Create a channel: enter its name")
             self._textarea.set_placeholder_text("channel name")
             self._action_btn_label.set_text("Create channel")
 
     def _focus_textarea(self, textarea):
+        """Point the keyboard at the tapped field (members or subject)."""
         if self._keyboard.get_textarea() is textarea:
-            return
+            return  # the keyboard's own CLICKED hook shows it
         self._keyboard.set_textarea(textarea)
         self._keyboard.show_keyboard()
 
@@ -229,7 +251,7 @@ class NewChatActivity(Activity):
     def _start_dm(self, raw):
         pubkeys = self._parse_pubkeys(raw)
         if pubkeys is None:
-            self._error_label.set_text("Invalid npub(s)")
+            self._set_error("Invalid npub(s)")
             return None
         if len(pubkeys) > 1:
             return self._start_group(raw, None)
@@ -245,7 +267,7 @@ class NewChatActivity(Activity):
             raw_members, own, resolve_name=self._resolve_member_name
         )
         if error:
-            self._error_label.set_text(error)
+            self._set_error(error)
             return None
         subject = (subject or "").strip() or None
         chat = self._store.get_or_create_nip17_group(members, subject=subject)
@@ -253,7 +275,7 @@ class NewChatActivity(Activity):
             self._store.update_chat_subject(chat.chat_id, subject, ts=_current_nostr_ts())
             chat.subject = subject
             chat.title = subject
-        self._error_label.set_text("")
+        self._set_error("")
         self._navigate_to_chat(chat)
         return chat
 
@@ -271,7 +293,7 @@ class NewChatActivity(Activity):
             self._navigate_to_chat(chat)
             return
 
-        self._error_label.set_text("Searching...")
+        self._set_error("Searching...")
         self._search_results = []
         self._results_list.clean()
 
@@ -306,7 +328,7 @@ class NewChatActivity(Activity):
         if elapsed >= _SEARCH_TIMEOUT_S or not self._search_sub_name:
             self._cleanup_search()
             if not self._search_results:
-                self._error_label.set_text("No channels found")
+                self._set_error("No channels found")
             return
         self._show_search_results()
 
@@ -340,7 +362,7 @@ class NewChatActivity(Activity):
             self._navigate_to_chat(chat)
         except Exception as e:
             logger.error("channel creation failed: %s", e)
-            self._error_label.set_text("Creation failed")
+            self._set_error("Creation failed")
             self._action_btn_label.set_text("Create channel")
             self._action_btn.remove_state(lv.STATE.DISABLED)
 
