@@ -5,6 +5,8 @@ The fixtures in tests/qrdecode/ are small camera-like grayscale frames
 rendered with segno + OpenCV. v1_* and v2_* have square finder patterns;
 v3_wifi_r2_* and v3_wifi_r15_* have finder patterns with rounded corners
 (radius 2 and 1.5 modules), as some apps draw them (MicroPythonOS #313).
+v2_url_mirrored_* is a mirrored code with one wrong module in each copy of
+its format information.
 
 The module keeps one decoder between calls (resized when the frame size
 changes) until qrdecode.release(), so these tests also check that frame size
@@ -54,6 +56,7 @@ try:
     _V1 = _read_pgm("v1_text_96x80.pgm")
     _R2 = _read_pgm("v3_wifi_r2_160x160.pgm")
     _R15 = _read_pgm("v3_wifi_r15_160x160.pgm")
+    _MIRRORED = _read_pgm("v2_url_mirrored_120x120.pgm")
     _HAS_FIXTURES = True
 except OSError:
     _HAS_FIXTURES = False
@@ -96,11 +99,9 @@ def _stacked(top, top_width, top_height, bottom, bottom_width, bottom_height):
     return frame
 
 
-def _finders_in_a_row(width=200, height=60, module=4):
-    # Three finder patterns side by side: capstones, but no L shape to group them into a grid.
+def _finders(width, height, module, origins):
     frame = bytearray(b"\xdc" * (width * height))
-    for k in range(3):
-        x0, y0 = 10 + 64 * k, 16
+    for x0, y0 in origins:
         for v in range(7):
             for u in range(7):
                 ring = u in (0, 6) or v in (0, 6)
@@ -110,6 +111,17 @@ def _finders_in_a_row(width=200, height=60, module=4):
                         start = y * width + x0 + u * module
                         frame[start:start + module] = b"\x1e" * module
     return frame, width, height
+
+
+def _finders_in_a_row():
+    # Three finder patterns side by side: capstones, but no L shape to group them into a grid.
+    return _finders(200, 60, 4, [(10 + 64 * k, 16) for k in range(3)])
+
+
+def _far_finders():
+    # Three 7-pixel finder patterns in an L, 200 pixels apart: quirc groups them
+    # into a grid of over 177 modules (QUIRC_MAX_GRID_SIZE), larger than any QR code.
+    return _finders(320, 240, 1, [(8, 8), (208, 8), (8, 208)])
 
 
 def _to_rgb565(gray):
@@ -252,6 +264,7 @@ class TestQRDecodeFallbacks(unittest.TestCase):
             cls.v1, cls.v1_w, cls.v1_h = _V1
             cls.r2, cls.r2_w, cls.r2_h = _R2
             cls.r15, cls.r15_w, cls.r15_h = _R15
+            cls.mirrored, cls.mirrored_w, cls.mirrored_h = _MIRRORED
 
     @classmethod
     def tearDownClass(cls):
@@ -278,6 +291,13 @@ class TestQRDecodeFallbacks(unittest.TestCase):
         self.assertEqual(qrdecode.qrdecode(frame, self.v2_h, self.v2_w), V2_PAYLOAD)
 
     @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_decodes_mirrored_code_whose_format_does_not_read(self):
+        # Read unmirrored, neither copy of the format information is close enough
+        # to a format word (QUIRC_ERROR_FORMAT_ECC); read mirrored, both are.
+        frame, width, height = self.mirrored, self.mirrored_w, self.mirrored_h
+        self.assertEqual(qrdecode.qrdecode(frame, width, height), V2_PAYLOAD)
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
     def test_decodes_mirrored_rounded_finder_code(self):
         frame = _transposed(self.r2, self.r2_w, self.r2_h)
         self.assertEqual(qrdecode.qrdecode(frame, self.r2_h, self.r2_w), ROUNDED_PAYLOAD)
@@ -300,6 +320,18 @@ class TestQRDecodeFallbacks(unittest.TestCase):
         frame, width, height = _finders_in_a_row()
         with self.assertRaises(ValueError):
             qrdecode.qrdecode(frame, width, height)
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_grid_too_large_for_a_qr_code_raises_type_error(self):
+        # quirc leaves such a grid's bitmap empty, and mirroring it read and wrote
+        # past the end of the bitmap. Decode a code first, so the kept decoder's
+        # data (right after the bitmap) is not all zero.
+        self.assertEqual(qrdecode.qrdecode(self.v2, self.v2_w, self.v2_h), V2_PAYLOAD)
+        frame, width, height = _far_finders()
+        for _ in range(2):
+            with self.assertRaises(TypeError):
+                qrdecode.qrdecode(frame, width, height)
+        self.assertEqual(qrdecode.qrdecode(self.v2, self.v2_w, self.v2_h), V2_PAYLOAD)
 
     @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
     def test_decoder_usable_after_retry(self):

@@ -98,7 +98,13 @@ static int qrdecode_any_grid(struct qrdecode_state *state) {
         // the code struct now contains the corners of the QR code, as well as the bitmap of the values
         // this could be used to display debug info to the user - they might even be able to see which modules are being misidentified!
         err = quirc_decode(&state->code, &state->data);
-        if (err != QUIRC_SUCCESS) {
+        // Mirror the grid and try again, but not after a size or version error:
+        // mirroring keeps the size, and quirc_flip() would read and write past the
+        // bitmap of a grid over QUIRC_MAX_GRID_SIZE. Upstream flips only after
+        // QUIRC_ERROR_DATA_ECC, but a mirrored code with a wrong format module can
+        // fail with QUIRC_ERROR_FORMAT_ECC first.
+        if (err != QUIRC_SUCCESS && err != QUIRC_ERROR_INVALID_GRID_SIZE &&
+            err != QUIRC_ERROR_INVALID_VERSION) {
             quirc_flip(&state->code);
             err = quirc_decode(&state->code, &state->data);
         }
