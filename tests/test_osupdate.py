@@ -121,13 +121,11 @@ class TestUpdateChecker(unittest.TestCase):
         async def run_test():
             return await self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
 
-        # MicroPython doesn't have ConnectionError, so catch generic Exception
-        try:
+        # MockDownloadManager returns None on failure, which causes an error
+        with self.assertRaises(ValueError) as cm:
             run_async(run_test())
-            self.fail("Should have raised an exception for HTTP 404")
-        except Exception as e:
-            # MockDownloadManager returns None on failure, which causes an error
-            pass
+
+        self.assertIn("Invalid JSON", str(cm.exception))
 
     def test_fetch_update_info_invalid_json(self):
         """Test fetch with invalid JSON."""
@@ -197,12 +195,11 @@ class TestUpdateChecker(unittest.TestCase):
         async def run_test():
             return await self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
 
-        try:
+        # MockDownloadManager returns None on failure, which causes an error
+        with self.assertRaises(ValueError) as cm:
             run_async(run_test())
-            self.fail("Should have raised an exception for timeout")
-        except Exception as e:
-            # MockDownloadManager returns None on failure, which causes an error
-            pass
+
+        self.assertIn("Invalid JSON", str(cm.exception))
 
     def test_fetch_update_info_connection_refused(self):
         """Test fetch with connection refused."""
@@ -211,12 +208,11 @@ class TestUpdateChecker(unittest.TestCase):
         async def run_test():
             return await self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
 
-        try:
+        # MockDownloadManager returns None on failure, which causes an error
+        with self.assertRaises(ValueError) as cm:
             run_async(run_test())
-            self.fail("Should have raised an exception")
-        except Exception as e:
-            # MockDownloadManager returns None on failure, which causes an error
-            pass
+
+        self.assertIn("Invalid JSON", str(cm.exception))
 
     def test_fetch_update_info_empty_response(self):
         """Test fetch with empty response."""
@@ -225,11 +221,10 @@ class TestUpdateChecker(unittest.TestCase):
         async def run_test():
             return await self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
 
-        try:
+        with self.assertRaises(ValueError) as cm:
             run_async(run_test())
-            self.fail("Should have raised an exception for empty response")
-        except Exception:
-            pass  # Expected to fail
+
+        self.assertIn("Invalid JSON", str(cm.exception))
 
     def test_fetch_update_info_server_error_500(self):
         """Test fetch with 500 server error."""
@@ -238,11 +233,10 @@ class TestUpdateChecker(unittest.TestCase):
         async def run_test():
             return await self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
 
-        try:
+        with self.assertRaises(ValueError) as cm:
             run_async(run_test())
-            self.fail("Should have raised an exception for HTTP 500")
-        except Exception as e:
-            pass
+
+        self.assertIn("Invalid JSON", str(cm.exception))
 
     def test_fetch_update_info_missing_changelog(self):
         """Test fetch with missing changelog field."""

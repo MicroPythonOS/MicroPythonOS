@@ -8,6 +8,9 @@ Frameworks:
 - qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
 - Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
 
+Testing:
+- test_osupdate: five fetch_update_info error tests (HTTP 404, timeout, connection refused, empty response, HTTP 500) called self.fail() inside `try: ... except Exception`, which also caught the AssertionError, so they could never fail. They now use assertRaises(ValueError) and check the 'Invalid JSON' message
+
 0.20.0
 ======
 
