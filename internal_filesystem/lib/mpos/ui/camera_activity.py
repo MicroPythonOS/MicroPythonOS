@@ -162,7 +162,10 @@ class CameraActivity(Activity):
 
     def onPause(self, screen):
         if __debug__: logger.debug("camera app backgrounded, cleaning up...")
-        self.stop_cam()
+        try:
+            self.stop_cam()
+        finally:
+            self._release_qr_decoder()
         if __debug__: logger.debug("camera app cleanup done.")
 
     def resize_buttons(self):
@@ -218,6 +221,7 @@ class CameraActivity(Activity):
     def stop_cam(self):
         if self.capture_timer:
             self.capture_timer.delete()
+            self.capture_timer = None
         if self.cam:
             CameraManager.get_cameras()[0].deinit(self.cam)
         self.cam = None
@@ -288,7 +292,7 @@ class CameraActivity(Activity):
             before = time.ticks_ms()
             import qrdecode
             if self.colormode:
-                # exceptions from this one are not caught - see comments in quirc_decode.c
+                # raises the same ValueError and TypeError as qrdecode(), caught below
                 result = qrdecode.qrdecode_rgb565(self.current_cam_buffer, self.width, self.height)
             else:
                 result = qrdecode.qrdecode(self.current_cam_buffer, self.width, self.height)
@@ -394,6 +398,7 @@ class CameraActivity(Activity):
     def stop_qr_decoding(self, activate_non_qr_mode=True):
         if __debug__: logger.debug("Deactivating live QR decoding...")
         self.scanqr_mode = False
+        self._release_qr_decoder()
         self.qr_label.set_text(mpos_ui.QR_SYMBOL)
         status_label_text = self.status_label.get_text()
         if status_label_text in (self.STATUS_NO_CAMERA, self.STATUS_SEARCHING_QR, self.STATUS_FOUND_QR): # if it found a QR code, leave it
@@ -406,6 +411,13 @@ class CameraActivity(Activity):
         self.stop_cam()
         self.start_cam()
     
+    def _release_qr_decoder(self):
+        try:
+            import qrdecode
+            qrdecode.release()
+        except Exception as e:
+            logger.warning("Could not release the QR decoder: %s", e)
+
     def qr_button_click(self, e):
         if not self.scanqr_mode:
             self.start_qr_decoding()
@@ -431,11 +443,11 @@ class CameraActivity(Activity):
         self.image.set_src(self.image_dsc)
         if self.scanqr_mode:
             try:
-                # Due to buggy behavior in MicroPython and/or qrdecode_rgb565 of quirc_decode.c
-                # the exceptions are not caught in self.qrdecode_one() so must be done here
+                # qrdecode_one() handles the decoder's exceptions; this keeps the
+                # capture timer running if anything else in it raises
                 self.qrdecode_one()
             except Exception as e:
-                logger.error("self.qrdecode_one() was unable to catch exception from qrdecode_rgb565(): %s" % (e))
+                logger.error("self.qrdecode_one() raised: %s", e)
         try:
             self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one
         except Exception as e:
