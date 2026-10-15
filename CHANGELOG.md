@@ -8,6 +8,9 @@ Frameworks:
 - qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
 - Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
 
+Testing:
+- unittest: an exception raised in setUp, tearDown, a cleanup, setUpClass or tearDownClass, including self.skipTest() or raise unittest.SkipTest, is now reported as a skip or an error instead of aborting the whole test file, which was then reported as failed with its later tests and classes never run. As in CPython, a failed setUp skips the test body and tearDown, a failed setUpClass skips the class's tests and tearDownClass, and cleanups always run, each one even if an earlier one raised
+
 0.20.0
 ======
 
