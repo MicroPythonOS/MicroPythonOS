@@ -1241,3 +1241,328 @@ void quirc_extract(const struct quirc *q, int index,
 		}
 	}
 }
+
+/************************************************************************
+ * Second chance for finder patterns with rounded corners
+ *
+ * find_region_corners() takes extreme pixels of the ring as its corners.
+ * That is exact for a square ring, but many apps draw the finder
+ * patterns with rounded corners. There the extreme pixels slide along
+ * the arcs, so the corners come out about 0.29 * radius modules too far
+ * in on each axis, and turned. The grid size estimate (from corner
+ * distances) and the alignment pattern estimate (from extended capstone
+ * edges) are then wrong, and the code does not decode.
+ *
+ * refine_capstone() fits the corners to the ring's straight outer edges
+ * instead: it probes the outer edge at 13 points along each side (placed
+ * with the capstone's current perspective), fits a line to each side
+ * while dropping points that lie inside it (those are on the rounded
+ * corners), intersects neighbouring lines, and repeats with the new
+ * corners.
+ *
+ * quirc_end() keeps the extreme-pixel corners: test_grouping() is so
+ * sensitive to corner positions that moving a corner of a square ring by
+ * a pixel can lose a code that decodes with the old corners. Only
+ * quirc_retry_rounded() uses the fitted corners, once nothing decoded.
+ */
+
+#define REFINE_PROBES	13	/* per side, 0.5 modules apart */
+#define REFINE_PASSES	3
+
+struct side_line {
+	quirc_float_t nx, ny, d;	/* nx * x + ny * y = d, n points out */
+};
+
+static void perspective_map_f(const quirc_float_t *c,
+			      quirc_float_t u, quirc_float_t v,
+			      quirc_float_t *x, quirc_float_t *y)
+{
+	quirc_float_t den = c[6] * u + c[7] * v + (quirc_float_t)1;
+
+	*x = (c[0] * u + c[1] * v + c[2]) / den;
+	*y = (c[3] * u + c[4] * v + c[5]) / den;
+}
+
+/* March from (x0, y0) towards (x1, y1), one pixel per step, and report
+ * the last pixel of region rcode before the march leaves it again.
+ */
+static int probe_edge(const struct quirc *q, int rcode,
+		      quirc_float_t x0, quirc_float_t y0,
+		      quirc_float_t x1, quirc_float_t y1,
+		      quirc_float_t *ex, quirc_float_t *ey)
+{
+	quirc_float_t dx = x1 - x0;
+	quirc_float_t dy = y1 - y0;
+	quirc_float_t len = fabs(dx) > fabs(dy) ? fabs(dx) : fabs(dy);
+	int steps, i, seen = 0;
+
+	if (!(len < q->w + q->h))	/* also rejects NaN */
+		return 0;
+	steps = (int)len + 1;
+	dx /= steps;
+	dy /= steps;
+	x0 += (quirc_float_t)0.5;	/* round by truncation below */
+	y0 += (quirc_float_t)0.5;
+
+	for (i = 0; i <= steps; i++) {
+		quirc_float_t fx = x0 + dx * i;
+		quirc_float_t fy = y0 + dy * i;
+		int x, y;
+
+		if (fx < 0 || fy < 0 || fx >= q->w || fy >= q->h) {
+			if (seen)
+				return 0;	/* ring runs off the image */
+			continue;
+		}
+		x = (int)fx;
+		y = (int)fy;
+		if (q->pixels[y * q->w + x] == rcode) {
+			seen = 1;
+			*ex = x;
+			*ey = y;
+		} else if (seen) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+/* Fit a line to the outer edge points of one side. Points well inside
+ * the line (rounded corners) or well outside it (noise, something
+ * touching the ring) are dropped one at a time, worst first.
+ */
+static int fit_side(const quirc_float_t *xs, const quirc_float_t *ys, int n,
+		    quirc_float_t cx, quirc_float_t cy,
+		    quirc_float_t tol_in, quirc_float_t tol_out,
+		    struct side_line *line)
+{
+	unsigned int keep = (1u << n) - 1;
+	int left = n;
+
+	while (left >= 3) {
+		quirc_float_t mx = 0, my = 0, sxx = 0, sxy = 0, syy = 0;
+		quirc_float_t lam, nx, ny, len, worst = 0;
+		int i, worst_i = -1;
+
+		for (i = 0; i < n; i++)
+			if (keep >> i & 1) {
+				mx += xs[i];
+				my += ys[i];
+			}
+		mx /= left;
+		my /= left;
+		for (i = 0; i < n; i++)
+			if (keep >> i & 1) {
+				quirc_float_t dx = xs[i] - mx;
+				quirc_float_t dy = ys[i] - my;
+
+				sxx += dx * dx;
+				sxy += dx * dy;
+				syy += dy * dy;
+			}
+
+		/* Normal: eigenvector of the smaller eigenvalue */
+		lam = (sxx + syy) / 2 -
+			sqrt((sxx - syy) * (sxx - syy) / 4 + sxy * sxy);
+		if (fabs(sxx - lam) >= fabs(syy - lam)) {
+			nx = sxy;
+			ny = lam - sxx;
+		} else {
+			nx = syy - lam;
+			ny = -sxy;
+		}
+		len = sqrt(nx * nx + ny * ny);
+		if (!(len > 0))
+			return 0;
+		nx /= len;
+		ny /= len;
+		if (nx * (mx - cx) + ny * (my - cy) < 0) {
+			nx = -nx;
+			ny = -ny;
+		}
+		line->nx = nx;
+		line->ny = ny;
+		line->d = nx * mx + ny * my;
+
+		for (i = 0; i < n; i++)
+			if (keep >> i & 1) {
+				quirc_float_t r = nx * xs[i] + ny * ys[i] -
+					line->d;
+				quirc_float_t bad = r < -tol_in ? -r - tol_in :
+					r > tol_out ? r - tol_out : 0;
+
+				if (bad > worst) {
+					worst = bad;
+					worst_i = i;
+				}
+			}
+		if (worst_i < 0)
+			return 1;
+		keep &= ~(1u << worst_i);
+		left--;
+	}
+
+	return 0;
+}
+
+static int intersect_sides(const struct side_line *a,
+			   const struct side_line *b,
+			   quirc_float_t *x, quirc_float_t *y)
+{
+	quirc_float_t det = a->nx * b->ny - a->ny * b->nx;
+
+	if (fabs(det) < (quirc_float_t)0.25)
+		return 0;
+	*x = (a->d * b->ny - a->ny * b->d) / det;
+	*y = (a->nx * b->d - a->d * b->nx) / det;
+	return 1;
+}
+
+/* Mean side length / 7, in pixels */
+static quirc_float_t capstone_module(const struct quirc_point *k)
+{
+	quirc_float_t s = 0;
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		quirc_float_t dx = k[(i + 1) % 4].x - k[i].x;
+		quirc_float_t dy = k[(i + 1) % 4].y - k[i].y;
+
+		s += sqrt(dx * dx + dy * dy);
+	}
+	return s / 28;
+}
+
+/* One pass: probe and fit the four sides of the ring, using the
+ * capstone's current perspective transform to place the probes.
+ */
+static int refine_pass(const struct quirc *q, const struct quirc_capstone *cap,
+		       struct quirc_point *out)
+{
+	/* side s runs from corner s to corner s + 1 (module space) */
+	static const signed char su[4] = {0, 7, 7, 0};
+	static const signed char sv[4] = {0, 0, 7, 7};
+	static const signed char du[4] = {1, 0, -1, 0};
+	static const signed char dv[4] = {0, 1, 0, -1};
+	struct side_line lines[4];
+	quirc_float_t cx, cy, mod, lim, size;
+	long turn;
+	int s, i;
+
+	perspective_map_f(cap->c, 3.5, 3.5, &cx, &cy);
+	mod = capstone_module(cap->corners);
+
+	for (s = 0; s < 4; s++) {
+		quirc_float_t xs[REFINE_PROBES], ys[REFINE_PROBES];
+		quirc_float_t nu = dv[s], nv = -du[s];	/* outward */
+		int n = 0;
+
+		for (i = 0; i < REFINE_PROBES; i++) {
+			quirc_float_t t = (quirc_float_t)0.5 * (i + 1);
+			quirc_float_t bu = su[s] + du[s] * t;
+			quirc_float_t bv = sv[s] + dv[s] * t;
+			quirc_float_t x0, y0, x1, y1;
+
+			/* from 1 module inside the side to 2 outside */
+			perspective_map_f(cap->c, bu - nu, bv - nv, &x0, &y0);
+			perspective_map_f(cap->c, bu + 2 * nu, bv + 2 * nv,
+					  &x1, &y1);
+			if (probe_edge(q, cap->ring, x0, y0, x1, y1,
+				       &xs[n], &ys[n]))
+				n++;
+		}
+
+		if (!fit_side(xs, ys, n, cx, cy,
+			      (quirc_float_t)0.5 + (quirc_float_t)0.1 * mod,
+			      (quirc_float_t)0.5 + (quirc_float_t)0.25 * mod,
+			      &lines[s]))
+			return 0;
+	}
+
+	/* corner s is where side s - 1 meets side s */
+	lim = (quirc_float_t)2.5 * mod + 2;
+	for (s = 0; s < 4; s++) {
+		quirc_float_t x, y;
+
+		if (!intersect_sides(&lines[(s + 3) % 4], &lines[s], &x, &y))
+			return 0;
+		if (!(fabs(x - cap->corners[s].x) <= lim &&
+		      fabs(y - cap->corners[s].y) <= lim))
+			return 0;	/* too far off, or NaN */
+		out[s].x = (int)floor(x + (quirc_float_t)0.5);
+		out[s].y = (int)floor(y + (quirc_float_t)0.5);
+	}
+
+	/* Must stay a convex quad, turning the same way as before, of
+	 * about the same size
+	 */
+	turn = (long)(cap->corners[1].x - cap->corners[0].x) *
+		(cap->corners[2].y - cap->corners[1].y) -
+		(long)(cap->corners[1].y - cap->corners[0].y) *
+		(cap->corners[2].x - cap->corners[1].x);
+	for (s = 0; s < 4; s++) {
+		const struct quirc_point *a = &out[s];
+		const struct quirc_point *b = &out[(s + 1) % 4];
+		const struct quirc_point *c = &out[(s + 2) % 4];
+		long cross = (long)(b->x - a->x) * (c->y - b->y) -
+			(long)(b->y - a->y) * (c->x - b->x);
+
+		if (!cross || (cross < 0) != (turn < 0))
+			return 0;
+	}
+	size = capstone_module(out);
+	if (size < (quirc_float_t)0.5 * mod || size > 2 * mod)
+		return 0;
+
+	return 1;
+}
+
+/* Fit the capstone's corners to the straight edges of its ring. A pass
+ * whose fit fails or doesn't pass the checks above leaves the corners of
+ * the pass before. Returns 1 if the corners changed.
+ */
+static int refine_capstone(const struct quirc *q, struct quirc_capstone *cap)
+{
+	struct quirc_point orig[4];
+	struct quirc_point next[4];
+	int pass;
+
+	memcpy(orig, cap->corners, sizeof(orig));
+
+	for (pass = 0; pass < REFINE_PASSES; pass++) {
+		if (!refine_pass(q, cap, next))
+			break;
+		if (!memcmp(next, cap->corners, sizeof(next)))
+			break;
+		memcpy(cap->corners, next, sizeof(next));
+		perspective_setup(cap->c, cap->corners, 7.0, 7.0);
+	}
+
+	if (!memcmp(orig, cap->corners, sizeof(orig)))
+		return 0;
+
+	perspective_map(cap->c, 3.5, 3.5, &cap->center);
+	return 1;
+}
+
+int quirc_retry_rounded(struct quirc *q)
+{
+	int i, changed = 0;
+
+	if (q->num_capstones < 3)
+		return 0;
+
+	for (i = 0; i < q->num_capstones; i++)
+		changed |= refine_capstone(q, &q->capstones[i]);
+	if (!changed)
+		return 0;
+
+	q->num_grids = 0;
+	for (i = 0; i < q->num_capstones; i++)
+		q->capstones[i].qr_grid = -1;
+	for (i = 0; i < q->num_capstones; i++)
+		test_grouping(q, i);
+
+	return q->num_grids;
+}
