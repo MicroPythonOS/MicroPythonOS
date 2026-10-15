@@ -6,11 +6,15 @@ import sys
 sys.path.insert(0, "lib")
 sys.path.insert(0, "apps/com_micropythonos_nostr")
 
+import asyncio
+
+import apps.com_micropythonos_nostr.chat_activity as chat_activity_module
 from apps.com_micropythonos_nostr.chat_activity import ChatActivity
 from apps.com_micropythonos_nostr.chat_model import (
     KIND_CHANNEL_MESSAGE,
     KIND_DM,
     KIND_NIP17_CHAT,
+    Chat,
     channel_chat_id,
     dm_chat_id,
 )
@@ -181,6 +185,181 @@ class TestChatActivityIgnoresOwnEvents(unittest.TestCase):
         self.assertEqual(len(stored), 1)
         self.assertTrue(stored[0].outgoing)
         self.assertEqual(stored[0].content, "from mpy")
+
+
+class _FakeSendResult:
+    def __init__(self, ids, failed=None):
+        self.ids = list(ids)
+        self.local_id = self.ids[0] if self.ids else None
+        self.published = [("x", i) for i in self.ids]
+        self.failed = list(failed or [])
+
+
+class _AsyncFakeManager(_FakeManager):
+    def __init__(self, own_pubkey=None, result=None):
+        super().__init__(own_pubkey)
+        self.calls = []
+        self.result = result or _FakeSendResult(["self_wrap", "peer_wrap"])
+
+    def is_connected(self):
+        return True
+
+    async def publish_nip17_message_async(
+        self, content, recipients, subject=None, reply_to=None, created_at=None, progress=None
+    ):
+        self.calls.append({
+            "content": content,
+            "recipients": list(recipients),
+            "subject": subject,
+            "created_at": created_at,
+        })
+        if progress:
+            progress(1, 2)
+            progress(2, 2)
+        return self.result
+
+
+class _GroupStore(_FakeStore):
+    def __init__(self, chat):
+        super().__init__()
+        self.chat = chat
+        self.queued = []
+        self.subjects = []
+
+    def get_chat(self, chat_id):
+        return self.chat if chat_id == self.chat.chat_id else None
+
+    def queue_outgoing(self, chat_id, content, kind, recipient_pubkey=None,
+                       channel_id=None, participants=None, subject=None):
+        self.queued.append({
+            "chat_id": chat_id, "content": content, "kind": kind,
+            "participants": participants, "subject": subject,
+        })
+        return None
+
+    def update_chat_subject(self, chat_id, subject, ts=0):
+        self.subjects.append((chat_id, subject, ts))
+
+
+class _FakeConnectivity:
+    online = True
+
+    @classmethod
+    def get(cls):
+        return cls
+
+    @classmethod
+    def is_online(cls):
+        return cls.online
+
+
+class _FakeWidget:
+    def __init__(self):
+        self.texts = []
+
+    def set_text(self, text):
+        self.texts.append(text)
+
+    def get_text(self):
+        return ""
+
+    def has_flag(self, flag):
+        return True
+
+    def hide_keyboard(self):
+        pass
+
+
+class TestChatActivityGroupSend(unittest.TestCase):
+    """Sending in a NIP-17 group: subject, progress, yielding publish, dedupe."""
+
+    def setUp(self):
+        self._orig_connectivity = chat_activity_module.ConnectivityManager
+        chat_activity_module.ConnectivityManager = _FakeConnectivity
+        _FakeConnectivity.online = True
+
+    def tearDown(self):
+        chat_activity_module.ConnectivityManager = self._orig_connectivity
+
+    def _activity(self, chat, own="a" * 64, result=None):
+        act = object.__new__(ChatActivity)
+        act._kind = KIND_NIP17_CHAT
+        act._chat_id = chat.chat_id
+        act._peer_pubkey = None
+        act._manager = _AsyncFakeManager(own_pubkey=own, result=result)
+        act._store = _GroupStore(chat)
+        act._sent_event_ids = set()
+        act._rendered_ids = set()
+        act._input_textarea = _FakeWidget()
+        act._keyboard = _FakeWidget()
+        act._title_label = _FakeWidget()
+        act.labels = []
+        act._set_sending_state = lambda label, disabled: act.labels.append(label)
+        act.rows = []
+        act._append_message_row = lambda message: act.rows.append(message)
+        act._request_scroll_to_bottom = lambda: None
+        return act
+
+    def test_group_send_passes_subject_shows_progress_and_stores_under_own_wrap(self):
+        chat = Chat.nip17_group(["c" * 64, "b" * 64], subject="Room")
+        act = self._activity(chat)
+        asyncio.run(act._send_async("hello room"))
+
+        call = act._manager.calls[0]
+        self.assertEqual(call["content"], "hello room")
+        self.assertEqual(call["recipients"], ["c" * 64, "b" * 64])
+        self.assertEqual(call["subject"], "Room")
+        self.assertTrue(isinstance(call["created_at"], int))
+        self.assertIn("Encrypting 1/2", act.labels)
+        self.assertIn("Encrypting 2/2", act.labels)
+        self.assertEqual(act.labels[-1], "Send")
+
+        stored = act._store.load_messages(chat.chat_id)
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].event_id, "self_wrap")
+        self.assertTrue(stored[0].outgoing)
+        self.assertIn("self_wrap", act._sent_event_ids)
+        self.assertIn("peer_wrap", act._sent_event_ids)
+        self.assertEqual(len(act.rows), 1)
+
+    def test_group_without_subject_sends_no_subject(self):
+        chat = Chat.nip17_group(["b" * 64, "c" * 64])
+        act = self._activity(chat)
+        asyncio.run(act._send_async("plain"))
+        self.assertEqual(act._manager.calls[0]["subject"], None)
+
+    def test_partial_failure_still_stores_message(self):
+        chat = Chat.nip17_group(["b" * 64, "c" * 64], subject="Room")
+        act = self._activity(chat, result=_FakeSendResult(["self_wrap", "w2"], failed=["c" * 64]))
+        asyncio.run(act._send_async("partly"))
+        stored = act._store.load_messages(chat.chat_id)
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].event_id, "self_wrap")
+
+    def test_offline_group_send_queues_with_subject(self):
+        _FakeConnectivity.online = False
+        chat = Chat.nip17_group(["b" * 64, "c" * 64], subject="Room")
+        act = self._activity(chat)
+        asyncio.run(act._send_async("later"))
+        self.assertEqual(act._manager.calls, [])
+        self.assertEqual(len(act._store.queued), 1)
+        self.assertEqual(act._store.queued[0]["subject"], "Room")
+        self.assertEqual(act._store.queued[0]["participants"], ["b" * 64, "c" * 64])
+
+    def test_incoming_subject_renames_open_group_chat(self):
+        chat = Chat.nip17_group(["b" * 64, "c" * 64], subject="Old")
+        act = self._activity(chat)
+        act._load_and_render = lambda: None
+        event = _FakeNostrEvent(
+            public_key="b" * 64,
+            event_id="ev_subject",
+            content="rename",
+            created_at=1700000000,
+            tags=[["p", "a" * 64], ["p", "c" * 64], ["subject", "New"]],
+        )
+        act._on_event(event)
+        self.assertEqual(act._store.subjects, [(chat.chat_id, "New", 1700000000)])
+        self.assertEqual(act._title_label.texts[-1], "New")
 
 
 if __name__ == "__main__":

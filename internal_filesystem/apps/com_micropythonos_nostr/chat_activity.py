@@ -22,7 +22,7 @@ from .chat_model import (
     KIND_NIP17_CHAT,
     Message,
     PROTOCOL_LABELS,
-    _display_title,
+    apply_nip17_subject,
     channel_chat_id,
     chat_id_for_event,
     content_from_event,
@@ -239,7 +239,7 @@ class ChatActivity(Activity):
         chat = self._store.get_chat(self._chat_id)
         if chat is not None:
             if not self._title:
-                self._title_label.set_text(_display_title(chat.title))
+                self._title_label.set_text(chat.display_title())
         for msg in messages:
             self._append_message_row(msg)
         self._request_scroll_to_bottom()
@@ -437,9 +437,29 @@ class ChatActivity(Activity):
         except Exception:
             pass
 
+    def _uses_nip17(self):
+        if self._kind == KIND_NIP17_CHAT:
+            return True
+        return self._kind == KIND_DM and self._dm_send_protocol() == "nip17"
+
+    def _nip17_subject(self):
+        """The room subject to send with every message of a NIP-17 group chat."""
+        if self._kind != KIND_NIP17_CHAT:
+            return None
+        chat = self._store.get_chat(self._chat_id)
+        if chat is None or len(chat.participants) < 2:
+            return None
+        return getattr(chat, "subject", None) or None
+
+    def _on_encrypt_progress(self, done, total):
+        self._set_sending_state("Encrypting %d/%d" % (done, total), True)
+
     async def _send_async(self, text):
         try:
-            result = self._do_send_sync(text)
+            if self._uses_nip17():
+                result = await self._do_send_nip17(text)
+            else:
+                result = self._do_send_sync(text)
         except Exception as e:
             logger.error("Send failed: %s", e)
             result = None
@@ -472,47 +492,57 @@ class ChatActivity(Activity):
         if not self._keyboard.has_flag(lv.obj.FLAG.HIDDEN):
             self._keyboard.hide_keyboard()
 
+    async def _do_send_nip17(self, text):
+        """Publish a NIP-17 message (group or DM), yielding between gift wraps.
+
+        Returns the same tuple as _do_send_sync, with the message keyed on the
+        sender's own gift wrap so its relay echo deduplicates.
+        """
+        online = ConnectivityManager.get().is_online() and self._manager.is_connected()
+        own = self._manager.get_own_pubkey_hex() or ""
+        # Capture the wall-clock timestamp once before any slow crypto work so
+        # the local message timestamp matches the NIP-17 event timestamp.
+        send_ts = _current_nostr_ts()
+        if not online:
+            self._queue_local_message(text, own)
+            self._input_textarea.set_text("")
+            self._keyboard.hide_keyboard()
+            return None
+        try:
+            result = await self._manager.publish_nip17_message_async(
+                text,
+                self._get_recipients(),
+                subject=self._nip17_subject(),
+                created_at=send_ts,
+                progress=self._on_encrypt_progress,
+            )
+        except Exception as e:
+            logger.error("Send failed: %s", e)
+            self._queue_local_message(text, own)
+            self._input_textarea.set_text("")
+            self._keyboard.hide_keyboard()
+            return None
+        if result.failed:
+            logger.warning(
+                "Message reached %s of %s recipients; not delivered to: %s",
+                len(result.published),
+                len(result.published) + len(result.failed),
+                result.failed,
+            )
+        return (result.local_id, result.ids, KIND_NIP17_CHAT, own, send_ts)
+
     def _do_send_sync(self, text):
         online = ConnectivityManager.get().is_online() and self._manager.is_connected()
         own = self._manager.get_own_pubkey_hex() or ""
         event_id = None
         event_ids = None
-        # Capture the wall-clock timestamp once before any slow crypto work so
-        # the local message timestamp matches the NIP-17 event timestamp.
         send_ts = _current_nostr_ts()
 
-        if self._kind == KIND_NIP17_CHAT:
+        if self._kind == KIND_DM:
             try:
                 if online:
-                    event_ids = self._manager.publish_nip17_message(
-                        text, self._get_recipients(), created_at=send_ts
-                    )
-                    event_id = event_ids[0]
-                    kind = KIND_NIP17_CHAT
-                else:
-                    self._queue_local_message(text, own)
-                    self._input_textarea.set_text("")
-                    self._keyboard.hide_keyboard()
-                    return None
-            except Exception as e:
-                logger.error("Send failed: %s", e)
-                self._queue_local_message(text, own)
-                self._input_textarea.set_text("")
-                self._keyboard.hide_keyboard()
-                return None
-        elif self._kind == KIND_DM:
-            protocol = self._dm_send_protocol()
-            try:
-                if online:
-                    if protocol == "nip17":
-                        event_ids = self._manager.publish_nip17_message(
-                            text, [self._peer_pubkey], created_at=send_ts
-                        )
-                        event_id = event_ids[0]
-                        kind = KIND_NIP17_CHAT
-                    else:
-                        event_id = self._manager.publish_dm(self._peer_pubkey, text)
-                        kind = KIND_DM
+                    event_id = self._manager.publish_dm(self._peer_pubkey, text)
+                    kind = KIND_DM
                 else:
                     self._queue_local_message(text, own)
                     self._input_textarea.set_text("")
@@ -559,6 +589,7 @@ class ChatActivity(Activity):
                 text,
                 KIND_NIP17_CHAT,
                 participants=self._get_recipients(),
+                subject=self._nip17_subject(),
             )
         elif self._kind == KIND_DM:
             protocol = self._dm_send_protocol()
@@ -588,6 +619,10 @@ class ChatActivity(Activity):
             chat_id = chat_id_for_event(nostr_event.event, own)
             if chat_id != self._chat_id:
                 return
+
+            chat = self._store.get_chat(self._chat_id)
+            if apply_nip17_subject(self._store, chat, nostr_event.event):
+                self._title_label.set_text(chat.display_title())
 
             content = content_from_event(nostr_event)
 
