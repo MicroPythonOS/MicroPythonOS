@@ -10,6 +10,7 @@ from mpos import (
     Intent,
     SettingsActivity,
     SharedPreferences,
+    TaskManager,
 )
 
 from .chat_activity import ChatActivity
@@ -60,6 +61,7 @@ class ChatListActivity(Activity):
     _prefs = None
     _handlers_registered = False
     _flush_timer = None
+    _flushing = False  # an outbox flush task is running
     _connectivity_cb = None
 
     def onCreate(self):
@@ -372,11 +374,24 @@ class ChatListActivity(Activity):
             return
         if not self._manager.is_connected():
             return
-        items = self._store.load_outbox()
-        if not items:
+        if self._flushing or not self._store.load_outbox():
             return
+        # A queued group message costs one seal and one gift wrap per member
+        # (seconds on an ESP32), so flush from a task that yields between them.
+        TaskManager.create_task(self._flush_outbox_async())
+
+    async def _flush_outbox_async(self):
+        self._flushing = True
+        try:
+            await self._flush_outbox_items()
+        finally:
+            self._flushing = False
+        if self.has_foreground():
+            self._refresh_chat_list()
+
+    async def _flush_outbox_items(self):
         own = self._manager.get_own_pubkey_hex()
-        for item in items:
+        for item in self._store.load_outbox():
             try:
                 kind = item.get("kind")
                 if kind == KIND_DM:
@@ -387,13 +402,14 @@ class ChatListActivity(Activity):
                     participants = item.get("participants")
                     if not participants and item.get("recipient_pubkey"):
                         participants = [item["recipient_pubkey"]]
-                    event_ids = self._manager.publish_nip17_message(
+                    result = await self._manager.publish_nip17_message_async(
                         item["content"],
                         participants,
                         subject=item.get("subject"),
                         created_at=item.get("ts"),
                     )
-                    event_id = event_ids[0]
+                    # The sender's own wrap id: its relay echo then deduplicates.
+                    event_id = result.local_id or result.ids[0]
                 else:
                     event_id = self._manager.publish_channel_message(
                         item["channel_id"], item["content"]
@@ -410,10 +426,10 @@ class ChatListActivity(Activity):
                     queued=False,
                 )
                 self._store.replace_message(chat_id, placeholder_id, new_message)
+                # Drop it from the outbox now: a later item failing must not
+                # re-send (re-wrap, with new ids) what already went out.
+                self._store.remove_outbox_item(placeholder_id)
             except Exception as e:
                 logger.error("Failed to flush outbox item: %s", e)
                 # Stop trying the rest until the next reconnect.
                 return
-        self._store.clear_outbox()
-        if self.has_foreground():
-            self._refresh_chat_list()

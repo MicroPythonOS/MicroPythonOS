@@ -1,5 +1,6 @@
 """Regression tests for outgoing local events in ChatListActivity."""
 
+import asyncio
 import sys
 import unittest
 
@@ -67,12 +68,17 @@ class _FakeStore:
         self.subjects.append((chat_id, subject, ts))
 
     def load_outbox(self):
-        return getattr(self, "outbox", [])
+        return list(getattr(self, "outbox", []))
 
     def replace_message(self, chat_id, old_event_id, new_message):
         self.replaced = getattr(self, "replaced", [])
         self.replaced.append((chat_id, old_event_id, new_message))
         return True
+
+    def remove_outbox_item(self, placeholder_id):
+        before = len(self.outbox)
+        self.outbox = [i for i in self.outbox if i.get("placeholder_id") != placeholder_id]
+        return len(self.outbox) != before
 
     def clear_outbox(self):
         self.outbox = []
@@ -165,20 +171,35 @@ class TestChatListActivityOutgoing(unittest.TestCase):
         self.assertFalse(message.outgoing)
 
 
+class _SendResult:
+    def __init__(self, ids):
+        self.ids = list(ids)
+        self.local_id = self.ids[0]
+        self.published = [("x", i) for i in self.ids]
+        self.failed = []
+
+
 class _PublishingManager(_FakeManager):
-    def __init__(self, own_pubkey=None):
+    def __init__(self, own_pubkey=None, fail_on_content=None):
         super().__init__(own_pubkey)
         self.nip17_calls = []
+        self.fail_on_content = fail_on_content
 
     def is_connected(self):
         return True
 
-    def publish_nip17_message(self, content, recipients, subject=None, reply_to=None, created_at=None):
+    async def publish_nip17_message_async(
+        self, content, recipients, subject=None, reply_to=None, created_at=None,
+        progress=None, on_local_id=None,
+    ):
         self.nip17_calls.append({
             "content": content, "recipients": list(recipients),
             "subject": subject, "created_at": created_at,
         })
-        return ["self_wrap", "peer_wrap"]
+        await asyncio.sleep_ms(0)
+        if content == self.fail_on_content:
+            raise RuntimeError("NIP-17 message could not be published to anyone")
+        return _SendResult(["self_wrap_%d" % len(self.nip17_calls), "peer_wrap"])
 
 
 class _FakeConnectivity:
@@ -199,6 +220,7 @@ class TestChatListActivityGroups(unittest.TestCase):
         act._manager = manager or _FakeManager(own_pubkey=own_pubkey)
         act._store = _FakeStore()
         act._handlers_registered = False
+        act._flushing = False
         act._chat_list = None
         act.has_foreground = lambda: False
         act._post_notification = lambda chat, msg: None
@@ -235,28 +257,66 @@ class TestChatListActivityGroups(unittest.TestCase):
         act._on_event(event)
         self.assertEqual(getattr(act._store, "subjects", []), [(chat.chat_id, "New", 1700000001)])
 
+    def _outbox_item(self, n, content):
+        return {
+            "placeholder_id": "out:x:%d" % n, "ts": 1700000000 + n, "chat_id": "nip17_x",
+            "content": content, "kind": KIND_NIP17_CHAT, "recipient_pubkey": None,
+            "channel_id": None, "participants": ["b" * 64, "c" * 64], "subject": "Room",
+        }
+
     def test_outbox_flush_sends_subject_and_keeps_own_wrap_id(self):
         own = "a" * 64
         manager = _PublishingManager(own_pubkey=own)
         act = self._activity(own, manager=manager)
-        orig = chat_list_module.ConnectivityManager
-        chat_list_module.ConnectivityManager = _FakeConnectivity
-        try:
-            act._store.outbox = [{
-                "placeholder_id": "out:x:1", "ts": 1700000000, "chat_id": "nip17_x",
-                "content": "queued", "kind": KIND_NIP17_CHAT, "recipient_pubkey": None,
-                "channel_id": None, "participants": ["b" * 64, "c" * 64], "subject": "Room",
-            }]
-            act._flush_outbox_if_online()
-        finally:
-            chat_list_module.ConnectivityManager = orig
+        act._store.outbox = [self._outbox_item(1, "queued")]
+        asyncio.run(act._flush_outbox_async())
         self.assertEqual(len(manager.nip17_calls), 1)
         self.assertEqual(manager.nip17_calls[0]["subject"], "Room")
-        self.assertEqual(manager.nip17_calls[0]["created_at"], 1700000000)
+        self.assertEqual(manager.nip17_calls[0]["created_at"], 1700000001)
         self.assertEqual(manager.nip17_calls[0]["recipients"], ["b" * 64, "c" * 64])
         _chat_id, placeholder, new_message = act._store.replaced[0]
         self.assertEqual(placeholder, "out:x:1")
-        self.assertEqual(new_message.event_id, "self_wrap")
+        self.assertEqual(new_message.event_id, "self_wrap_1")
+        self.assertEqual(act._store.outbox, [])
+        self.assertFalse(act._flushing)
+
+    def test_outbox_flush_drops_each_item_as_it_is_published(self):
+        # A failing second item must not make the next reconnect re-send (and
+        # re-wrap, with new ids) the first one.
+        own = "a" * 64
+        manager = _PublishingManager(own_pubkey=own, fail_on_content="bad")
+        act = self._activity(own, manager=manager)
+        act._store.outbox = [
+            self._outbox_item(1, "good"), self._outbox_item(2, "bad"), self._outbox_item(3, "later"),
+        ]
+        asyncio.run(act._flush_outbox_async())
+        self.assertEqual([c["content"] for c in manager.nip17_calls], ["good", "bad"])
+        self.assertEqual([i["content"] for i in act._store.outbox], ["bad", "later"])
+        self.assertEqual(len(act._store.replaced), 1)
+        self.assertFalse(act._flushing)
+
+    def test_flush_if_online_runs_as_a_task_once(self):
+        own = "a" * 64
+        manager = _PublishingManager(own_pubkey=own)
+        act = self._activity(own, manager=manager)
+        act._store.outbox = [self._outbox_item(1, "queued")]
+        created = []
+        orig_connectivity = chat_list_module.ConnectivityManager
+        orig_create_task = chat_list_module.TaskManager.create_task
+        chat_list_module.ConnectivityManager = _FakeConnectivity
+        chat_list_module.TaskManager.create_task = classmethod(
+            lambda cls, coro: created.append(coro)
+        )
+        try:
+            act._flush_outbox_if_online()
+            act._flushing = True  # the task is running
+            act._flush_outbox_if_online()
+        finally:
+            chat_list_module.ConnectivityManager = orig_connectivity
+            chat_list_module.TaskManager.create_task = orig_create_task
+        self.assertEqual(len(created), 1)
+        asyncio.run(created[0])
+        self.assertEqual(len(manager.nip17_calls), 1)
 
     def test_group_row_shows_subject_else_members(self):
         act = self._activity("a" * 64)
