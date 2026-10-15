@@ -257,6 +257,17 @@ Critical gotchas:
 - Trust visual reality over code intent with UI bugs. Use `mpos.get_widget_tree()` to inspect actual coordinates.
 - A crash is ALWAYS a bug: fix the crash site first, work around it second — never avoidance alone. "Upstream code" is not immunity: this repo already patches IDF (`patches/*.patch` via `build_mpos.sh`), and a decodeable PC (`xtensa-*-elf-addr2line -e <elf>`) turns a mystery abort into a patchable line. Avoidance is only acceptable together with a fix attempt, or when the crash is in upstream code AND the workaround is genuinely easy (no permanent UX tax).
 
+### Performance
+
+Full guide: `../docs/docs/apps/app-performance.md`. Load-bearing rules:
+
+- Measure via serial `sysmon:` (`render Xms | flush Yms`) with overlay off. FPS counts refresh cycles (~300ms window), capped ~30 by `LV_DEF_REFR_PERIOD=33ms`. `change_task_handler(period)` is the outer pump, not the refresh rate.
+- ESP32-S3 SPI: 80MHz max (integer divider, 60 rounds down to 40). Freq is per-device; flush is DMA-async.
+- No floats in hot loops (heap objects → GC jitter). Fixed-point milli-pixels with accumulators (naive `SPEED*dt//1000` truncation freezes slow movers); modulo-bound counters so they never outgrow small ints.
+- `set_text()`/`set_offset_x()` always invalidate → guard on change. `set_x/set_y` are free when unchanged.
+- Permanent `set_rotation()` = per-pixel transform forever → ship pre-rotated assets. `TILE` = 1 draw call per tile → pre-compose strips. Translucent+rounded panels = blend+mask+overdraw.
+- `ruff`/`mpy-cross` on the real path: symlinked external-app files are NOT covered by `make lint`/`syntax-tests`.
+
 ## Apps & docs
 
 - Install: `./scripts/install.sh com.micropythonos.appname` then `AppManager.refresh_apps()`.

@@ -46,17 +46,17 @@ typedef uint16_t quirc_pixel_t;
 #error "QUIRC_MAX_REGIONS > 65534 is not supported"
 #endif
 
-#ifdef __xtensa__
+#ifdef QUIRC_PS_MALLOC_HEAP_CAPS
 #include <esp_heap_caps.h>
 static inline void* ps_malloc(const size_t size) {
-  return heap_caps_malloc_prefer(size, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+  return heap_caps_malloc_prefer(size, 2, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
 }
 /*
 static inline void* d_malloc(const size_t size) {
   return heap_caps_malloc(size, MALLOC_CAP_DEFAULT | MALLOC_CAP_INTERNAL);
 }
 */
-#else // __xtensa__
+#else // QUIRC_PS_MALLOC_HEAP_CAPS
 static inline void* ps_malloc(const size_t size) {
   return malloc(size);
 }
@@ -65,7 +65,7 @@ static inline void* d_malloc(const size_t size) {
   return malloc(size);
 }
 */
-#endif // __xtensa__
+#endif // QUIRC_PS_MALLOC_HEAP_CAPS
 
 
 

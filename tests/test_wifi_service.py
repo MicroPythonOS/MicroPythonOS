@@ -1282,3 +1282,201 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
         # but the important part is the code runs without error
 
 
+
+
+class TestWifiServiceBusyFlag(unittest.TestCase):
+    """Test that connects and scans claim wifi_busy and report it when held."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        MockSharedPreferences.reset_all()
+        WifiService.access_points = {}
+        WifiService.wifi_busy = False
+        WifiService.hotspot_enabled = False
+        WifiService._needs_hotspot_restore = False
+
+    def tearDown(self):
+        """Clean up after test."""
+        MockSharedPreferences.reset_all()
+        WifiService.access_points = {}
+        WifiService.wifi_busy = False
+        WifiService.hotspot_enabled = False
+        WifiService._needs_hotspot_restore = False
+
+    def _save_networks(self, access_points):
+        prefs = MockSharedPreferences("com.micropythonos.system.wifiservice")
+        editor = prefs.edit()
+        editor.put_dict("access_points", access_points)
+        editor.commit()
+
+    def test_attempt_connecting_holds_busy_flag(self):
+        """attempt_connecting() claims wifi_busy for the attempt and releases it."""
+        mock_network = MockNetwork(connected=False)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        busy_during_connect = []
+
+        def mock_connect(ssid, password):
+            busy_during_connect.append(WifiService.is_busy())
+            mock_wlan._connected = True
+
+        mock_wlan.connect = mock_connect
+
+        result = WifiService.attempt_connecting(
+            "Office", "password", network_module=mock_network, time_module=MockTime()
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(busy_during_connect, [True])
+        self.assertFalse(WifiService.is_busy())
+
+    def test_attempt_connecting_refused_while_busy(self):
+        """attempt_connecting() returns None and leaves the radio alone while busy."""
+        WifiService.wifi_busy = True
+        mock_network = MockNetwork(connected=True)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        calls = []
+        mock_wlan.connect = lambda ssid, password: calls.append("connect")
+        mock_wlan.disconnect = lambda: calls.append("disconnect")
+
+        result = WifiService.attempt_connecting(
+            "Office", "password", network_module=mock_network, time_module=MockTime()
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual(calls, [])
+        self.assertTrue(WifiService.wifi_busy, "Must not release a flag another operation holds")
+
+    def test_attempt_connecting_releases_busy_flag_after_failure(self):
+        """attempt_connecting() releases wifi_busy after a timeout and after an error."""
+        mock_network = MockNetwork(connected=False)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        mock_wlan.isconnected = lambda: False
+
+        result = WifiService.attempt_connecting(
+            "Office", "password", network_module=mock_network, time_module=MockTime()
+        )
+        self.assertFalse(result)
+        self.assertFalse(WifiService.is_busy())
+
+        def raise_error(ssid, password):
+            raise Exception("Wifi Internal Error")
+
+        mock_wlan.connect = raise_error
+
+        result = WifiService.attempt_connecting(
+            "Office", "password", network_module=mock_network, time_module=MockTime()
+        )
+        self.assertFalse(result)
+        self.assertFalse(WifiService.is_busy())
+
+    def test_auto_connect_does_not_interrupt_attempt_connecting(self):
+        """A reconnect tick during a user connect must not scan or reconnect."""
+        self._save_networks({"Home": {"password": "home-pass"}})
+        mock_network = MockNetwork(connected=False)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        scan_results = [(b"Home", b"", 1, -50, 3, False)]
+        events = []
+
+        def mock_scan():
+            events.append("scan")
+            return scan_results
+
+        def mock_connect(ssid, password):
+            events.append("connect " + ssid)
+            # ConnectivityManager's reconnect fires while this connect is in flight
+            WifiService.auto_connect(network_module=mock_network, time_module=MockTime())
+            mock_wlan._connected = True
+
+        mock_wlan.scan = mock_scan
+        mock_wlan.connect = mock_connect
+
+        result = WifiService.attempt_connecting(
+            "Office", "password", network_module=mock_network, time_module=MockTime()
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(events, ["connect Office"])
+        self.assertFalse(WifiService.is_busy())
+
+    def test_auto_connect_connects_to_saved_network(self):
+        """auto_connect() still connects while it holds wifi_busy itself."""
+        self._save_networks({"Home": {"password": "home-pass"}})
+        mock_network = MockNetwork(connected=False)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        mock_wlan._scan_results = [(b"Home", b"", 1, -50, 3, False)]
+        connected_to = []
+
+        def mock_connect(ssid, password):
+            connected_to.append(ssid)
+            mock_wlan._connected = True
+
+        mock_wlan.connect = mock_connect
+
+        WifiService.auto_connect(network_module=mock_network, time_module=MockTime())
+
+        self.assertEqual(connected_to, ["Home"])
+        self.assertFalse(WifiService.is_busy())
+
+    def test_auto_connect_restores_hotspot_after_failed_connect(self):
+        """auto_connect() turns a hotspot it switched off back on when it fails."""
+        self._save_networks({"Home": {"password": "home-pass"}})
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        ap_wlan.active(True)
+        WifiService.hotspot_enabled = True
+        sta_wlan = mock_network.WLAN(mock_network.STA_IF)
+        sta_wlan._scan_results = [(b"Home", b"", 1, -50, 3, False)]
+        sta_wlan.isconnected = lambda: False
+
+        WifiService.auto_connect(network_module=mock_network, time_module=MockTime())
+
+        self.assertTrue(ap_wlan.active())
+        self.assertTrue(WifiService.hotspot_enabled)
+        self.assertFalse(WifiService.is_busy())
+
+    def test_scan_networks_returns_none_while_busy(self):
+        """scan_networks() reports busy as None, distinct from an empty scan."""
+        WifiService.wifi_busy = True
+        mock_network = MockNetwork(connected=False)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        scans = []
+
+        def mock_scan():
+            scans.append(True)
+            return [(b"Home", b"", 1, -50, 3, False)]
+
+        mock_wlan.scan = mock_scan
+
+        result = WifiService.scan_networks(network_module=mock_network)
+
+        self.assertIsNone(result)
+        self.assertEqual(scans, [])
+        self.assertTrue(WifiService.wifi_busy, "Must not release a flag another operation holds")
+
+    def test_scan_networks_returns_empty_list_when_nothing_found(self):
+        """scan_networks() returns [] when the scan finds no networks."""
+        mock_network = MockNetwork(connected=False)
+        mock_network.WLAN(mock_network.STA_IF)._scan_results = []
+
+        result = WifiService.scan_networks(network_module=mock_network)
+
+        self.assertEqual(result, [])
+        self.assertFalse(WifiService.is_busy())
+
+    def test_scan_networks_holds_busy_flag_while_scanning(self):
+        """scan_networks() claims wifi_busy for the scan and releases it."""
+        mock_network = MockNetwork(connected=False)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        busy_during_scan = []
+
+        def mock_scan():
+            busy_during_scan.append(WifiService.is_busy())
+            return [(b"Home", b"", 1, -50, 3, False)]
+
+        mock_wlan.scan = mock_scan
+
+        result = WifiService.scan_networks(network_module=mock_network)
+
+        self.assertEqual(result, ["Home"])
+        self.assertEqual(busy_during_scan, [True])
+        self.assertFalse(WifiService.is_busy())

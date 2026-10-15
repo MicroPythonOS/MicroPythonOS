@@ -19,7 +19,7 @@ from mpos import InputManager
 
 # Pin configuration
 SPI_BUS = 2
-SPI_FREQ = 40000000
+SPI_FREQ = 80000000
 LCD_SCLK = 39
 LCD_MOSI = 38
 LCD_MISO = 40

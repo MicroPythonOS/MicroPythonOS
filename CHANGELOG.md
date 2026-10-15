@@ -1,6 +1,13 @@
 Future release (next version)
 =====
 
+Frameworks:
+- qrdecode: faster QR scanning with bit-identical results. quirc rounds perspective-mapped points without a rintf() library call where there is no rounding instruction (ESP32) and scans for finder patterns run by run; the decoder (about 400 KB at 640x640) is kept between frames instead of being allocated and freed for every frame, and the camera frame is read in place instead of copied. New qrdecode.release() frees the decoder; the Camera activity calls it when QR scanning stops or the activity is paused
+- qrdecode: exceptions from qrdecode_rgb565() are now caught by the caller's except clause; they used to skip it (and could leave the caller's frame in a broken state) because the error path popped the caller's exception handler as well as its own
+- qrdecode: the decoder kept while QR scanning is on comes entirely from PSRAM. quirc's flood-fill stack (about 7 KB at 640x640) used to come from internal RAM, which the display and camera DMA buffers also need. quirc's ps_malloc() passed its capability flags where heap_caps_malloc_prefer() expects their count, and it now prefers PSRAM on every ESP32 target, not only on Xtensa
+- qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
+- Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
+
 OS:
 - ESP32: fix hard resets (stack overflow panics) when an app is started with AppManager.start_app() from the REPL, mpremote, an asyncio task or auto_start_app at boot, seen with BlockTV on the Waveshare ESP32-S3-Touch-LCD-3.5. The LVGL task handler runs as a scheduled callback on top of whatever Python code is executing, so a pass that started while an app built its UI deep in onCreate/onResume overflowed the 16 KB mp_task stack (a redraw needs up to 7.3 KB measured). A pass is now skipped, and retried on the next tick, when less than 9 KB of stack is left (mpos.ui.render_guard)
 
@@ -9,14 +16,16 @@ OS:
 
 Board Support:
 - Add Waveshare ESP32-P4-WIFI6-Touch-LCD-4.3: first esp32p4 target, MIPI-DSI display, touch, speaker
-- Add Waveshare ESP32-S3-Touch-LCD-1.54: 1.54" 240x240 ST7789, CST816S touch, ES8311 speaker + ES7210 microphone, TF card slot
+- Add Waveshare ESP32-S3-Touch-LCD-1.54: 1.54' 240x240 ST7789, CST816S touch, ES8311 speaker + ES7210 microphone, TF card slot
 - Waveshare ESP32-S3-Touch-LCD-3.5: keep the ES8311 speaker output warm for 30 s after a clip (warm_ms) so rapid back-to-back clips play without a click
+- Fri3d 2024/2026: increase display SPI frequency from 40Mhz to 80Mhz (like Waveshare ESP32-S3-Touch-LCD-3.5) for higher framerate
+- ESP32-S3-Touch-LCD-2: increase display SPI frequency from 40Mhz to 80Mhz (like Waveshare ESP32-S3-Touch-LCD-3.5) for higher framerate
 
 Frameworks:
 - AudioManager (desktop): RTTTL playback renders one pass of the tune and lets WAVStream repeat it, so a .rtttl file opened in the Music Player (Repeat is on by default) plays straight away instead of silently pre-rendering 1,000,000 repeats into /tmp at ~10 MB/s; set_repeat() now reaches the playing stream
 - AudioManager/WAVStream: opt-in warm output (Output(warm_ms=N)) keeps the I2S clocks running and the codec unmuted between clips so back-to-back playback doesn't click on codecs such as the ES8311; released after N ms idle, by WAVStream.release_warm(), or before I2S recording
 - InputActivity: optional `selected_callback(value)` setting key for radiobuttons/dropdown, fired on every pick before Save (re-tapping the active radio fires again) so pickers can preview a choice live, e.g. play a sound effect. `changed_callback` semantics unchanged
-- SettingsActivity: fix a TypeError ("can't convert 'int' object to str implicitly", surfaced as the "app threw an exception" dialog) when a setting's stored value is a number instead of a string
+- SettingsActivity: fix a TypeError ('can't convert 'int' object to str implicitly', surfaced as the 'app threw an exception' dialog) when a setting's stored value is a number instead of a string
 - CameraManager: apply the Manual Exposure, Manual Gain and WB Mode camera settings when their Auto switch is turned off. They were never applied, because the Auto switches always have a value (defaults), and the manual gain check was also inverted
 
 Builtin Apps:
@@ -24,11 +33,11 @@ Builtin Apps:
 - Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
 
 OS:
-- uaiowebsocket: stop trying to send a second pong on incoming pings (aiohttp already replies; the call raised and logged "Failed to send pong" on every relay ping, #299)
+- uaiowebsocket: stop trying to send a second pong on incoming pings (aiohttp already replies; the call raised and logged 'Failed to send pong' on every relay ping, #299)
 
 Testing:
 - mpos_controller: on macOS, only kill orphaned MPOS desktop processes (parent gone or reparented to launchd) when a test run starts, instead of `killall -9` on every lvgl_micropy_macOS, which crashed concurrent test runs and open desktop apps
-- mpos_controller: on Linux, really kill orphaned lvgl_micropy_unix processes when a test run starts. The kernel cuts /proc/<pid>/comm to 15 characters ("lvgl_micropy_un"), so the exact name match never hit; a truncated comm is now confirmed against argv[0] from /proc/<pid>/cmdline
+- mpos_controller: on Linux, really kill orphaned lvgl_micropy_unix processes when a test run starts. The kernel cuts /proc/<pid>/comm to 15 characters ('lvgl_micropy_un'), so the exact name match never hit; a truncated comm is now confirmed against argv[0] from /proc/<pid>/cmdline
 
 0.19.0
 ======

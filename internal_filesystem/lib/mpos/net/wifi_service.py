@@ -84,7 +84,7 @@ class WifiService:
 
     @staticmethod
     def _restore_hotspot_if_needed(network_module=None):
-        if WifiService._needs_hotspot_restore:
+        if WifiService._needs_hotspot_restore and not WifiService.wifi_busy:
             WifiService._needs_hotspot_restore = False
             WifiService.enable_hotspot(network_module=network_module)
 
@@ -225,7 +225,7 @@ class WifiService:
                 password = WifiService.access_points.get(ssid).get("password")
                 if __debug__: logger.debug("Attempting to connect to saved network '%s'", ssid)
 
-                if WifiService.attempt_connecting(
+                if WifiService._attempt_connecting(
                     ssid,
                     password,
                     network_module=network_module,
@@ -244,7 +244,7 @@ class WifiService:
                 password = config.get("password")
                 if __debug__: logger.debug("Attempting hidden network '%s'", ssid)
 
-                if WifiService.attempt_connecting(
+                if WifiService._attempt_connecting(
                     ssid,
                     password,
                     network_module=network_module,
@@ -271,7 +271,28 @@ class WifiService:
 
         Returns:
             bool: True if successfully connected, False otherwise
+            None: if another WiFi operation is in progress (nothing was attempted)
         """
+        if not WifiService._acquire_busy():
+            if __debug__: logger.debug("attempt_connecting() - WiFi is busy, not connecting")
+            return None
+
+        connected = False
+        try:
+            connected = WifiService._attempt_connecting(
+                ssid,
+                password,
+                network_module=network_module,
+                time_module=time_module,
+            )
+        finally:
+            WifiService.wifi_busy = False
+            if not connected:
+                WifiService._restore_hotspot_if_needed(network_module=network_module)
+        return connected
+
+    @staticmethod
+    def _attempt_connecting(ssid, password, network_module=None, time_module=None):
         if __debug__: logger.debug("Connecting to SSID: %s", ssid)
 
         time_mod = time_module if time_module else time
@@ -426,9 +447,9 @@ class WifiService:
                     if __debug__: logger.debug("WiFi disabled to conserve power")
 
         finally:
+            WifiService.wifi_busy = False
             if not connected:
                 WifiService._restore_hotspot_if_needed(network_module=network_module)
-            WifiService.wifi_busy = False
             if __debug__: logger.debug("Auto-connect thread finished")
 
     @staticmethod
@@ -694,14 +715,15 @@ class WifiService:
         Scan for available WiFi networks.
 
         This method manages the wifi_busy flag internally. If WiFi is already busy,
-        returns an empty list. The busy flag is automatically cleared when scanning
+        returns None. The busy flag is automatically cleared when scanning
         completes (even on error).
 
         Args:
             network_module: Network module for dependency injection (testing)
 
         Returns:
-            list: List of SSIDs found, empty list if busy, or mock data on desktop
+            list: List of SSIDs found, or mock data on desktop
+            None: if another WiFi operation is in progress (nothing was scanned)
         """
         # Desktop mode - return mock SSIDs (no busy flag needed)
         if WifiService._is_desktop_mode(network_module):
@@ -709,11 +731,10 @@ class WifiService:
             return ["Home WiFi", "Pretty Fly for a Wi Fi", "Winternet is coming", "The Promised LAN"]
 
         # Check if already busy
-        if WifiService.wifi_busy:
-            if __debug__: logger.debug("scan_networks() - WiFi is busy, returning empty list")
-            return []
+        if not WifiService._acquire_busy():
+            if __debug__: logger.debug("scan_networks() - WiFi is busy, returning None")
+            return None
 
-        WifiService.wifi_busy = True
         try:
             networks = WifiService._scan_networks_raw(network_module)
             # Return unique SSIDs, filtering out empty ones and invalid lengths

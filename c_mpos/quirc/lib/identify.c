@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <float.h>
 #include <limits.h>
 #include <string.h>
 #include <stdbool.h>
@@ -97,6 +98,61 @@ static void perspective_setup(quirc_float_t *c,
 		hden;
 }
 
+/* perspective_map() rounds with rint() where compilers expand it to one
+ * instruction: FRINTX on AArch64, ROUNDSS/ROUNDSD on x86 with SSE4.1,
+ * f32.nearest/f64.nearest in WebAssembly and FROUNDNX on RISC-V with Zfa.
+ * Elsewhere, as on Xtensa (ESP32, ESP32-S3), RISC-V without Zfa (ESP32-C6,
+ * ESP32-P4) and x86-64 without SSE4.1, rint() is a library call, and
+ * round_nearest() gives the same results without it. round_nearest() needs
+ * every operation rounded to quirc_float_t (FLT_EVAL_METHOD == 0, unlike the
+ * x87's excess precision) and (x + shift) - shift kept as written (no
+ * -ffast-math, -fassociative-math or -funsafe-math-optimizations), so rint()
+ * is also used when either can't be ruled out. GCC reports those flags through
+ * __FAST_MATH__ and __ASSOCIATIVE_MATH__; clang has no macro for most of them
+ * (only -ffast-math defines __FAST_MATH__), so clang builds always use rint().
+ * Defining QUIRC_USE_RINT to 0 or 1 overrides the choice.
+ */
+#ifndef QUIRC_USE_RINT
+#if defined(__aarch64__) || defined(__SSE4_1__) || defined(__wasm__) || \
+	defined(__riscv_zfa) || !defined(FLT_EVAL_METHOD) || \
+	FLT_EVAL_METHOD != 0 || defined(__FAST_MATH__) || \
+	defined(__ASSOCIATIVE_MATH__) || defined(__clang__)
+#define QUIRC_USE_RINT 1
+#else
+#define QUIRC_USE_RINT 0
+#endif
+#endif
+
+#if !QUIRC_USE_RINT
+#if !defined(FLT_EVAL_METHOD) || FLT_EVAL_METHOD != 0
+#error "round_nearest() needs FLT_EVAL_METHOD == 0; define QUIRC_USE_RINT to 1"
+#endif
+
+_Static_assert(sizeof(quirc_float_t) == sizeof(float) ||
+	       sizeof(quirc_float_t) == sizeof(double),
+	       "round_nearest() expects quirc_float_t to be float or double");
+
+/* rint() without the library call: round to the nearest integer, ties to
+ * even (the default rounding mode). Below 2^(p-1), p being the significand
+ * width, adding and then subtracting 2^(p-1) with the sign of x leaves x
+ * rounded by the FPU; from 2^(p-1) up every value is already an integer, and
+ * infinities and NaNs pass through, as with rint(). Unlike rint(), a negative
+ * x that rounds to zero gives +0, which the (int) cast makes the same 0.
+ * Needs strict IEEE arithmetic in quirc_float_t's own precision (see above).
+ */
+static quirc_float_t round_nearest(quirc_float_t x)
+{
+	const quirc_float_t big = sizeof(quirc_float_t) == sizeof(float) ?
+		(quirc_float_t)(1 / FLT_EPSILON) : (quirc_float_t)(1 / DBL_EPSILON);
+	const quirc_float_t shift = x < 0 ? -big : big;
+
+	if (fabs(x) < big)
+		x = (x + shift) - shift;
+
+	return x;
+}
+#endif
+
 static void perspective_map(const quirc_float_t *c,
 			    quirc_float_t u, quirc_float_t v, struct quirc_point *ret)
 {
@@ -104,8 +160,13 @@ static void perspective_map(const quirc_float_t *c,
 	quirc_float_t x = (c[0]*u + c[1]*v + c[2]) / den;
 	quirc_float_t y = (c[3]*u + c[4]*v + c[5]) / den;
 
+#if QUIRC_USE_RINT
 	ret->x = (int) rint(x);
 	ret->y = (int) rint(y);
+#else
+	ret->x = (int) round_nearest(x);
+	ret->y = (int) round_nearest(y);
+#endif
 }
 
 static void perspective_unmap(const quirc_float_t *c,
@@ -288,14 +349,14 @@ static void flood_fill_seed(struct quirc *q,
  * Adaptive thresholding
  */
 
-static uint8_t otsu(const struct quirc *q)
+static uint8_t otsu(const struct quirc *q, const uint8_t *image)
 {
 	unsigned int numPixels = q->w * q->h;
 
 	// Calculate histogram
 	unsigned int histogram[UINT8_MAX + 1];
 	(void)memset(histogram, 0, sizeof(histogram));
-	uint8_t* ptr = q->image;
+	const uint8_t* ptr = image;
 	unsigned int length = numPixels;
 	while (length--) {
 		uint8_t value = *ptr++;
@@ -533,45 +594,62 @@ static void test_capstone(struct quirc *q, unsigned int x, unsigned int y,
 
 static void finder_scan(struct quirc *q, unsigned int y)
 {
-	quirc_pixel_t *row = q->pixels + y * q->w;
-	int x;
-	int last_color = 0;
-	unsigned int run_length = 0;
+	const quirc_pixel_t *row = q->pixels + y * q->w;
+	const int w = q->w;
+	int x = 0;
+	int color;
 	unsigned int run_count = 0;
-	unsigned int pb[5];
+	unsigned int pb0 = 0, pb1 = 0, pb2 = 0, pb3 = 0, pb4 = 0;
 
-	memset(pb, 0, sizeof(pb));
-	for (x = 0; x < q->w; x++) {
-		int color = row[x] ? 1 : 0;
+	if (w <= 0)
+		return;
 
-		if (x && color != last_color) {
-			memmove(pb, pb + 1, sizeof(pb[0]) * 4);
-			pb[4] = run_length;
-			run_length = 0;
-			run_count++;
+	/* test_capstone() relabels dark pixels, possibly further along this
+	 * row, but never turns a dark pixel light or a light one dark, so the
+	 * runs found here are the runs of the thresholded row.
+	 */
+	color = row[0] ? 1 : 0;
+	for (;;) {
+		const int start = x;
 
-			if (!color && run_count >= 5) {
-				const int scale = 16;
-				static const unsigned int check[5] = {1, 1, 3, 1, 1};
-				unsigned int avg, err;
-				unsigned int i;
-				int ok = 1;
-
-				avg = (pb[0] + pb[1] + pb[3] + pb[4]) * scale / 4;
-				err = avg * 3 / 4;
-
-				for (i = 0; i < 5; i++)
-					if (pb[i] * scale < check[i] * avg - err ||
-					    pb[i] * scale > check[i] * avg + err)
-						ok = 0;
-
-				if (ok)
-					test_capstone(q, x, y, pb);
-			}
+		if (color) {
+			while (++x < w && row[x])
+				;
+		} else {
+			while (++x < w && !row[x])
+				;
 		}
 
-		run_length++;
-		last_color = color;
+		if (x >= w)
+			break;
+
+		pb0 = pb1;
+		pb1 = pb2;
+		pb2 = pb3;
+		pb3 = pb4;
+		pb4 = x - start;
+		run_count++;
+		color = !color;
+
+		if (!color && run_count >= 5) {
+			const int scale = 16;
+			static const unsigned int check[5] = {1, 1, 3, 1, 1};
+			unsigned int pb[5] = {pb0, pb1, pb2, pb3, pb4};
+			unsigned int avg, err;
+			unsigned int i;
+			int ok = 1;
+
+			avg = (pb[0] + pb[1] + pb[3] + pb[4]) * scale / 4;
+			err = avg * 3 / 4;
+
+			for (i = 0; i < 5; i++)
+				if (pb[i] * scale < check[i] * avg - err ||
+				    pb[i] * scale > check[i] * avg + err)
+					ok = 0;
+
+			if (ok)
+				test_capstone(q, x, y, pb);
+		}
 	}
 }
 
@@ -1072,13 +1150,14 @@ static void test_grouping(struct quirc *q, int i)
 	test_neighbours(q, i, &hlist, &vlist);
 }
 
-static void pixels_setup(struct quirc *q, uint8_t threshold)
+static void pixels_setup(struct quirc *q, const uint8_t *image,
+			 uint8_t threshold)
 {
 	if (QUIRC_PIXEL_ALIAS_IMAGE) {
 		q->pixels = (quirc_pixel_t *)q->image;
 	}
 
-	uint8_t* source = q->image;
+	const uint8_t* source = image;
 	quirc_pixel_t* dest = q->pixels;
 	int length = q->w * q->h;
 	while (length--) {
@@ -1101,18 +1180,29 @@ uint8_t *quirc_begin(struct quirc *q, int *w, int *h)
 	return q->image;
 }
 
-void quirc_end(struct quirc *q)
+static void process_image(struct quirc *q, const uint8_t *image)
 {
 	int i;
 
-	uint8_t threshold = otsu(q);
-	pixels_setup(q, threshold);
+	uint8_t threshold = otsu(q, image);
+	pixels_setup(q, image, threshold);
 
 	for (i = 0; i < q->h; i++)
 		finder_scan(q, i);
 
 	for (i = 0; i < q->num_capstones; i++)
 		test_grouping(q, i);
+}
+
+void quirc_end(struct quirc *q)
+{
+	process_image(q, q->image);
+}
+
+void quirc_end_from(struct quirc *q, const uint8_t *src)
+{
+	quirc_begin(q, NULL, NULL);
+	process_image(q, src);
 }
 
 void quirc_extract(const struct quirc *q, int index,

@@ -25,7 +25,7 @@ spi_bus = machine.SPI.Bus(
 )
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
-    freq=40000000,
+    freq=80000000,
     dc=4,
     cs=5
 )
