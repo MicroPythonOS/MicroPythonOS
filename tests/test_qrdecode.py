@@ -1,8 +1,10 @@
 """Tests for the qrdecode C module (c_mpos/src/quirc_decode.c).
 
 The fixtures in tests/qrdecode/ are small camera-like grayscale frames
-(binary PGM): square finder patterns, slight rotation, blur, noise and uneven
-lighting. They were rendered with segno + OpenCV.
+(binary PGM): slight rotation, blur, noise and uneven lighting. They were
+rendered with segno + OpenCV. v1_* and v2_* have square finder patterns;
+v3_wifi_r2_* and v3_wifi_r15_* have finder patterns with rounded corners
+(radius 2 and 1.5 modules), as some apps draw them (MicroPythonOS #313).
 
 The module keeps one decoder between calls (resized when the frame size
 changes) until qrdecode.release(), so these tests also check that frame size
@@ -31,6 +33,7 @@ except ImportError:
 
 V2_PAYLOAD = b"https://micropythonos.com"
 V1_PAYLOAD = b"MicroPythonOS"
+ROUNDED_PAYLOAD = b"WIFI:S:MicroPythonOS;T:WPA;P:rounded;;"
 
 
 def _read_pgm(name):
@@ -49,6 +52,8 @@ def _read_pgm(name):
 try:
     _V2 = _read_pgm("v2_url_120x120.pgm")
     _V1 = _read_pgm("v1_text_96x80.pgm")
+    _R2 = _read_pgm("v3_wifi_r2_160x160.pgm")
+    _R15 = _read_pgm("v3_wifi_r15_160x160.pgm")
     _HAS_FIXTURES = True
 except OSError:
     _HAS_FIXTURES = False
@@ -66,6 +71,45 @@ def _unreadable_frame(frame, width):
     for y in range(52, 81):
         corrupt[y * width + 46:y * width + 75] = b"\xc8" * 29
     return corrupt
+
+
+def _blank(frame, width, x0, y0, x1, y1):
+    blanked = bytearray(frame)
+    for y in range(y0, y1):
+        blanked[y * width + x0:y * width + x1] = b"\xc8" * (x1 - x0)
+    return blanked
+
+
+def _transposed(frame, width, height):
+    # Swapping rows and columns mirrors the code (ISO 18004:2015 allows mirrored codes).
+    return bytes(frame[y * width + x] for x in range(width) for y in range(height))
+
+
+def _stacked(top, top_width, top_height, bottom, bottom_width, bottom_height):
+    width = max(top_width, bottom_width)
+    frame = bytearray(b"\xc8" * (width * (top_height + bottom_height)))
+    for y in range(top_height):
+        frame[y * width:y * width + top_width] = top[y * top_width:(y + 1) * top_width]
+    for y in range(bottom_height):
+        row = (top_height + y) * width
+        frame[row:row + bottom_width] = bottom[y * bottom_width:(y + 1) * bottom_width]
+    return frame
+
+
+def _finders_in_a_row(width=200, height=60, module=4):
+    # Three finder patterns side by side: capstones, but no L shape to group them into a grid.
+    frame = bytearray(b"\xdc" * (width * height))
+    for k in range(3):
+        x0, y0 = 10 + 64 * k, 16
+        for v in range(7):
+            for u in range(7):
+                ring = u in (0, 6) or v in (0, 6)
+                stone = 2 <= u <= 4 and 2 <= v <= 4
+                if ring or stone:
+                    for y in range(y0 + v * module, y0 + (v + 1) * module):
+                        start = y * width + x0 + u * module
+                        frame[start:start + module] = b"\x1e" * module
+    return frame, width, height
 
 
 def _to_rgb565(gray):
@@ -190,6 +234,82 @@ class TestQRDecode(unittest.TestCase):
             caught.append("TypeError")
         self.assertEqual(caught, ["ValueError", "TypeError"])
         self.assertEqual(qrdecode.qrdecode_rgb565(_to_rgb565(self.v2), self.v2_w, self.v2_h), V2_PAYLOAD)
+
+
+class TestQRDecodeFallbacks(unittest.TestCase):
+    """Codes whose first grid doesn't decode.
+
+    qrdecode tries every grid quirc found, each also mirrored, and then
+    quirc_retry_rounded(), which fits the finder patterns' corners to their
+    straight edges: quirc takes a ring's extreme pixels as its corners, which
+    lie on the arcs when the corners are rounded (MicroPythonOS #313).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if _HAS_FIXTURES:
+            cls.v2, cls.v2_w, cls.v2_h = _V2
+            cls.v1, cls.v1_w, cls.v1_h = _V1
+            cls.r2, cls.r2_w, cls.r2_h = _R2
+            cls.r15, cls.r15_w, cls.r15_h = _R15
+
+    @classmethod
+    def tearDownClass(cls):
+        qrdecode.release()
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_decodes_rounded_finder_code_without_a_first_grid(self):
+        # Radius 2 modules: the extreme-pixel corners give no grid at all.
+        self.assertEqual(qrdecode.qrdecode(self.r2, self.r2_w, self.r2_h), ROUNDED_PAYLOAD)
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_decodes_rounded_finder_code_with_a_wrong_first_grid(self):
+        # Radius 1.5 modules: the extreme-pixel corners give a grid of the wrong size.
+        self.assertEqual(qrdecode.qrdecode(self.r15, self.r15_w, self.r15_h), ROUNDED_PAYLOAD)
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_rgb565_decodes_rounded_finder_code(self):
+        frame = _to_rgb565(self.r2)
+        self.assertEqual(qrdecode.qrdecode_rgb565(frame, self.r2_w, self.r2_h), ROUNDED_PAYLOAD)
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_decodes_mirrored_code(self):
+        frame = _transposed(self.v2, self.v2_w, self.v2_h)
+        self.assertEqual(qrdecode.qrdecode(frame, self.v2_h, self.v2_w), V2_PAYLOAD)
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_decodes_mirrored_rounded_finder_code(self):
+        frame = _transposed(self.r2, self.r2_w, self.r2_h)
+        self.assertEqual(qrdecode.qrdecode(frame, self.r2_h, self.r2_w), ROUNDED_PAYLOAD)
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_decodes_second_grid_when_first_does_not_decode(self):
+        # The unreadable code is above the readable one, so quirc finds its grid first.
+        frame = _stacked(_unreadable_frame(self.v2, self.v2_w), self.v2_w, self.v2_h, self.v1, self.v1_w, self.v1_h)
+        width, height = self.v2_w, self.v2_h + self.v1_h
+        self.assertEqual(qrdecode.qrdecode(frame, width, height), V1_PAYLOAD)
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_unreadable_rounded_code_raises_type_error(self):
+        # Only the retry finds a grid here, and it can't be read: still "failed to decode".
+        frame = _blank(self.r2, self.r2_w, 64, 64, 100, 100)
+        with self.assertRaises(TypeError):
+            qrdecode.qrdecode(frame, self.r2_w, self.r2_h)
+
+    def test_finders_without_a_grid_raise_value_error(self):
+        frame, width, height = _finders_in_a_row()
+        with self.assertRaises(ValueError):
+            qrdecode.qrdecode(frame, width, height)
+
+    @unittest.skipUnless(_HAS_FIXTURES, _NO_FIXTURES)
+    def test_decoder_usable_after_retry(self):
+        unreadable = _blank(self.r2, self.r2_w, 64, 64, 100, 100)
+        for _ in range(2):
+            with self.assertRaises(TypeError):
+                qrdecode.qrdecode(unreadable, self.r2_w, self.r2_h)
+            self.assertEqual(qrdecode.qrdecode(self.r2, self.r2_w, self.r2_h), ROUNDED_PAYLOAD)
+            self.assertEqual(qrdecode.qrdecode(self.r15, self.r15_w, self.r15_h), ROUNDED_PAYLOAD)
+            self.assertEqual(qrdecode.qrdecode(self.v2, self.v2_w, self.v2_h), V2_PAYLOAD)
 
 
 class TestQRDecodeFrameSize(unittest.TestCase):

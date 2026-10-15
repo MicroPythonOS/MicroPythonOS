@@ -89,19 +89,45 @@ static struct qrdecode_state *qrdecode_get_state(int width, int height) {
     return state;
 }
 
-// Decodes the first code found by the last quirc_end() or quirc_end_from().
-static mp_obj_t qrdecode_result(struct qrdecode_state *state) {
-    int count = quirc_count(state->qr);
-    if (count == 0) {
-        mp_raise_ValueError(MP_ERROR_TEXT("no QR code found"));
+// Decodes the grids quirc found, each also mirrored, until one decodes. Returns
+// QUIRC_SUCCESS or the last grid's error.
+static int qrdecode_any_grid(struct qrdecode_state *state) {
+    int err = QUIRC_ERROR_INVALID_GRID_SIZE;
+    for (int i = 0; i < quirc_count(state->qr); i++) {
+        quirc_extract(state->qr, i, &state->code);
+        // the code struct now contains the corners of the QR code, as well as the bitmap of the values
+        // this could be used to display debug info to the user - they might even be able to see which modules are being misidentified!
+        err = quirc_decode(&state->code, &state->data);
+        if (err != QUIRC_SUCCESS) {
+            quirc_flip(&state->code);
+            err = quirc_decode(&state->code, &state->data);
+        }
+        if (err == QUIRC_SUCCESS) {
+            break;
+        }
     }
+    return err;
+}
 
-    quirc_extract(state->qr, 0, &state->code);
-    // the code struct now contains the corners of the QR code, as well as the bitmap of the values
-    // this could be used to display debug info to the user - they might even be able to see which modules are being misidentified!
-
-    int err = quirc_decode(&state->code, &state->data);
+// Decodes a code found by the last quirc_end() or quirc_end_from(). Raises
+// ValueError if quirc found no grid, TypeError if none of its grids decoded.
+static mp_obj_t qrdecode_result(struct qrdecode_state *state) {
+    int grids = quirc_count(state->qr);
+    int err = qrdecode_any_grid(state);
     if (err != QUIRC_SUCCESS) {
+        // Finder patterns with rounded corners get a second chance (quirc.h). It
+        // only runs when nothing decoded and quirc found 3+ finder patterns, so a
+        // frame whose first grid decodes does exactly the same work as before.
+        int retry_grids = quirc_retry_rounded(state->qr);
+        if (retry_grids > 0) {
+            grids += retry_grids;
+            err = qrdecode_any_grid(state);
+        }
+    }
+    if (err != QUIRC_SUCCESS) {
+        if (grids == 0) {
+            mp_raise_ValueError(MP_ERROR_TEXT("no QR code found"));
+        }
         mp_raise_TypeError(MP_ERROR_TEXT("failed to decode QR code"));
     }
 
