@@ -325,6 +325,10 @@ class NostrManager:
         # background persistence can store events already processed by the UI.
         self._post_event_handlers = {}
 
+        # Optional event_id -> bool: is this event already stored? See
+        # set_known_event_check().
+        self._is_known_event = None
+
         # NWC-specific callbacks (set by NWCWallet)
         self._nwc_balance_cb = None
         self._nwc_payments_cb = None
@@ -447,6 +451,28 @@ class NostrManager:
             self._post_event_handlers[kind] = [
                 cb for cb in self._post_event_handlers[kind] if cb != callback
             ]
+
+    def set_known_event_check(self, check):
+        """Set `check(event_id)`, True for an event that is already stored.
+
+        A NIP-17 gift wrap it knows is dropped before unwrapping. Unwrapping
+        costs two ECDH, two NIP-44 decryptions and the seal's signature check,
+        well over 0.1 s on an ESP32, and the store would drop the message as
+        known anyway; yet every start re-fetches days of wraps, and every
+        send's relay echo is the sender's own, already stored, wrap. None
+        turns it off.
+        """
+        self._is_known_event = check
+
+    def _is_known_event_id(self, event_id):
+        check = self._is_known_event
+        if check is None:
+            return False
+        try:
+            return bool(check(event_id))
+        except Exception as e:
+            logger.warning("NostrManager: known-event check failed: %s", e)
+            return False
 
     def set_nwc_callbacks(self, balance_cb=None, payments_cb=None, notification_cb=None):
         self._nwc_balance_cb = balance_cb
@@ -1316,6 +1342,12 @@ class NostrManager:
             )
 
         if event.kind in (KIND_NIP17_GIFT_WRAP, KIND_NIP17_GIFT_WRAP_EPHEMERAL):
+            wrap_id = event.id  # hashed on every read of a relay event
+            if self._is_known_event_id(wrap_id):
+                if __debug__:
+                    logger.debug("NostrManager: gift wrap %s already stored, not unwrapping",
+                                 wrap_id[:16])
+                return
             decrypted_event = self._decrypt_nip17_gift_wrap(event)
             if decrypted_event is None:
                 logger.warning(
@@ -1326,7 +1358,7 @@ class NostrManager:
             # Preserve the original gift-wrap id so the same message deduplicates.
             # Event.id is a computed property; assign an instance attribute to
             # shadow it for downstream code that reads event.id.
-            decrypted_event.id = event.id
+            decrypted_event.id = wrap_id
             event = decrypted_event
             # Only the size: the content is end-to-end encrypted chat.
             logger.info(

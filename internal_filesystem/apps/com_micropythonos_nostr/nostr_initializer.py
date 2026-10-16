@@ -146,7 +146,8 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
         The singleton manager to configure.
     store : EventStore, optional
         When provided, channel subscriptions are also refreshed from the
-        store's known chats.
+        store's known chats, and gift wraps it already holds are not
+        unwrapped again.
     dm_since : int, optional
         Override the ``since`` timestamp used for DM/NIP-17 subscriptions.
         When omitted it is computed from the store's chat history or the
@@ -193,6 +194,11 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
     # silently without making a sound for every historical message.
     manager._initial_fetch_deadline = _time.time() + FIRST_FETCH_GRACE_SECONDS
     manager._silent_initial_chats = set()
+
+    if store is not None:
+        # Gift wraps already stored are not unwrapped again, including the
+        # history the subscriptions below re-fetch.
+        manager.set_known_event_check(store.has_event)
 
     try:
         manager.subscribe_dms(since=dm_since, limit=dm_settings["limit"])

@@ -16,6 +16,7 @@ Builtin Apps:
 - Nostr Chat: a group send yields between recipients instead of starving the relay connections, the Send button shows "Encrypting 2/5" meanwhile, and a gift wrap that fails to publish is logged instead of aborting the rest. Leaving the chat during a send no longer touches the deleted screen. Offline-queued group messages keep their subject, are flushed from a background task (one wrap per member costs seconds on an ESP32) and leave the outbox one by one, so a failure later in the queue doesn't re-send the earlier ones
 - Nostr Chat: a chat opened from "New chat" (DM, group or channel) stays open. The new-chat screen finished itself after starting the chat, which popped the chat off the activity stack and left an empty screen
 - Nostr Chat: decrypted private-message content is no longer written to the log at INFO level
+- Nostr Chat: a NIP-17 gift wrap that is already stored is no longer unwrapped again. Each unwrap costs two ECDH, two decryptions and the seal's signature check (well over 0.1 s on an ESP32), and every app start re-fetches up to 100 wraps from the last 4 days, while every message you send comes back from the relay as your own, already stored, wrap
 
 0.20.0
 ======

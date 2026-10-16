@@ -114,6 +114,30 @@ class TestEventStoreDeduplication(unittest.TestCase):
         )
         self.assertEqual(second_store.get_chat(chat_id).unread, 2)
 
+    def test_has_event_knows_stored_ids_across_restart(self):
+        # NostrManager asks this before unwrapping a gift wrap.
+        chat_id = "dm_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        stored_id = "s" * 64
+
+        first_store = EventStore(self.app_name)
+        self.assertFalse(first_store.has_event(stored_id))
+        first_store.add_message(
+            chat_id,
+            Message(event_id=stored_id, ts=1700000000, pubkey="a" * 64, content="hi",
+                    kind=KIND_DM),
+        )
+        self.assertTrue(first_store.has_event(stored_id))
+        first_store.flush_index()
+
+        EventStore._instances.pop(self.app_name, None)
+        second_store = EventStore(self.app_name)
+        self.assertTrue(second_store.has_event(stored_id))
+        self.assertFalse(second_store.has_event("u" * 64))
+
+        # A removed message (e.g. a send that never went out) is not known.
+        self.assertTrue(second_store.remove_message(chat_id, stored_id))
+        self.assertFalse(second_store.has_event(stored_id))
+
 
 if __name__ == "__main__":
     unittest.main()

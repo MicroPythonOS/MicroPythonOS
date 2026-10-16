@@ -73,6 +73,9 @@ class _FakeManager:
     def register_event_handler(self, kind, callback):
         pass
 
+    def set_known_event_check(self, check):
+        self.calls.append(("set_known_event_check", check))
+
 
 class _FakeStore:
     def __init__(self, chats=None):
@@ -98,6 +101,9 @@ class _FakeStore:
 
     def update_chat_title(self, chat_id, title):
         pass
+
+    def has_event(self, event_id):
+        return event_id == "stored"
 
 
 class TestConfigureNostrManager(unittest.TestCase):
@@ -182,6 +188,29 @@ class TestConfigureNostrManager(unittest.TestCase):
             if c[0] == "subscribe_channel" and c[1]["channel_id"] == DEFAULT_CHANNEL_ID
         ]
         self.assertEqual(len(channel_calls), 1)
+
+    def test_store_tells_the_manager_which_wraps_are_stored(self):
+        # Set before subscribing, so the re-fetched history is covered too.
+        manager = _FakeManager()
+        store = _FakeStore()
+        prefs = _FakePrefs(nsec=self._make_nsec(), relay="wss://relay.example")
+
+        configure_nostr_manager(prefs, manager, store=store)
+
+        names = [c[0] for c in manager.calls]
+        self.assertIn("set_known_event_check", names)
+        self.assertTrue(names.index("set_known_event_check") < names.index("subscribe_nip17_dms"))
+        check = [c[1] for c in manager.calls if c[0] == "set_known_event_check"][0]
+        self.assertTrue(check("stored"))
+        self.assertFalse(check("not stored"))
+
+    def test_no_store_leaves_the_known_event_check_alone(self):
+        manager = _FakeManager()
+        prefs = _FakePrefs(nsec=self._make_nsec(), relay="wss://relay.example")
+
+        configure_nostr_manager(prefs, manager, store=None)
+
+        self.assertFalse("set_known_event_check" in [c[0] for c in manager.calls])
 
 
 if __name__ == "__main__":

@@ -362,6 +362,14 @@ class EventStore:
                 f.write(json.dumps(obj.to_dict()))
                 f.write("\n")
 
+    def has_event(self, event_id):
+        """True if a message with this event id is stored.
+
+        Answers from the in-memory dedup cache: it can forget an old id
+        (add_message still dedups those), but never claims an unknown one.
+        """
+        return event_id in self._known_ids
+
     def _add_known_id(self, event_id):
         self._known_ids.add(event_id)
         if len(self._known_ids) > 500:
