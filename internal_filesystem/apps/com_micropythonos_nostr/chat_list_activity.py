@@ -61,7 +61,6 @@ class ChatListActivity(Activity):
     _prefs = None
     _handlers_registered = False
     _flush_timer = None
-    _flushing = False  # an outbox flush task is running
     _connectivity_cb = None
 
     def onCreate(self):
@@ -374,18 +373,23 @@ class ChatListActivity(Activity):
             return
         if not self._manager.is_connected():
             return
-        if self._flushing or not self._store.load_outbox():
+        if self._store.outbox_flushing or not self._store.load_outbox():
             return
         # A queued group message costs one seal and one gift wrap per member
         # (seconds on an ESP32), so flush from a task that yields between them.
-        TaskManager.create_task(self._flush_outbox_async())
+        self._store.outbox_flushing = True
+        try:
+            TaskManager.create_task(self._flush_outbox_async())
+        except Exception:
+            self._store.outbox_flushing = False
+            raise
 
     async def _flush_outbox_async(self):
-        self._flushing = True
+        self._store.outbox_flushing = True
         try:
             await self._flush_outbox_items()
         finally:
-            self._flushing = False
+            self._store.outbox_flushing = False
         if self.has_foreground():
             self._refresh_chat_list()
 

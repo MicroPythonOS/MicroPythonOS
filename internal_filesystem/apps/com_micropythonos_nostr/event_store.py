@@ -74,6 +74,7 @@ class EventStore:
     """
 
     _instances = {}
+    outbox_flushing = False  # an outbox flush task is running
 
     def __new__(cls, app_fullname):
         if app_fullname not in cls._instances:

@@ -34,6 +34,8 @@ class _FakeManager:
 
 
 class _FakeStore:
+    outbox_flushing = False
+
     def __init__(self, chats=None):
         self.chats = dict(chats) if chats else {}
         self.added = []
@@ -220,7 +222,6 @@ class TestChatListActivityGroups(unittest.TestCase):
         act._manager = manager or _FakeManager(own_pubkey=own_pubkey)
         act._store = _FakeStore()
         act._handlers_registered = False
-        act._flushing = False
         act._chat_list = None
         act.has_foreground = lambda: False
         act._post_notification = lambda chat, msg: None
@@ -278,7 +279,7 @@ class TestChatListActivityGroups(unittest.TestCase):
         self.assertEqual(placeholder, "out:x:1")
         self.assertEqual(new_message.event_id, "self_wrap_1")
         self.assertEqual(act._store.outbox, [])
-        self.assertFalse(act._flushing)
+        self.assertFalse(act._store.outbox_flushing)
 
     def test_outbox_flush_drops_each_item_as_it_is_published(self):
         # A failing second item must not make the next reconnect re-send (and
@@ -293,13 +294,10 @@ class TestChatListActivityGroups(unittest.TestCase):
         self.assertEqual([c["content"] for c in manager.nip17_calls], ["good", "bad"])
         self.assertEqual([i["content"] for i in act._store.outbox], ["bad", "later"])
         self.assertEqual(len(act._store.replaced), 1)
-        self.assertFalse(act._flushing)
+        self.assertFalse(act._store.outbox_flushing)
 
-    def test_flush_if_online_runs_as_a_task_once(self):
-        own = "a" * 64
-        manager = _PublishingManager(own_pubkey=own)
-        act = self._activity(own, manager=manager)
-        act._store.outbox = [self._outbox_item(1, "queued")]
+    def _flush_requests(self, *activities):
+        """Ask each activity to flush, in order, before any task runs."""
         created = []
         orig_connectivity = chat_list_module.ConnectivityManager
         orig_create_task = chat_list_module.TaskManager.create_task
@@ -308,15 +306,46 @@ class TestChatListActivityGroups(unittest.TestCase):
             lambda cls, coro: created.append(coro)
         )
         try:
-            act._flush_outbox_if_online()
-            act._flushing = True  # the task is running
-            act._flush_outbox_if_online()
+            for act in activities:
+                act._flush_outbox_if_online()
         finally:
             chat_list_module.ConnectivityManager = orig_connectivity
             chat_list_module.TaskManager.create_task = orig_create_task
+        return created
+
+    def test_flush_if_online_runs_as_a_task_once(self):
+        own = "a" * 64
+        manager = _PublishingManager(own_pubkey=own)
+        act = self._activity(own, manager=manager)
+        act._store.outbox = [self._outbox_item(1, "queued")]
+        created = self._flush_requests(act, act)
         self.assertEqual(len(created), 1)
         asyncio.run(created[0])
         self.assertEqual(len(manager.nip17_calls), 1)
+
+    def test_chat_lists_sharing_a_store_flush_it_once(self):
+        own = "a" * 64
+        manager = _PublishingManager(own_pubkey=own)
+        first = self._activity(own, manager=manager)
+        second = self._activity(own, manager=manager)
+        second._store = first._store
+        first._store.outbox = [self._outbox_item(1, "queued")]
+        created = self._flush_requests(first, second)
+        self.assertEqual(len(created), 1)
+        asyncio.run(created[0])
+        self.assertEqual(len(manager.nip17_calls), 1)
+
+    def test_flush_can_run_again_after_the_previous_one_ends(self):
+        own = "a" * 64
+        manager = _PublishingManager(own_pubkey=own)
+        act = self._activity(own, manager=manager)
+        act._store.outbox = [self._outbox_item(1, "first")]
+        asyncio.run(self._flush_requests(act)[0])
+        act._store.outbox = [self._outbox_item(2, "second")]
+        created = self._flush_requests(act)
+        self.assertEqual(len(created), 1)
+        asyncio.run(created[0])
+        self.assertEqual([c["content"] for c in manager.nip17_calls], ["first", "second"])
 
     def test_group_row_shows_subject_else_members(self):
         act = self._activity("a" * 64)
