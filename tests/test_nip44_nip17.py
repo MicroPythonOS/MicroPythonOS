@@ -67,6 +67,14 @@ class TestNip44(unittest.TestCase):
         self.fail("tampered payload should fail MAC check")
 
 
+def _wrap_target(gift):
+    return [t[1] for t in gift["tags"] if t[0] == "p"][0]
+
+
+def _p_tags(rumor):
+    return [t[1] for t in rumor["tags"] if t[0] == "p"]
+
+
 class TestNip17(unittest.TestCase):
     """NIP-17 gift-wrap construction and decryption."""
 
@@ -88,13 +96,24 @@ class TestNip17(unittest.TestCase):
             return
         self.fail("empty recipients should raise ValueError")
 
-    def test_make_nip17_messages_does_not_auto_wrap_sender(self):
+    def test_make_nip17_messages_wraps_for_sender_first(self):
         alice = PrivateKey()
         bob = PrivateKey()
         messages = make_nip17_messages(alice, "hello", [bob.public_key.hex()])
-        # The sender is no longer auto-added; only Bob should receive a wrap.
-        self.assertEqual(len(messages), 1)
+        self.assertEqual(len(messages), 2)
         self.assertTrue(all(m["kind"] == 1059 for m in messages))
+        self.assertEqual(_wrap_target(messages[0]), alice.public_key.hex())
+        self.assertEqual(_wrap_target(messages[1]), bob.public_key.hex())
+        own_copy = decrypt_gift_wrap_to_rumor(messages[0], alice)
+        self.assertEqual(_p_tags(own_copy), [bob.public_key.hex()])
+
+    def test_make_nip17_messages_can_skip_the_sender(self):
+        alice = PrivateKey()
+        bob = PrivateKey()
+        messages = make_nip17_messages(
+            alice, "hello", [bob.public_key.hex()], include_sender=False
+        )
+        self.assertEqual([_wrap_target(m) for m in messages], [bob.public_key.hex()])
 
     def test_roundtrip_decrypt_gift_wrap(self):
         alice = PrivateKey()
@@ -119,7 +138,7 @@ class TestNip17(unittest.TestCase):
         bob = PrivateKey()
         charlie = PrivateKey()
         messages = make_nip17_messages(alice, "hello", [bob.public_key.hex()])
-        gift = messages[0]
+        gift = next(m for m in messages if _wrap_target(m) == bob.public_key.hex())
         try:
             decrypt_gift_wrap_to_rumor(gift, charlie)
         except ValueError:
@@ -132,28 +151,30 @@ class TestNip17(unittest.TestCase):
         charlie = PrivateKey()
         recipients = [bob.public_key.hex(), charlie.public_key.hex()]
         messages = make_nip17_messages(alice, "group hi", recipients, subject="g")
-        # Only the explicit recipients get a wrap; the sender is not auto-added.
-        self.assertEqual(len(messages), 2)
-        targets = set()
-        for m in messages:
-            for tag in m["tags"]:
-                if tag[0] == "p" and len(tag) >= 2:
-                    targets.add(tag[1])
-        self.assertEqual(targets, {bob.public_key.hex(), charlie.public_key.hex()})
+        self.assertEqual(len(messages), 3)
+        targets = {_wrap_target(m) for m in messages}
+        self.assertEqual(
+            targets,
+            {alice.public_key.hex(), bob.public_key.hex(), charlie.public_key.hex()},
+        )
+        gift = next(m for m in messages if _wrap_target(m) == bob.public_key.hex())
+        rumor = decrypt_gift_wrap_to_rumor(gift, bob)
+        self.assertEqual(sorted(_p_tags(rumor)), sorted(recipients))
 
     def test_created_at_is_respected(self):
+        from nostr.event import Event
+
         alice = PrivateKey()
         bob = PrivateKey()
         fixed_ts = 2000000000
         messages = make_nip17_messages(
             alice, "ts test", [bob.public_key.hex()], created_at=fixed_ts
         )
+        gift = next(m for m in messages if _wrap_target(m) == bob.public_key.hex())
+        self.assertEqual(decrypt_gift_wrap_to_rumor(gift, bob)["created_at"], fixed_ts)
+        now = Event.epoch_seconds()
         for gift in messages:
-            self.assertEqual(gift["created_at"], fixed_ts)
-            # Verify the id was computed with the fixed timestamp by
-            # reconstructing the Event.
-            from nostr.event import Event
-
+            self.assertTrue(now - 2 * 24 * 60 * 60 - 5 <= gift["created_at"] <= now + 5)
             event = Event(
                 content=gift["content"],
                 public_key=gift["pubkey"],

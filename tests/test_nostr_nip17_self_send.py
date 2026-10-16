@@ -123,5 +123,38 @@ class TestNip17SelfSendReceive(unittest.TestCase):
         self.assertEqual(event_caught[0].event.public_key, self.own_hex)
 
 
+    def test_send_to_peer_also_wraps_for_self_and_routes_to_the_dm(self):
+        """The sender's own gift-wrap (NIP-17: "to each receiver and the sender
+        individually") must unwrap for us, route to the peer's DM chat, and
+        carry the id the local echo was stored under (ids[0])."""
+        from com_micropythonos_nostr.chat_model import chat_id_for_event, dm_chat_id
+
+        peer = PrivateKey()
+        peer_hex = peer.public_key.hex()
+        ids = self.mgr.publish_nip17_message("to a peer", [peer_hex])
+        self.assertEqual(len(ids), 2)
+        gifts = [self._event_to_gift_dict(e) for e in self.mgr.relay_manager.published]
+        own_gift = self._find_wrap_for_recipient(gifts, self.own_hex)
+        self.assertIsNotNone(own_gift)
+        self.assertEqual(own_gift["id"], ids[0])
+        self.assertIsNotNone(self._find_wrap_for_recipient(gifts, peer_hex))
+
+        caught = []
+        self.mgr.register_event_handler(KIND_NIP17_CHAT, lambda e: caught.append(e))
+        self.mgr._process_event(Event(
+            content=own_gift["content"],
+            public_key=own_gift["pubkey"],
+            created_at=own_gift["created_at"],
+            kind=own_gift["kind"],
+            tags=own_gift["tags"],
+            signature=own_gift["sig"],
+        ))
+        self.assertEqual(len(caught), 1)
+        rumor = caught[0].event
+        self.assertEqual(rumor.public_key, self.own_hex)
+        self.assertEqual(rumor.id, ids[0])
+        self.assertEqual(chat_id_for_event(rumor, self.own_hex), dm_chat_id(self.own_hex, peer_hex))
+
+
 if __name__ == "__main__":
     unittest.main()

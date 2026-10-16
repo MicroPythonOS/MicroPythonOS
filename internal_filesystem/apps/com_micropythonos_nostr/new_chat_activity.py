@@ -6,16 +6,27 @@ import lvgl as lv
 from mpos import Activity, DisplayMetrics, Intent, MposKeyboard
 
 from .chat_activity import ChatActivity
-from .chat_model import KIND_CHANNEL_MESSAGE, KIND_NIP17_CHAT
-from .event_store import EventStore
+from .chat_model import (
+    KIND_CHANNEL_MESSAGE,
+    KIND_NIP17_CHAT,
+    normalize_group_members,
+    parse_pubkey,
+)
+from .event_store import EventStore, _current_nostr_ts
 from .nostr_initializer import search_channel_directory
 from .nostr_service import NostrManager
+from .profile_cache import ProfileCache
 
 logger = logging.getLogger(__name__)
 
 MODE_DM = 0
-MODE_JOIN_CHANNEL = 1
-MODE_CREATE_CHANNEL = 2
+MODE_GROUP = 1
+MODE_JOIN_CHANNEL = 2
+MODE_CREATE_CHANNEL = 3
+
+# Characters for a member list of MAX_GROUP_MEMBERS npubs plus separators.
+_MEMBERS_MAX_LENGTH = 1200
+_INPUT_MAX_LENGTH = 200
 
 _SEARCH_REFRESH_MS = 500
 _SEARCH_TIMEOUT_S = 6
@@ -27,7 +38,9 @@ class NewChatActivity(Activity):
 
     _screen = None
     _textarea = None
+    _subject_textarea = None
     _keyboard = None
+    _keyboard_one_line = None
     _error_label = None
     _hint_label = None
     _action_btn = None
@@ -72,36 +85,53 @@ class NewChatActivity(Activity):
         spacer.set_size(DisplayMetrics.pct_of_width(12), DisplayMetrics.pct_of_width(12))
         spacer.set_style_border_width(0, lv.PART.MAIN)
 
-        mode_label = lv.label(self._screen)
-        mode_label.set_text("Mode:")
-        mode_label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
-
+        # The mode buttons label themselves; no "Mode:" caption and no row
+        # padding, so the Group mode (members, subject, button) fits 240 px.
         mode_row = lv.obj(self._screen)
         mode_row.set_width(lv.pct(100))
         mode_row.set_height(lv.SIZE_CONTENT)
         mode_row.set_style_border_width(0, lv.PART.MAIN)
+        mode_row.set_style_pad_all(0, lv.PART.MAIN)
+        mode_row.set_style_pad_column(DisplayMetrics.pct_of_width(1), lv.PART.MAIN)
         mode_row.set_flex_flow(lv.FLEX_FLOW.ROW)
 
         self._make_mode_btn(mode_row, "DM", MODE_DM)
-        self._make_mode_btn(mode_row, "Join Ch.", MODE_JOIN_CHANNEL)
-        self._make_mode_btn(mode_row, "Create Ch.", MODE_CREATE_CHANNEL)
+        self._make_mode_btn(mode_row, "Group", MODE_GROUP)
+        self._make_mode_btn(mode_row, "Join", MODE_JOIN_CHANNEL)
+        self._make_mode_btn(mode_row, "Create", MODE_CREATE_CHANNEL)
 
         self._hint_label = lv.label(self._screen)
         self._hint_label.set_text("")
         self._hint_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+        self._hint_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self._hint_label.set_width(lv.pct(95))
 
         self._textarea = lv.textarea(self._screen)
         self._textarea.set_text_selection(True)
         self._textarea.set_one_line(True)
         self._textarea.set_width(lv.pct(100))
-        self._textarea.set_max_length(200)
+        self._textarea.set_max_length(_INPUT_MAX_LENGTH)
+        self._textarea.add_event_cb(
+            lambda e: self._focus_textarea(self._textarea), lv.EVENT.CLICKED, None
+        )
+
+        self._subject_textarea = lv.textarea(self._screen)
+        self._subject_textarea.set_text_selection(True)
+        self._subject_textarea.set_one_line(True)
+        self._subject_textarea.set_width(lv.pct(100))
+        self._subject_textarea.set_max_length(_INPUT_MAX_LENGTH)
+        self._subject_textarea.set_placeholder_text("subject (optional)")
+        self._subject_textarea.add_flag(lv.obj.FLAG.HIDDEN)
+        self._subject_textarea.add_event_cb(
+            lambda e: self._focus_textarea(self._subject_textarea), lv.EVENT.CLICKED, None
+        )
 
         self._keyboard = MposKeyboard(self._screen)
         self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
-        self._keyboard.set_textarea(self._textarea)
 
         self._error_label = lv.label(self._screen)
-        self._error_label.set_text("")
+        self._set_error("")
+        self._error_label.add_flag(lv.obj.FLAG.HIDDEN)  # shown by _set_error
         self._error_label.set_style_text_color(lv.color_hex(0xFF0000), lv.PART.MAIN)
         self._error_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self._error_label.set_width(lv.pct(95))
@@ -123,7 +153,7 @@ class NewChatActivity(Activity):
 
     def _make_mode_btn(self, parent, label, mode):
         btn = lv.button(parent)
-        btn.set_size(lv.pct(30), lv.SIZE_CONTENT)
+        btn.set_size(lv.pct(22), lv.SIZE_CONTENT)
         btn.set_flex_grow(1)
         lbl = lv.label(btn)
         lbl.set_text(label)
@@ -137,24 +167,73 @@ class NewChatActivity(Activity):
         self._cleanup_search()
         self._mode = mode
         self._textarea.set_text("")
-        self._error_label.set_text("")
+        self._subject_textarea.set_text("")
+        self._set_error("")
         self._results_list.add_flag(lv.obj.FLAG.HIDDEN)
         self._results_list.clean()
         self._update_for_mode()
 
+    def _set_error(self, text):
+        self._error_label.set_text(text)
+        if text:
+            self._error_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._error_label.add_flag(lv.obj.FLAG.HIDDEN)
+
+    def _set_hint(self, text):
+        self._hint_label.set_text(text)
+        if text:
+            self._hint_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._hint_label.add_flag(lv.obj.FLAG.HIDDEN)
+
     def _update_for_mode(self):
+        group = self._mode == MODE_GROUP
+        # The member list is multi-line and long; every other input is one line.
+        self._textarea.set_one_line(not group)
+        self._textarea.set_max_length(_MEMBERS_MAX_LENGTH if group else _INPUT_MAX_LENGTH)
+        # Two lines of members; the list scrolls inside the field.
+        self._textarea.set_height(DisplayMetrics.pct_of_height(18) if group else lv.SIZE_CONTENT)
+        if group:
+            self._subject_textarea.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._subject_textarea.add_flag(lv.obj.FLAG.HIDDEN)
+        # Re-target the keyboard (set_textarea also picks the one-line or
+        # multi-line key map) when it types into the other input or the
+        # one-line mode of this one changed.
+        if (
+            self._keyboard.get_textarea() is not self._textarea
+            or self._keyboard_one_line != (not group)
+        ):
+            self._keyboard.set_textarea(self._textarea)
+            self._keyboard_one_line = not group
         if self._mode == MODE_DM:
-            self._hint_label.set_text("Enter npub(s) comma-separated")
+            self._set_hint("Enter npub(s) comma-separated")
             self._textarea.set_placeholder_text("npub1...")
             self._action_btn_label.set_text("Start chat")
+        elif group:
+            # The members field explains itself; a hint row would push the
+            # Create button below a 240 px screen.
+            self._set_hint("")
+            self._textarea.set_placeholder_text(
+                "Members: npubs, hex keys or names,\ncomma or newline separated"
+            )
+            self._action_btn_label.set_text("Create group")
         elif self._mode == MODE_JOIN_CHANNEL:
-            self._hint_label.set_text("Channel name or hex id")
+            self._set_hint("Join a channel: name or hex id")
             self._textarea.set_placeholder_text("name or hex channel id")
             self._action_btn_label.set_text("Search")
         else:
-            self._hint_label.set_text("Enter a name for the new channel")
+            self._set_hint("Create a channel: enter its name")
             self._textarea.set_placeholder_text("channel name")
             self._action_btn_label.set_text("Create channel")
+
+    def _focus_textarea(self, textarea):
+        """Point the keyboard at the tapped field (members or subject)."""
+        if self._keyboard.get_textarea() is textarea:
+            return  # the keyboard's own CLICKED hook shows it
+        self._keyboard.set_textarea(textarea)
+        self._keyboard.show_keyboard()
 
     def _on_action(self):
         raw = self._textarea.get_text().strip()
@@ -162,6 +241,8 @@ class NewChatActivity(Activity):
             return
         if self._mode == MODE_DM:
             self._start_dm(raw)
+        elif self._mode == MODE_GROUP:
+            self._start_group(raw, self._subject_textarea.get_text())
         elif self._mode == MODE_JOIN_CHANNEL:
             self._join_channel(raw)
         else:
@@ -170,14 +251,40 @@ class NewChatActivity(Activity):
     def _start_dm(self, raw):
         pubkeys = self._parse_pubkeys(raw)
         if pubkeys is None:
-            self._error_label.set_text("Invalid npub(s)")
-            return
+            self._set_error("Invalid npub(s)")
+            return None
+        if len(pubkeys) > 1:
+            return self._start_group(raw, None)
         own = self._manager.get_own_pubkey_hex() or ""
-        if len(pubkeys) == 1:
-            chat = self._store.get_or_create_dm(own, pubkeys[0])
-        else:
-            chat = self._store.get_or_create_nip17_group(pubkeys)
+        chat = self._store.get_or_create_dm(own, pubkeys[0])
         self._navigate_to_chat(chat)
+        return chat
+
+    def _start_group(self, raw_members, subject):
+        """Create (or reopen) the NIP-17 room for the typed members and open it."""
+        own = self._manager.get_own_pubkey_hex() or ""
+        members, error = normalize_group_members(
+            raw_members, own, resolve_name=self._resolve_member_name
+        )
+        if error:
+            self._set_error(error)
+            return None
+        subject = (subject or "").strip() or None
+        chat = self._store.get_or_create_nip17_group(members, subject=subject)
+        if subject and chat.subject != subject:
+            self._store.update_chat_subject(chat.chat_id, subject, ts=_current_nostr_ts())
+            chat.subject = subject
+            chat.title = subject
+        self._set_error("")
+        self._navigate_to_chat(chat)
+        return chat
+
+    def _resolve_member_name(self, name):
+        try:
+            return ProfileCache.get_instance().find_pubkeys_by_name(name)
+        except Exception as e:
+            logger.warning("profile name lookup failed: %s", e)
+            return []
 
     def _join_channel(self, raw):
         lower = raw.lower().strip()
@@ -186,7 +293,7 @@ class NewChatActivity(Activity):
             self._navigate_to_chat(chat)
             return
 
-        self._error_label.set_text("Searching...")
+        self._set_error("Searching...")
         self._search_results = []
         self._results_list.clean()
 
@@ -221,7 +328,7 @@ class NewChatActivity(Activity):
         if elapsed >= _SEARCH_TIMEOUT_S or not self._search_sub_name:
             self._cleanup_search()
             if not self._search_results:
-                self._error_label.set_text("No channels found")
+                self._set_error("No channels found")
             return
         self._show_search_results()
 
@@ -255,7 +362,7 @@ class NewChatActivity(Activity):
             self._navigate_to_chat(chat)
         except Exception as e:
             logger.error("channel creation failed: %s", e)
-            self._error_label.set_text("Creation failed")
+            self._set_error("Creation failed")
             self._action_btn_label.set_text("Create channel")
             self._action_btn.remove_state(lv.STATE.DISABLED)
 
@@ -270,8 +377,10 @@ class NewChatActivity(Activity):
             intent.putExtra("peer_pubkey", chat.peer_pubkey or (chat.participants[0] if chat.participants else ""))
         else:
             intent.putExtra("peer_pubkey", chat.peer_pubkey)
-        self.startActivity(intent)
+        # finish() pops the top of the activity stack, so it must run before
+        # the chat is started or it would close the chat screen just opened.
         self.finish()
+        self.startActivity(intent)
 
     def _cleanup_search(self):
         if self._search_sub_name:
@@ -294,25 +403,11 @@ class NewChatActivity(Activity):
     def onDestroy(self, screen):
         self._cleanup_search()
 
-    def _parse_npub(self, text):
-        text = text.strip()
-        if text.startswith("npub1"):
-            try:
-                from nostr.key import PublicKey
-
-                return PublicKey.from_npub(text).hex()
-            except Exception as e:
-                logger.warning("npub parse failed: %s", e)
-                return None
-        if len(text) == 64 and all(c in "0123456789abcdef" for c in text):
-            return text
-        return None
-
     def _parse_pubkeys(self, text):
-        parts = [p.strip() for p in text.split(",") if p.strip()]
+        parts = [p.strip() for p in text.replace("\n", ",").split(",") if p.strip()]
         pubkeys = []
         for part in parts:
-            pk = self._parse_npub(part)
+            pk = parse_pubkey(part)
             if pk is None:
                 return None
             pubkeys.append(pk)
