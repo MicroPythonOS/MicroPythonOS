@@ -41,11 +41,13 @@ bytes_types = (bytes, bytearray)  # Types acceptable as binary data
 
 def _bytes_from_decode_data(s):
     if isinstance(s, str):
-        try:
-            return s.encode("ascii")
-        #        except UnicodeEncodeError:
-        except:
+        # MicroPython's str.encode() ignores the codec and always returns UTF-8,
+        # so encode("ascii") never raises. In UTF-8 only non-ASCII characters
+        # take more than one byte.
+        b = s.encode()
+        if len(b) != len(s):
             raise ValueError("string argument should contain only ASCII characters")
+        return b
     elif isinstance(s, bytes_types):
         return s
     else:

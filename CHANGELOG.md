@@ -11,6 +11,7 @@ Frameworks:
 OS:
 - binascii/base64: lib/binascii.py no longer shadows the C ubinascii b2a_base64/a2b_base64 with the pure-Python copies from micropython-lib, which were O(n²) and frozen into every firmware. A 3000-byte base64 round-trip takes 0.026 ms instead of 13.6 ms on the desktop build, and everything that base64-encodes benefits: NIP-44/NIP-17 DMs, NWC, aiohttp websockets, webrepl. Incorrect padding now raises ValueError instead of a bare Exception, and str input is accepted
 - base64: b64decode(validate=True), b32decode() and b16decode() raise ValueError on invalid input, as documented. They raised AttributeError, because lib/base64.py raises binascii.Error and lib/binascii.py (a shim over ubinascii) never defined it; binascii.Error is now an alias of ValueError, as in CPython, where it is a ValueError subclass. urlsafe_b64decode() is implemented instead of raising NotImplementedError: MicroPython has no bytes.translate(), so it decodes through b64decode(altchars=b"-_"), the counterpart of the already working urlsafe_b64encode()
+- base64: the decoders raise ValueError("string argument should contain only ASCII characters") for a str with a non-ASCII character, as in CPython, instead of silently skipping it: urlsafe_b64decode(chr(233)) returned b"" and b64decode("YWJj" + chr(233)) returned b"abc". MicroPython's str.encode("ascii") ignores the codec and returns UTF-8, so the old check never fired. This covers b64decode(), urlsafe_b64decode(), b32decode(), b16decode() and their altchars/map01 arguments
 
 0.20.0
 ======

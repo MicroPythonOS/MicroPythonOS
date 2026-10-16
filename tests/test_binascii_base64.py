@@ -13,6 +13,13 @@ error paths in lib/base64.py raised AttributeError instead of ValueError, and
 urlsafe_b64decode() was a NotImplementedError stub (MicroPython has no
 bytes.translate(); the altchars path of b64decode() does the same job).
 
+A str with a non-ASCII character must raise ValueError, as in CPython. The
+decoders used to accept it silently: MicroPython's str.encode("ascii") ignores
+the codec and returns UTF-8 bytes, which b64decode() then skipped as
+non-alphabet input. Non-ASCII test strings are built with chr(), because the
+desktop runner pastes this file into the REPL, where non-ASCII literals and
+unicode escapes are lost.
+
 The OS imports binascii and base64 at boot (webrepl, secrets, aiohttp, nostr),
 so both are evicted from sys.modules first: the tests then exercise the copies
 found on sys.path (lib/ on the desktop build, the frozen ones on a device)
@@ -286,6 +293,71 @@ class TestUrlsafe(unittest.TestCase):
                 base64.urlsafe_b64decode(bad)
         with self.assertRaises(TypeError):
             base64.urlsafe_b64decode(123)
+
+
+class TestNonAsciiStr(unittest.TestCase):
+    _MESSAGE = "string argument should contain only ASCII characters"
+    # 2-, 3- and 4-byte UTF-8 characters, alone and next to valid input
+    _NON_ASCII = (
+        chr(233),
+        chr(128),
+        "YWJj" + chr(233),
+        chr(0x20AC) + "QUJD",
+        "QUJD" + chr(0x1F600) + "QUJD",
+    )
+
+    def _assert_rejected(self, decode, s, **kwargs):
+        with self.assertRaises(ValueError) as cm:
+            decode(s, **kwargs)
+        # b32decode() and b16decode() reject the UTF-8 bytes of a non-ASCII str
+        # as non-alphabet input anyway; the message says the str was refused
+        self.assertEqual(str(cm.exception), self._MESSAGE, "%r raised %r" % (s, str(cm.exception)))
+
+    def test_b64decode_rejects_non_ascii_str(self):
+        for s in self._NON_ASCII:
+            self._assert_rejected(base64.b64decode, s)
+            self._assert_rejected(base64.b64decode, s, validate=True)
+            self._assert_rejected(base64.standard_b64decode, s)
+
+    def test_urlsafe_b64decode_rejects_non_ascii_str(self):
+        for s in self._NON_ASCII:
+            self._assert_rejected(base64.urlsafe_b64decode, s)
+
+    def test_b32decode_rejects_non_ascii_str(self):
+        for s in self._NON_ASCII + (chr(233) * 8,):
+            self._assert_rejected(base64.b32decode, s)
+            self._assert_rejected(base64.b32decode, s, casefold=True)
+
+    def test_b16decode_rejects_non_ascii_str(self):
+        for s in self._NON_ASCII:
+            self._assert_rejected(base64.b16decode, s)
+            self._assert_rejected(base64.b16decode, s, casefold=True)
+
+    def test_altchars_and_map01_reject_non_ascii_str(self):
+        # one character, but two UTF-8 bytes: the len(altchars) == 2 assert passed
+        self._assert_rejected(base64.b64decode, b"QUJD", altchars=chr(233))
+        self._assert_rejected(base64.b64decode, b"QUJD", altchars="-" + chr(233))
+        self._assert_rejected(base64.b32decode, b"MZXW6YTB01======", map01=chr(233))
+
+    def test_ascii_str_still_decodes(self):
+        self.assertEqual(base64.b64decode(""), b"")
+        self.assertEqual(base64.b64decode("YWJj"), b"abc")
+        self.assertEqual(base64.b64decode("YWJj", validate=True), b"abc")
+        self.assertEqual(base64.b64decode("-_8=", altchars="-_"), b"\xfb\xff")
+        self.assertEqual(base64.standard_b64decode("QUJD"), b"ABC")
+        self.assertEqual(base64.urlsafe_b64decode("-_8="), b"\xfb\xff")
+        self.assertEqual(base64.b32decode("MZXW6YTBOI======"), b"foobar")
+        self.assertEqual(base64.b32decode("mzxw6ytboi======", casefold=True), b"foobar")
+        self.assertEqual(base64.b32decode("MZXW6YTB01======", map01="I"), b"foobar")
+        self.assertEqual(base64.b16decode("01AB"), b"\x01\xab")
+        self.assertEqual(base64.b16decode("01ab", casefold=True), b"\x01\xab")
+        # chr(127) is the last ASCII character: skipped as non-alphabet input
+        self.assertEqual(base64.b64decode("YWJj" + chr(127)), b"abc")
+        with self.assertRaises(ValueError):
+            base64.b64decode("YWJj" + chr(127), validate=True)
+        enc = base64.b64encode(_DATA)
+        self.assertEqual(base64.b64decode(enc.decode()), _DATA)
+        self.assertEqual(base64.urlsafe_b64decode(base64.urlsafe_b64encode(_DATA).decode()), _DATA)
 
 
 class TestBase64Timing(unittest.TestCase):
