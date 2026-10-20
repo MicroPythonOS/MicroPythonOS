@@ -8,11 +8,16 @@ Frameworks:
 - qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
 - Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
 
+Testing:
+- unittest: an exception raised in setUp, tearDown, a cleanup, setUpClass or tearDownClass, including self.skipTest() or raise unittest.SkipTest, is now reported as a skip or an error instead of aborting the whole test file, which was then reported as failed with its later tests and classes never run. As in CPython, a failed setUp skips the test body and tearDown, a failed setUpClass skips the class's tests and tearDownClass, and cleanups always run, each one even if an earlier one raised
+
 OS:
+- Displays (ESP32): tell LVGL a flush is done directly from C in the DMA-done interrupt (new lcd_bus.FlushReadyCallback) instead of running a Python callback inside that interrupt after every flush. Python callbacks that still run there, such as Breakout's, get a zeroed thread state and a stack limit taken from the real interrupt stack, now 2560 bytes, so running out of stack raises RecursionError instead of silently overwriting memory
 - ESP32: fix hard resets (stack overflow panics) when an app is started with AppManager.start_app() from the REPL, mpremote, an asyncio task or auto_start_app at boot, seen with BlockTV on the Waveshare ESP32-S3-Touch-LCD-3.5. The LVGL task handler runs as a scheduled callback on top of whatever Python code is executing, so a pass that started while an app built its UI deep in onCreate/onResume overflowed the 16 KB mp_task stack (a redraw needs up to 7.3 KB measured). A pass is now skipped, and retried on the next tick, when less than 9 KB of stack is left (mpos.ui.render_guard)
 
 Testing:
 - test_graphical_notification_bar: the check that the clock, temperature, WiFi and battery icons are not hidden ran its assertFalse inside `try: ... except Exception`, which also caught the AssertionError, so a hidden icon could never fail the test. It is now a real assertion (waiting up to 5 s for the periodic icon timers); the WiFi icon is only required to be visible while WiFi is connected, as it is hidden by design otherwise (e.g. --ondevice without a network)
+- test_osupdate: five fetch_update_info error tests (HTTP 404, timeout, connection refused, empty response, HTTP 500) called self.fail() inside `try: ... except Exception`, which also caught the AssertionError, so they could never fail. They now use assertRaises(ValueError) and check the 'Invalid JSON' message
 
 0.20.0
 ======
