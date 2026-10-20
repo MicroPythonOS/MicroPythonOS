@@ -242,6 +242,11 @@ Critical gotchas:
 - `TaskManager.create_task()` crashes at C level when `TaskManager.disable()` is True (the test runner disables TaskManager). If any activity `onResume` callback calls `create_task()`, the device reboots silently — no Python traceback, no issue on desktop. Fix: guard `create_task` with `if cls.disabled: return None` in source AND mirror in `mpos_controller.py:_build_test_code` runtime patch (frozen modules shadow flash files).
 - Services that call `start()` → `register_callback()` → `create_task(_run_loop())` at boot: the callback path works (fired via timer ISR on main thread), but the run-loop task may face scheduling delays. Don't rely on the run-loop for time-sensitive work — treat it as best-effort periodic background check.
 
+### Badge buttons (fri3d 2024 vs 2026)
+- Button→key mapping differs per board. Most keypad boards (2026, odroid_go, m5stack_fire, lilygo_t4, unphone, unihiker) map secondary buttons to `lv.KEY.NEXT`/`PREV`, which LVGL **consumes for focus tabbing** — the focused object never receives them as `EVENT.KEY`. Only fri3d 2024 + desktop SDL send action buttons as `ord("B")`/`ord("Y")` letters that reach apps.
+- fri3d 2026 (`drivers/indev/fri3d_2026_expander.py`) **dual-delivers**: B→NEXT (tab) + `send_data(ord("B"))`, Y→PREV (tab) + `send_data(ord("Y"))`. So apps can rely on `ord("B")/ord("Y")` KEY events on both badges + desktop. Every B/Y press still tabs focus — apps that care must repair focus next frame (see `quasibird.py:_repair_focus`).
+- For **held-state** (not edge) input, poll `mpos.io_expander.digital` directly (indices: `[6]=B [7]=A [8]=Y [9]=X`); see `com.casiegames.runner`. `_fire_nav_hook` in the expander driver is a `KeypadDriver` hook running in the LVGL read tick — side effects there (back_screen, send_data) follow existing precedent.
+
 ### BLE
 - 31-byte advertising cap (NimBLE). No extended advertising. Scan response = separate 31 bytes.
 - IRQ handlers run in main thread — LVGL calls are thread-safe.
