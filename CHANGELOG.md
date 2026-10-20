@@ -9,6 +9,7 @@ Frameworks:
 - Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
 
 OS:
+- ESP32: fix hard resets (stack overflow panics) when an app is started with AppManager.start_app() from the REPL, mpremote, an asyncio task or auto_start_app at boot, seen with BlockTV on the Waveshare ESP32-S3-Touch-LCD-3.5. The LVGL task handler runs as a scheduled callback on top of whatever Python code is executing, so a pass that started while an app built its UI deep in onCreate/onResume overflowed the 16 KB mp_task stack (a redraw needs up to 7.3 KB measured). A pass is now skipped, and retried on the next tick, when less than 9 KB of stack is left (mpos.ui.render_guard)
 - binascii/base64: lib/binascii.py no longer shadows the C ubinascii b2a_base64/a2b_base64 with the pure-Python copies from micropython-lib, which were O(n²) and frozen into every firmware. A 3000-byte base64 round-trip takes 0.026 ms instead of 13.6 ms on the desktop build, and everything that base64-encodes benefits: NIP-44/NIP-17 DMs, NWC, aiohttp websockets, webrepl. Incorrect padding now raises ValueError instead of a bare Exception, and str input is accepted
 
 0.20.0
