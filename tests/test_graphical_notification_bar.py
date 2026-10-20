@@ -12,6 +12,7 @@ from mpos import (
     DisplayMetrics,
     Notification,
     NotificationManager,
+    WifiService,
     get_widget_coords,
     simulate_drag,
     wait_for_widget,
@@ -108,15 +109,15 @@ class TestNotificationBarVisibility(unittest.TestCase):
                     continue
         return labels
 
-    def _assert_within_bar(self, widget, bar, label):
+    def _assert_within_bar(self, widget, bar, label, expect_visible=True):
         self.assertIsNotNone(widget, f"{label} widget not available")
-        try:
-            self.assertFalse(
-                widget.has_flag(lv.obj.FLAG.HIDDEN),
+        if expect_visible:
+            # Icons are shown by periodic timers (the WiFi icon only every
+            # topmenu.WIFI_ICON_UPDATE_INTERVAL ms), so allow them to settle.
+            self.assertTrue(
+                wait_for_widget(lambda: not widget.has_flag(lv.obj.FLAG.HIDDEN), timeout=5),
                 f"{label} is hidden",
             )
-        except Exception:
-            pass
         node = widget
         for _ in range(20):
             if node is bar:
@@ -291,7 +292,11 @@ class TestNotificationBarVisibility(unittest.TestCase):
 
         self._assert_within_bar(time_label, bar, "Clock label")
         self._assert_within_bar(temp_label, bar, "Temperature label")
-        self._assert_within_bar(wifi_label, bar, "WiFi icon")
+        # The WiFi icon is hidden by design while WiFi is down (e.g. --ondevice
+        # without a network); desktop always reports connected.
+        self._assert_within_bar(
+            wifi_label, bar, "WiFi icon", expect_visible=WifiService.is_connected()
+        )
         if battery_label is not None:
             self._assert_within_bar(battery_label, bar, "Battery icon")
 
