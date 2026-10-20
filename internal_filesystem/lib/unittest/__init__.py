@@ -397,10 +397,43 @@ def _run_suite(c, test_result: TestResult, suite_name=""):
     except AttributeError:
         pass
 
+    # Exceptions from setUp, tearDown, cleanups, setUpClass and tearDownClass
+    # (SkipTest included) are recorded like test exceptions. Letting them
+    # propagate aborted the rest of the run.
+    def record(test_name, ex):
+        _handle_test_exception(
+            current_test=(test_name, c), test_result=test_result, exc_info=(type(ex), ex, None)
+        )
+
+    def record_after_test(what, ex):
+        # The test's own status is already printed, so this gets its own line.
+        print("%s (%s) %s ..." % (name, suite_name, what), end="")
+        record(name, ex)
+
+    def run_cleanups():
+        # doCleanups pops each cleanup before calling it, so calling it again
+        # after one raised runs the rest, as in CPython.
+        if not hasattr(o, "doCleanups"):
+            return
+        while True:
+            try:
+                o.doCleanups()
+                return
+            except Exception as ex:
+                record_after_test("cleanup", ex)
+
     def run_one(test_function):
         global __test_result__, __current_test__
         print("%s (%s) ..." % (name, suite_name), end="")
-        set_up()
+        try:
+            set_up()
+        except Exception as ex:
+            # As in CPython, neither the test nor tearDown runs when setUp
+            # fails, but cleanups added so far do.
+            test_result.testsRun += 1
+            record(name, ex)
+            run_cleanups()
+            return
         __test_result__ = test_result
         test_container = f"({suite_name})"
         __current_test__ = (name, test_container)
@@ -414,21 +447,25 @@ def _run_suite(c, test_result: TestResult, suite_name=""):
             else:
                 print(" ok")
         except Exception as ex:
-            _handle_test_exception(
-                current_test=(name, c), test_result=test_result, exc_info=(type(ex), ex, None)
-            )
+            record(name, ex)
             # Uncomment to investigate failure in detail
             # raise ex
         finally:
             __test_result__ = None
             __current_test__ = None
-            tear_down()
             try:
-                o.doCleanups()
-            except AttributeError:
-                pass
+                tear_down()
+            except Exception as ex:
+                record_after_test("tearDown", ex)
+            run_cleanups()
 
-    set_up_class()
+    try:
+        set_up_class()
+    except Exception as ex:
+        # As in CPython, none of the class's tests run, nor tearDownClass.
+        print("setUpClass (%s) ..." % suite_name, end="")
+        record("setUpClass", ex)
+        return
     try:
         if hasattr(o, "runTest"):
             name = str(o)
@@ -446,7 +483,11 @@ def _run_suite(c, test_result: TestResult, suite_name=""):
             name = o.__name__
             run_one(o)
     finally:
-        tear_down_class()
+        try:
+            tear_down_class()
+        except Exception as ex:
+            print("tearDownClass (%s) ..." % suite_name, end="")
+            record("tearDownClass", ex)
 
     return exceptions
 
