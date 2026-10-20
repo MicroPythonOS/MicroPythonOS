@@ -180,6 +180,16 @@ quirc_decode_error_t quirc_decode(const struct quirc_code *code,
 /* Flip a QR-code according to optional mirror feature of ISO 18004:2015 */
 void quirc_flip(struct quirc_code *code);
 
+/* Second chance for QR-codes whose finder patterns have rounded corners,
+ * for when none of the grids from quirc_end() decoded: fits the corners
+ * of every capstone to the straight edges of its finder pattern and
+ * groups the capstones again. Returns the number of new grids, read with
+ * quirc_count() and quirc_extract() as usual. Returns 0 and leaves
+ * everything as it was if there are fewer than three capstones or no
+ * corner moved.
+ */
+int quirc_retry_rounded(struct quirc *q);
+
 #ifdef __cplusplus
 }
 #endif
