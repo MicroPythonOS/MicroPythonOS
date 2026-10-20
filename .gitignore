@@ -60,3 +60,6 @@ c_mpos/breakout/build
 /web/index.html
 /web/mpos.html
 /web/.preload_internal_filesystem/
+
+# local API key
+ppq_api.txt
