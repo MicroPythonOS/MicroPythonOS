@@ -10,6 +10,7 @@ from mpos import (
     Intent,
     SettingsActivity,
     SharedPreferences,
+    TaskManager,
 )
 
 from .chat_activity import ChatActivity
@@ -22,13 +23,12 @@ from .chat_model import (
     KIND_DM,
     KIND_NIP17_CHAT,
     Message,
-    _display_title,
+    apply_nip17_subject,
     channel_chat_id,
     channel_id_from_event,
     chat_id_for_event,
     participants_from_nip17_event,
     peer_from_dm_event,
-    subject_from_nip17_event,
 )
 
 from .event_store import DEFAULT_MAX_MESSAGES_PER_CHAT, EventStore, _current_nostr_ts
@@ -224,18 +224,17 @@ class ChatListActivity(Activity):
                     participants = participants_from_nip17_event(
                         nostr_event.event, own
                     )
-                    title = subject_from_nip17_event(nostr_event.event)
                     if len(participants) == 1:
                         chat = self._store.get_or_create_dm(own, participants[0])
                     else:
-                        chat = self._store.get_or_create_nip17_group(
-                            participants, title=title
-                        )
+                        chat = self._store.get_or_create_nip17_group(participants)
                 else:
                     channel_id = channel_id_from_event(nostr_event.event)
                     chat = self._store.get_or_create_channel(
                         channel_id or DEFAULT_CHANNEL_ID
                     )
+            if kind == KIND_NIP17_CHAT:
+                apply_nip17_subject(self._store, chat, nostr_event.event)
 
             is_new = self._store.add_message(chat_id, message, mark_unread=True)
             if not is_new:
@@ -295,7 +294,7 @@ class ChatListActivity(Activity):
             btn.add_state(lv.STATE.DISABLED)
 
     def _format_chat_row(self, chat, now):
-        title = _display_title(chat.title)
+        title = chat.display_title()
         if chat.kind == KIND_CHANNEL_MESSAGE or (
             chat.kind == KIND_NIP17_CHAT and chat.participants and len(chat.participants) > 1
         ):
@@ -374,11 +373,29 @@ class ChatListActivity(Activity):
             return
         if not self._manager.is_connected():
             return
-        items = self._store.load_outbox()
-        if not items:
+        if self._store.outbox_flushing or not self._store.load_outbox():
             return
+        # A queued group message costs one seal and one gift wrap per member
+        # (seconds on an ESP32), so flush from a task that yields between them.
+        self._store.outbox_flushing = True
+        try:
+            TaskManager.create_task(self._flush_outbox_async())
+        except Exception:
+            self._store.outbox_flushing = False
+            raise
+
+    async def _flush_outbox_async(self):
+        self._store.outbox_flushing = True
+        try:
+            await self._flush_outbox_items()
+        finally:
+            self._store.outbox_flushing = False
+        if self.has_foreground():
+            self._refresh_chat_list()
+
+    async def _flush_outbox_items(self):
         own = self._manager.get_own_pubkey_hex()
-        for item in items:
+        for item in self._store.load_outbox():
             try:
                 kind = item.get("kind")
                 if kind == KIND_DM:
@@ -389,12 +406,14 @@ class ChatListActivity(Activity):
                     participants = item.get("participants")
                     if not participants and item.get("recipient_pubkey"):
                         participants = [item["recipient_pubkey"]]
-                    event_ids = self._manager.publish_nip17_message(
+                    result = await self._manager.publish_nip17_message_async(
                         item["content"],
                         participants,
+                        subject=item.get("subject"),
                         created_at=item.get("ts"),
                     )
-                    event_id = event_ids[0]
+                    # The sender's own wrap id: its relay echo then deduplicates.
+                    event_id = result.local_id or result.ids[0]
                 else:
                     event_id = self._manager.publish_channel_message(
                         item["channel_id"], item["content"]
@@ -411,10 +430,10 @@ class ChatListActivity(Activity):
                     queued=False,
                 )
                 self._store.replace_message(chat_id, placeholder_id, new_message)
+                # Drop it from the outbox now: a later item failing must not
+                # re-send (re-wrap, with new ids) what already went out.
+                self._store.remove_outbox_item(placeholder_id)
             except Exception as e:
                 logger.error("Failed to flush outbox item: %s", e)
                 # Stop trying the rest until the next reconnect.
                 return
-        self._store.clear_outbox()
-        if self.has_foreground():
-            self._refresh_chat_list()

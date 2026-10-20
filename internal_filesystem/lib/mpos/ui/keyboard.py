@@ -120,6 +120,9 @@ class MposKeyboard:
         # Create underlying LVGL keyboard widget
         self._keyboard = lv.keyboard(parent)
         self._parent = parent # store it for later
+        # Textareas that already open this keyboard on click, so switching
+        # between fields with set_textarea() does not stack handlers.
+        self._hooked_textareas = []
         # self._keyboard.set_popovers(True) # disabled for now because they're quite ugly on LVGL 9.3 - maybe better on 9.4?
         keyboard_font = FontManager.getFont(20, emoji=True)
         self._keyboard.set_style_text_font(keyboard_font, lv.PART.MAIN)
@@ -261,8 +264,13 @@ class MposKeyboard:
             self.mode_info = dict(type(self).mode_info)
 
         # NOTE: We deliberately DO NOT call self._keyboard.set_textarea()
-        # to avoid LVGL's automatic character insertion
-        self._textarea.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
+        # to avoid LVGL's automatic character insertion.
+        # Hook each textarea once: set_textarea() is also how an activity with
+        # several fields retargets the keyboard, and a second CLICKED handler
+        # would show the keyboard twice per tap (two animations, two timers).
+        if textarea is not None and not any(t is textarea for t in self._hooked_textareas):
+            textarea.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
+            self._hooked_textareas.append(textarea)
 
         # Apply the selected maps by refreshing the current mode.
         self.set_mode(self._current_mode if self._current_mode is not None else self.MODE_LOWERCASE)

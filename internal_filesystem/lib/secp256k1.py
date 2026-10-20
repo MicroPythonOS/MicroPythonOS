@@ -155,10 +155,14 @@ class PublicKey(ECDSA):
     def _pubkey_changed(self):
         if HAS_EXTRAKEYS:
             self.xonly_pubkey = ffi.new('secp256k1_xonly_pubkey *')
-            assert lib.secp256k1_xonly_pubkey_from_pubkey(secp256k1_ctx,
-                                                          self.xonly_pubkey,
-                                                          ffi.NULL,
-                                                          self.public_key) == 1
+            # Not inside an assert: builds frozen with mpy-cross -O3 drop
+            # asserts, and the x-only key would stay all zeros.
+            res = lib.secp256k1_xonly_pubkey_from_pubkey(secp256k1_ctx,
+                                                         self.xonly_pubkey,
+                                                         ffi.NULL,
+                                                         self.public_key)
+            if res != 1:
+                raise Exception("invalid public key")
 
     def serialize(self, compressed=True):
         assert self.public_key, "No public key defined"

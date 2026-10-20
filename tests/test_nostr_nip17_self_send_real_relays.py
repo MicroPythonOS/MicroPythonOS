@@ -90,7 +90,9 @@ class TestNip17SelfSendRealRelays(unittest.TestCase):
 
         # Only fetch events published after now, so historical DMs don't
         # satisfy the assertion before our marker event arrives.
-        since = int(time.time())
+        # NIP-17/59: gift wraps are backdated by up to two days, so a `since`
+        # of "now" would make the client-side filter drop our own echo.
+        since = int(time.time()) - 2 * 24 * 60 * 60 - 60
         manager.subscribe_nip17_dms(since=since)
 
         connected = await self._wait_for_connected(manager, timeout=30)

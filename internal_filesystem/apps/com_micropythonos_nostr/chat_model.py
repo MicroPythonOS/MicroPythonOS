@@ -25,6 +25,14 @@ CHAT_ID_DM_PREFIX = "dm_"
 CHAT_ID_CHANNEL_PREFIX = "channel_"
 CHAT_ID_NIP17_PREFIX = "nip17_"
 
+# NIP-17 private groups. "Members" are the other participants of a room:
+# NIP-17 says "Group chats with more than 10 participants should find a more
+# suitable messaging scheme", and the room's participants are you plus the
+# members, so 9 members. A room with a single other member is a DM.
+MAX_GROUP_PARTICIPANTS = 10
+MAX_GROUP_MEMBERS = MAX_GROUP_PARTICIPANTS - 1
+MIN_GROUP_MEMBERS = 2
+
 # Auto-joined public channel (#MicroPythonOS, NIP-28).
 DEFAULT_CHANNEL_ID = "cbf20cd9212aea3c7d399777b69cec750a0109edd831001a5011d892268a9481"
 DEFAULT_CHANNEL_NAME = "MicroPythonOS"
@@ -77,6 +85,80 @@ def subject_from_nip17_event(event):
         if isinstance(tag, (list, tuple)) and len(tag) >= 2 and tag[0] == "subject":
             return tag[1]
     return None
+
+
+def parse_pubkey(text):
+    """Return the hex pubkey for an npub or 64-char hex string, else None."""
+    text = (text or "").strip()
+    if text.lower().startswith("npub1"):
+        try:
+            from nostr.key import PublicKey
+
+            return PublicKey.from_npub(text).hex()
+        except Exception as e:
+            logger.warning("npub parse failed: %s", e)
+            return None
+    lower = text.lower()
+    if len(lower) == 64 and all(c in "0123456789abcdef" for c in lower):
+        return lower
+    return None
+
+
+def normalize_group_members(raw, own_pubkey, resolve_name=None, max_members=MAX_GROUP_MEMBERS):
+    """Turn a typed member list into a sorted, deduplicated list of hex pubkeys.
+
+    Members are separated by commas or newlines and may be npubs, hex pubkeys
+    or, when `resolve_name` is given, names it maps to a list of hex pubkeys.
+    The user's own key is dropped. Returns (members, None) or (None, error).
+    """
+    tokens = []
+    for part in (raw or "").replace("\n", ",").split(","):
+        part = part.strip()
+        if part:
+            tokens.append(part)
+    members = []
+    for token in tokens:
+        hex_pubkey = parse_pubkey(token)
+        if hex_pubkey is None and resolve_name is not None:
+            matches = list(resolve_name(token) or [])
+            if len(matches) > 1:
+                return None, "Ambiguous name: %s" % token
+            if matches:
+                hex_pubkey = matches[0]
+        if hex_pubkey is None:
+            return None, "Not an npub, hex key or known name: %s" % token
+        if hex_pubkey == own_pubkey or hex_pubkey in members:
+            continue
+        members.append(hex_pubkey)
+    if len(members) > max_members:
+        return None, (
+            "Too many members: %d. A NIP-17 room holds at most %d people, "
+            "you and %d others" % (len(members), max_members + 1, max_members)
+        )
+    if len(members) < MIN_GROUP_MEMBERS:
+        return None, "A group needs at least %d other members (use DM for one)" % MIN_GROUP_MEMBERS
+    return sorted(members), None
+
+
+def apply_nip17_subject(store, chat, event):
+    """Apply a kind 14 subject tag to a group chat; returns True when it changed.
+
+    NIP-17: "The newest `subject` in the chat room is the subject of the
+    conversation", so only a subject at least as new as the stored one wins.
+    """
+    if chat is None or chat.kind != KIND_NIP17_CHAT or len(chat.participants) < 2:
+        return False
+    subject = subject_from_nip17_event(event)
+    if not subject or subject == chat.subject:
+        return False
+    ts = int(getattr(event, "created_at", 0) or 0)
+    if ts < chat.subject_ts:
+        return False
+    store.update_chat_subject(chat.chat_id, subject, ts=ts)
+    chat.subject = subject
+    chat.subject_ts = ts
+    chat.title = subject
+    return True
 
 
 def chat_id_for_event(event, own_pubkey):
@@ -157,6 +239,7 @@ def get_or_create_chat_for_event(store, nostr_event, own_pubkey):
 
     chat = store.get_chat(chat_id)
     if chat is not None:
+        apply_nip17_subject(store, chat, event)
         return chat
 
     kind = event.kind
@@ -165,10 +248,11 @@ def get_or_create_chat_for_event(store, nostr_event, own_pubkey):
         return store.get_or_create_dm(own_pubkey or "", peer)
     if kind == KIND_NIP17_CHAT:
         participants = participants_from_nip17_event(event, own_pubkey)
-        title = subject_from_nip17_event(event)
         if len(participants) == 1:
             return store.get_or_create_dm(own_pubkey or "", participants[0])
-        return store.get_or_create_nip17_group(participants, title=title)
+        chat = store.get_or_create_nip17_group(participants)
+        apply_nip17_subject(store, chat, event)
+        return chat
     if kind == KIND_CHANNEL_MESSAGE:
         channel_id = channel_id_from_event(event)
         return store.get_or_create_channel(channel_id or DEFAULT_CHANNEL_ID)
@@ -282,10 +366,14 @@ class Chat:
         last_ts=0,
         last_preview="",
         unread=0,
+        subject=None,
+        subject_ts=0,
     ):
         self.chat_id = chat_id
         self.kind = kind
-        self.title = title or _default_title(kind, peer_pubkey, channel_id, participants)
+        self.subject = subject or None
+        self.subject_ts = int(subject_ts or 0)
+        self.title = title or subject or _default_title(kind, peer_pubkey, channel_id, participants)
         self.peer_pubkey = peer_pubkey
         self.channel_id = channel_id
         self.participants = list(participants) if participants else []
@@ -313,14 +401,15 @@ class Chat:
         )
 
     @classmethod
-    def nip17_group(cls, participants, title=None):
+    def nip17_group(cls, participants, title=None, subject=None):
         chat_id = nip17_group_chat_id(participants)
         return cls(
             chat_id=chat_id,
             kind=KIND_NIP17_CHAT,
-            title=title,
+            title=title or subject,
             peer_pubkey=participants[0] if len(participants) == 1 else None,
             participants=participants,
+            subject=subject,
         )
 
     @classmethod
@@ -335,6 +424,8 @@ class Chat:
             last_ts=data.get("last_ts", 0),
             last_preview=data.get("last_preview", ""),
             unread=data.get("unread", 0),
+            subject=data.get("subject"),
+            subject_ts=data.get("subject_ts", 0),
         )
 
     def to_dict(self):
@@ -347,7 +438,22 @@ class Chat:
             "last_ts": self.last_ts,
             "last_preview": self.last_preview,
             "unread": self.unread,
+            "subject": self.subject,
+            "subject_ts": self.subject_ts,
         }
+
+    def display_title(self):
+        """Title for lists and headers; a group shows its subject, else its members."""
+        if self.kind == KIND_NIP17_CHAT and len(self.participants) > 1:
+            if self.subject:
+                return self.subject
+            if self.title and not _looks_like_member_list(self.title, self.participants):
+                # A room stored before subjects were tracked kept the subject
+                # of its first message as the title; keep showing it (it is
+                # not re-sent as the room subject, only an incoming one is).
+                return self.title
+            return ", ".join(_short_name(p) for p in self.participants)
+        return _display_title(self.title)
 
     def update_from_message(self, message):
         self.last_ts = max(self.last_ts, message.ts)
@@ -365,6 +471,23 @@ class Chat:
         if self.kind == KIND_DM:
             return _short_name(self.peer_pubkey)
         return _short_name(message.pubkey)
+
+
+def _looks_like_member_list(title, participants):
+    """True when `title` is the default member-name title of a group: every
+    comma-separated part is a member's current name, an npub prefix or a
+    truncated hex key (as _short_name renders them)."""
+    names = set(_short_name(p) for p in participants or [])
+    for part in title.split(", "):
+        part = part.strip()
+        if part in names or part == "?":
+            continue
+        if part.startswith("npub1") and len(part) == 12:
+            continue
+        if part.endswith("...") and len(part) == 11:
+            continue
+        return False
+    return True
 
 
 def _default_title(kind, peer_pubkey, channel_id, participants=None):
