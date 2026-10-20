@@ -7,6 +7,12 @@ worse on an ESP32). These tests pin the C functions, check their output against
 RFC 4648 and a small pure-Python reference encoder for every size 0..3000, cover
 invalid input, and keep a coarse timing bound that the pure-Python version fails.
 
+They also pin binascii.Error and base64.urlsafe_b64decode(). lib/binascii.py
+defined no Error, so the b64decode(validate=True), b32decode() and b16decode()
+error paths in lib/base64.py raised AttributeError instead of ValueError, and
+urlsafe_b64decode() was a NotImplementedError stub (MicroPython has no
+bytes.translate(); the altchars path of b64decode() does the same job).
+
 The OS imports binascii and base64 at boot (webrepl, secrets, aiohttp, nostr),
 so both are evicted from sys.modules first: the tests then exercise the copies
 found on sys.path (lib/ on the desktop build, the frozen ones on a device)
@@ -85,6 +91,13 @@ class TestBinasciiIsC(unittest.TestCase):
         self.assertEqual(binascii.b2a_hex(b"\x01\xff"), b"01ff")
         self.assertEqual(binascii.unhexlify(b"01ff"), b"\x01\xff")
         self.assertEqual(binascii.a2b_hex(b"01ff"), b"\x01\xff")
+
+    def test_error_is_a_valueerror(self):
+        self.assertTrue(issubclass(binascii.Error, ValueError))
+        with self.assertRaises(binascii.Error):
+            binascii.a2b_base64(b"Q")
+        with self.assertRaises(binascii.Error):
+            binascii.unhexlify(b"0G")
 
 
 class TestBase64RoundTrip(unittest.TestCase):
@@ -166,6 +179,113 @@ class TestBase64InvalidInput(unittest.TestCase):
         self.assertEqual(binascii.a2b_base64("YWJj"), b"abc")
         self.assertEqual(binascii.b2a_base64("abc"), b"YWJj\n")
         self.assertEqual(base64.b64decode("YWJj"), b"abc")
+
+
+class TestBase64Validate(unittest.TestCase):
+    def test_validate_accepts_alphabet_only_input(self):
+        self.assertEqual(base64.b64decode(b"YWJj", validate=True), b"abc")
+        self.assertEqual(base64.b64decode(b"QQ==", validate=True), b"A")
+        self.assertEqual(base64.b64decode(b"", validate=True), b"")
+        self.assertEqual(base64.b64decode("YWJj", validate=True), b"abc")
+        self.assertEqual(base64.b64decode(b"+/8=", validate=True), b"\xfb\xff")
+        # altchars are translated back before the alphabet check
+        self.assertEqual(base64.b64decode(b"-_8=", altchars=b"-_", validate=True), b"\xfb\xff")
+
+    def test_validate_rejects_non_alphabet_input(self):
+        for bad in (b"YW\nJj", b"YW Jj", b"Y-W_Jj", b"YW*Jj", b"-_8=", b"YWJj\n"):
+            with self.assertRaises(ValueError):
+                base64.b64decode(bad, validate=True)
+            with self.assertRaises(binascii.Error):
+                base64.b64decode(bad, validate=True)
+        # the same input is accepted without validate: non-alphabet bytes are skipped
+        self.assertEqual(base64.b64decode(b"YW\nJj"), b"abc")
+        self.assertEqual(base64.b64decode(b"Y-W_Jj"), b"abc")
+
+
+class TestBase32Base16(unittest.TestCase):
+    _RFC4648_B32 = (
+        (b"", b""),
+        (b"f", b"MY======"),
+        (b"fo", b"MZXQ===="),
+        (b"foo", b"MZXW6==="),
+        (b"foob", b"MZXW6YQ="),
+        (b"fooba", b"MZXW6YTB"),
+        (b"foobar", b"MZXW6YTBOI======"),
+    )
+
+    def test_b32_rfc4648_vectors(self):
+        for raw, enc in self._RFC4648_B32:
+            self.assertEqual(base64.b32encode(raw), enc)
+            self.assertEqual(base64.b32decode(enc), raw)
+        self.assertEqual(base64.b32decode(b"mzxw6ytboi======", casefold=True), b"foobar")
+        self.assertEqual(base64.b32decode(b"MZXW6YTB01======", map01=b"I"), b"foobar")
+        self.assertEqual(base64.b32decode("MZXW6YTBOI======"), b"foobar")
+
+    def test_b32_errors_raise_valueerror(self):
+        for bad in (
+            b"A",  # length not a multiple of 8
+            b"MZXW6YTBOI=====",
+            b"mzxw6ytboi======",  # lowercase without casefold
+            b"MZXW6YTB01======",  # 0 and 1 without map01
+            b"!!!!!!!!",  # non-alphabet bytes
+            b"MZXW6YTBOIA=====",  # 5 pad chars is never valid
+            b"MZXW6YTBOIAAAA==",  # nor 2
+            b"MZXW6YTBO=======",  # nor 7
+        ):
+            with self.assertRaises(ValueError):
+                base64.b32decode(bad)
+
+    def test_b16_vectors(self):
+        self.assertEqual(base64.b16encode(b""), b"")
+        self.assertEqual(base64.b16encode(b"\x01\xab"), b"01AB")
+        self.assertEqual(base64.b16decode(b"01AB"), b"\x01\xab")
+        self.assertEqual(base64.b16decode("01AB"), b"\x01\xab")
+        self.assertEqual(base64.b16decode(b"01ab", casefold=True), b"\x01\xab")
+        self.assertEqual(base64.b16decode(b""), b"")
+
+    def test_b16_errors_raise_valueerror(self):
+        for bad in (
+            b"01ab",  # lowercase without casefold
+            b"0G",
+            b"01 AB",
+            b"01AB\n",
+            b"0",  # odd length (rejected by unhexlify)
+            b"0AB",
+        ):
+            with self.assertRaises(ValueError):
+                base64.b16decode(bad)
+
+
+class TestUrlsafe(unittest.TestCase):
+    def test_urlsafe_vectors(self):
+        self.assertEqual(base64.urlsafe_b64encode(b"\xfb\xff"), b"-_8=")
+        self.assertEqual(base64.urlsafe_b64decode(b"-_8="), b"\xfb\xff")
+        self.assertEqual(base64.urlsafe_b64decode("-_8="), b"\xfb\xff")
+        self.assertEqual(base64.urlsafe_b64decode(bytearray(b"-_8=")), b"\xfb\xff")
+        # as in CPython, the standard alphabet still decodes
+        self.assertEqual(base64.urlsafe_b64decode(b"+/8="), b"\xfb\xff")
+        for raw, enc in _RFC4648:
+            self.assertEqual(base64.urlsafe_b64encode(raw), enc)
+            self.assertEqual(base64.urlsafe_b64decode(enc), raw)
+
+    def test_urlsafe_roundtrip_every_size_0_to_300(self):
+        urlsafe_alphabet = _ALPHABET.replace(b"+/", b"-_")
+        for n in range(301):
+            data = _DATA[:n]
+            enc = base64.urlsafe_b64encode(data)
+            self.assertEqual(enc.strip(urlsafe_alphabet + b"="), b"", "size %d" % n)
+            self.assertEqual(base64.urlsafe_b64decode(enc), data, "size %d" % n)
+        enc = base64.urlsafe_b64encode(_DATA)
+        self.assertTrue(b"-" in enc and b"_" in enc)
+        self.assertTrue(b"+" not in enc and b"/" not in enc)
+        self.assertEqual(base64.urlsafe_b64decode(enc), _DATA)
+
+    def test_urlsafe_errors(self):
+        for bad in (b"-_8", b"Q", b"QQ="):
+            with self.assertRaises(ValueError):
+                base64.urlsafe_b64decode(bad)
+        with self.assertRaises(TypeError):
+            base64.urlsafe_b64decode(123)
 
 
 class TestBase64Timing(unittest.TestCase):

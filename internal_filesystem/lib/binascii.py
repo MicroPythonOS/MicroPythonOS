@@ -1,5 +1,11 @@
 from ubinascii import *
 
+if not "Error" in globals():
+    # CPython's binascii.Error is a ValueError subclass. ubinascii raises plain
+    # ValueError and defines no Error, so base64.py's "raise binascii.Error(...)"
+    # used to be an AttributeError.
+    Error = ValueError
+
 if not "unhexlify" in globals():
 
     def unhexlify(data):
