@@ -15,6 +15,9 @@ OS:
 - Displays (ESP32): tell LVGL a flush is done directly from C in the DMA-done interrupt (new lcd_bus.FlushReadyCallback) instead of running a Python callback inside that interrupt after every flush. Python callbacks that still run there, such as Breakout's, get a zeroed thread state and a stack limit taken from the real interrupt stack, now 2560 bytes, so running out of stack raises RecursionError instead of silently overwriting memory
 - ESP32: fix hard resets (stack overflow panics) when an app is started with AppManager.start_app() from the REPL, mpremote, an asyncio task or auto_start_app at boot, seen with BlockTV on the Waveshare ESP32-S3-Touch-LCD-3.5. The LVGL task handler runs as a scheduled callback on top of whatever Python code is executing, so a pass that started while an app built its UI deep in onCreate/onResume overflowed the 16 KB mp_task stack (a redraw needs up to 7.3 KB measured). A pass is now skipped, and retried on the next tick, when less than 9 KB of stack is left (mpos.ui.render_guard)
 
+Testing:
+- test_osupdate: five fetch_update_info error tests (HTTP 404, timeout, connection refused, empty response, HTTP 500) called self.fail() inside `try: ... except Exception`, which also caught the AssertionError, so they could never fail. They now use assertRaises(ValueError) and check the 'Invalid JSON' message
+
 0.20.0
 ======
 
