@@ -66,6 +66,10 @@ class WifiService:
     # to 30 s to join on channel 6).
     CONNECT_TIMEOUT_S = 13
 
+    # Seconds _scan_networks_raw() waits before scanning once more when the
+    # scan right after a radio restart finds nothing (see there).
+    SCAN_RETRY_DELAY_S = 5
+
     @staticmethod
     def _is_desktop_mode(network_module=None):
         return not HAS_NETWORK_MODULE and network_module is None
@@ -206,7 +210,7 @@ class WifiService:
             bool: True if successfully connected, False otherwise
         """
         # Scan for available networks using internal method
-        networks = WifiService._scan_networks_raw(network_module)
+        networks = WifiService._scan_networks_raw(network_module, time_module)
 
         # Sort networks by RSSI (signal strength) in descending order
         # RSSI is at index 3, higher values (less negative) = stronger signal
@@ -682,12 +686,13 @@ class WifiService:
             if __debug__: logger.debug("disconnect() to stop connecting: %s", e)
 
     @staticmethod
-    def _scan_networks_raw(network_module=None):
+    def _scan_networks_raw(network_module=None, time_module=None):
         """
         Internal method to scan for available WiFi networks and return raw data.
 
         Args:
             network_module: Network module for dependency injection (testing)
+            time_module: Time module for dependency injection (testing)
 
         Returns:
             list: Raw network tuples from wlan.scan(), or empty list on desktop
@@ -706,11 +711,19 @@ class WifiService:
             # A radio restart does not end a pending (re)connection loop, which
             # would make the scan come back empty (see _stop_connecting).
             WifiService._stop_connecting(wlan)
+            networks = wlan.scan()
+            if networks:
+                return networks
+            # On an ESP32-P4 whose ESP32-C6 ran its original firmware, a scan
+            # straight after the restart found nothing although networks were
+            # in range, and one 5 s later found them (#309).
+            time_mod = time_module if time_module else time
+            time_mod.sleep(WifiService.SCAN_RETRY_DELAY_S)
 
         return wlan.scan()
 
     @staticmethod
-    def scan_networks(network_module=None):
+    def scan_networks(network_module=None, time_module=None):
         """
         Scan for available WiFi networks.
 
@@ -720,6 +733,7 @@ class WifiService:
 
         Args:
             network_module: Network module for dependency injection (testing)
+            time_module: Time module for dependency injection (testing)
 
         Returns:
             list: List of SSIDs found, or mock data on desktop
@@ -736,7 +750,7 @@ class WifiService:
             return None
 
         try:
-            networks = WifiService._scan_networks_raw(network_module)
+            networks = WifiService._scan_networks_raw(network_module, time_module)
             # Return unique SSIDs, filtering out empty ones and invalid lengths
             ssids = list(set(n[0].decode() for n in networks if n[0]))
             return [s for s in ssids if 0 < len(s) <= 32]
