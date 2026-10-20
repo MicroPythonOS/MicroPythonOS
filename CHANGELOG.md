@@ -8,6 +8,9 @@ Frameworks:
 - qrdecode: a frame size whose pixel count overflows a 32-bit int raises ValueError. On the ESP32 such a size used to pass the buffer size check, and quirc then scanned rows beyond its buffer
 - Camera: stopping the camera twice, for example when the activity is paused again, no longer deletes the capture timer twice
 
+OS:
+- ESP32: fix hard resets (stack overflow panics) when an app is started with AppManager.start_app() from the REPL, mpremote, an asyncio task or auto_start_app at boot, seen with BlockTV on the Waveshare ESP32-S3-Touch-LCD-3.5. The LVGL task handler runs as a scheduled callback on top of whatever Python code is executing, so a pass that started while an app built its UI deep in onCreate/onResume overflowed the 16 KB mp_task stack (a redraw needs up to 7.3 KB measured). A pass is now skipped, and retried on the next tick, when less than 9 KB of stack is left (mpos.ui.render_guard)
+
 Testing:
 - test_graphical_notification_bar: the check that the clock, temperature, WiFi and battery icons are not hidden ran its assertFalse inside `try: ... except Exception`, which also caught the AssertionError, so a hidden icon could never fail the test. It is now a real assertion (waiting up to 5 s for the periodic icon timers); the WiFi icon is only required to be visible while WiFi is connected, as it is hidden by design otherwise (e.g. --ondevice without a network)
 
