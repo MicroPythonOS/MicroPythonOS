@@ -411,6 +411,8 @@ def change_task_handler(period_ms=2):
     # Convenient for apps to be able to access these:
     mpos.ui.task_handler.TASK_HANDLER_STARTED = task_handler.TASK_HANDLER_STARTED
     mpos.ui.task_handler.TASK_HANDLER_FINISHED = task_handler.TASK_HANDLER_FINISHED
+    from mpos.ui import render_guard
+    render_guard.install(mpos.ui.task_handler, task_handler.TASK_HANDLER_STARTED)
 
 mpos.ui.change_task_handler = change_task_handler # make it accessible
 mpos.ui.change_task_handler()
