@@ -177,6 +177,23 @@ class Fri3d2026Expander(keypad_framework.KeypadDriver):
             mpos.ui.focus_direction.move_focus_direction(0)
         elif key == lv.KEY.DOWN:
             mpos.ui.focus_direction.move_focus_direction(180)
+        # Dual delivery: LVGL consumes NEXT/PREV for focus navigation, so
+        # the focused object never sees B/Y as KEY events. Deliver the ord
+        # letter as well, matching the fri3d 2024 badge and desktop SDL.
+        # Focus still tabs exactly as before.
+        if key == lv.KEY.NEXT:
+            self._send_app_key(ord("B"))
+        elif key == lv.KEY.PREV:
+            self._send_app_key(ord("Y"))
+
+    @staticmethod
+    def _send_app_key(code):
+        try:
+            group = lv.group_get_default()
+            if group is not None:
+                group.send_data(code)
+        except Exception:
+            pass
 
     def _get_key(self):
         if self._int_pin is None:
