@@ -24,6 +24,8 @@ class TestGraphicalQuasibirdButtons(unittest.TestCase):
             pass
 
     def _start_quasibird(self):
+        if AppManager.get("com.quasikili.quasibird") is None:
+            self.skipTest("com.quasikili.quasibird external app is not installed")
         self.assertTrue(
             AppManager.start_app("com.quasikili.quasibird"),
             "Failed to start quasibird",
