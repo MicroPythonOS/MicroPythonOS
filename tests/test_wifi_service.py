@@ -455,6 +455,157 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
         self.assertEqual(call_order, ["scan"])
 
 
+class TestWifiServiceEmptyScanRescan(unittest.TestCase):
+    """A scan straight after a radio restart that finds nothing is repeated
+    once, 5 s later (#309)."""
+
+    NET = (b"Home", b"", 1, -50, 3, False)
+
+    def setUp(self):
+        MockSharedPreferences.reset_all()
+        WifiService.access_points = {}
+        WifiService.wifi_busy = False
+        WifiService._needs_hotspot_restore = False
+
+    def tearDown(self):
+        MockSharedPreferences.reset_all()
+        WifiService.access_points = {}
+        WifiService.wifi_busy = False
+        WifiService._needs_hotspot_restore = False
+
+    def _recording(self, connected, scan_results):
+        """MockNetwork and MockTime that log the station's radio, disconnect,
+        connect and scan calls and every sleep, in order. scan() returns the
+        entries of scan_results in turn; the last one repeats."""
+        mock_network = MockNetwork(connected=connected)
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        mock_time = MockTime()
+        calls = []
+        results = list(scan_results)
+
+        original_active = mock_wlan.active
+        original_sleep = mock_time.sleep
+
+        def mock_active(is_active=None):
+            if is_active is not None:
+                calls.append("active %s" % is_active)
+            return original_active(is_active)
+
+        def mock_disconnect():
+            calls.append("disconnect")
+            mock_wlan._connected = False
+
+        def mock_connect(ssid, password):
+            calls.append("connect %s" % ssid)
+            mock_wlan._connected = True
+
+        def mock_scan():
+            calls.append("scan")
+            return results.pop(0) if len(results) > 1 else results[0]
+
+        def mock_sleep(seconds):
+            calls.append("sleep %s" % seconds)
+            original_sleep(seconds)
+
+        mock_wlan.active = mock_active
+        mock_wlan.disconnect = mock_disconnect
+        mock_wlan.connect = mock_connect
+        mock_wlan.scan = mock_scan
+        mock_time.sleep = mock_sleep
+        return mock_network, mock_time, calls
+
+    def test_empty_scan_after_restart_is_repeated_after_5_s(self):
+        """The second scan runs 5 s after the empty one, without another radio
+        restart, and its result is the one returned."""
+        mock_network, mock_time, calls = self._recording(False, [[], [self.NET]])
+
+        networks = WifiService._scan_networks_raw(
+            network_module=mock_network, time_module=mock_time
+        )
+
+        self.assertEqual(
+            calls,
+            ["active False", "active True", "disconnect", "scan", "sleep 5", "scan"],
+        )
+        self.assertEqual(networks, [self.NET])
+
+    def test_empty_scan_after_restart_is_repeated_only_once(self):
+        """When the second scan is empty too, the empty result is returned."""
+        mock_network, mock_time, calls = self._recording(False, [[]])
+
+        networks = WifiService._scan_networks_raw(
+            network_module=mock_network, time_module=mock_time
+        )
+
+        self.assertEqual(
+            calls,
+            ["active False", "active True", "disconnect", "scan", "sleep 5", "scan"],
+        )
+        self.assertEqual(networks, [])
+
+    def test_scan_that_finds_networks_is_not_repeated(self):
+        mock_network, mock_time, calls = self._recording(False, [[self.NET]])
+
+        networks = WifiService._scan_networks_raw(
+            network_module=mock_network, time_module=mock_time
+        )
+
+        self.assertEqual(calls, ["active False", "active True", "disconnect", "scan"])
+        self.assertEqual(mock_time.get_sleep_calls(), [])
+        self.assertEqual(networks, [self.NET])
+
+    def test_empty_scan_while_connected_is_not_repeated(self):
+        """While connected the radio is not restarted, so an empty scan is
+        returned as it is."""
+        mock_network, mock_time, calls = self._recording(True, [[]])
+
+        networks = WifiService._scan_networks_raw(
+            network_module=mock_network, time_module=mock_time
+        )
+
+        self.assertEqual(calls, ["scan"])
+        self.assertEqual(mock_time.get_sleep_calls(), [])
+        self.assertEqual(networks, [])
+
+    def test_connect_joins_a_network_found_by_the_second_scan(self):
+        """auto_connect()'s path: connect() passes its time module on to the
+        scan and tries the saved network the second scan found."""
+        mock_network, mock_time, calls = self._recording(False, [[], [self.NET]])
+        WifiService.access_points = {"Home": {"password": "home-pass"}}
+
+        result = WifiService.connect(network_module=mock_network, time_module=mock_time)
+
+        self.assertTrue(result)
+        self.assertEqual(
+            calls,
+            [
+                "active False", "active True", "disconnect", "scan", "sleep 5", "scan",
+                "disconnect", "connect Home",
+            ],
+        )
+
+    def test_scan_networks_repeats_an_empty_scan_while_holding_busy(self):
+        """The Wi-Fi app's path: scan_networks() takes a time module too and
+        keeps wifi_busy for both scans."""
+        mock_network, mock_time, _ = self._recording(False, [[], [self.NET]])
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        recording_scan = mock_wlan.scan
+        busy_during_scan = []
+
+        def mock_scan():
+            busy_during_scan.append(WifiService.is_busy())
+            return recording_scan()
+
+        mock_wlan.scan = mock_scan
+
+        result = WifiService.scan_networks(network_module=mock_network, time_module=mock_time)
+
+        self.assertEqual(result, ["Home"])
+        self.assertEqual(mock_time.get_sleep_calls(), [5])
+        self.assertEqual(busy_during_scan, [True, True])
+        self.assertFalse(WifiService.is_busy())
+
+
 class TestWifiServiceAutoConnect(unittest.TestCase):
     """Test WifiService.auto_connect() method."""
 
@@ -1458,7 +1609,7 @@ class TestWifiServiceBusyFlag(unittest.TestCase):
         mock_network = MockNetwork(connected=False)
         mock_network.WLAN(mock_network.STA_IF)._scan_results = []
 
-        result = WifiService.scan_networks(network_module=mock_network)
+        result = WifiService.scan_networks(network_module=mock_network, time_module=MockTime())
 
         self.assertEqual(result, [])
         self.assertFalse(WifiService.is_busy())
