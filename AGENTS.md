@@ -113,6 +113,7 @@ def _capture_task(coro):
 - **TDD:** write failing test → fix → test passes.
 - **Lint:** every change must pass `make lint`. Ruff, double quotes.
 - **Comments/docstrings:** never add/remove/modify unless explicitly asked.
+- **GitHub comments:** always very polite and gentle (issues, PRs, reviews).
 - **Batch edits:** constrain to exact patterns. Broad edits can silently delete unrelated code. If damage occurs, restore from git and re-apply a precise script.
 - **Implement missing functionality** rather than working around it.
 - **USB host:** DisplayLink display + HID support lives in `c_mpos/usb/` — read its `README.md` before touching USB, display, touch, or topmenu code; build with `./scripts/build_mpos.sh esp32s3 --usb`.
