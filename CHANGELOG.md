@@ -27,6 +27,8 @@ Builtin Apps:
 
 Testing:
 - unittest: an exception raised in setUp, tearDown, a cleanup, setUpClass or tearDownClass, including self.skipTest() or raise unittest.SkipTest, is now reported as a skip or an error instead of aborting the whole test file, which was then reported as failed with its later tests and classes never run. As in CPython, a failed setUp skips the test body and tearDown, a failed setUpClass skips the class's tests and tearDownClass, and cleanups always run, each one even if an earlier one raised
+- unittest: raise AssertionError explicitly instead of using `assert` statements, which mpy-cross -O3 strips. The desktop build freezes lib/ with -O3, so self.fail() and expectedFailure() did nothing there and a test that called self.fail() passed under test_runner, whose self-check only repaired the assert* methods
+- test_runner: the unittest self-check also checks self.fail(), and when the frozen unittest's asserts don't work it copies a working fail() from lib/unittest along with the assert methods, so binaries built before this fix also report self.fail() calls
 
 OS:
 - Displays (ESP32): tell LVGL a flush is done directly from C in the DMA-done interrupt (new lcd_bus.FlushReadyCallback) instead of running a Python callback inside that interrupt after every flush. Python callbacks that still run there, such as Breakout's, get a zeroed thread state and a stack limit taken from the real interrupt stack, now 2560 bytes, so running out of stack raises RecursionError instead of silently overwriting memory
