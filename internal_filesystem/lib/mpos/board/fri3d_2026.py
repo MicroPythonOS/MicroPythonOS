@@ -39,6 +39,7 @@ import drivers.display.st7789 as st7789
 import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager, IRManager, DeviceManager
+from mpos.imu.constants import IMU_I2C_TIMEOUT_US
 
 # === LED HARDWARE ===
 from mpos import LightsManager
@@ -175,7 +176,7 @@ mpos.ui.main_display.set_backlight = lambda percent: setattr(expander, "lcd_brig
 # Touch handling:
 # touch pad interrupt TP Int is on ESP.IO13
 import drivers.indev.cst816s as cst816s
-i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
+i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False, timeout=IMU_I2C_TIMEOUT_US)
 DeviceManager.registerBus(i2c_bus=i2c_bus) # register because Time of Flight app needs it
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
 try:

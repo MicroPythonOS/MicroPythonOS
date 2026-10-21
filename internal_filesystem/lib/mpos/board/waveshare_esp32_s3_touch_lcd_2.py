@@ -16,6 +16,7 @@ import lvgl as lv
 import machine
 import mpos.ui
 from mpos import InputManager
+from mpos.imu.constants import IMU_I2C_TIMEOUT_US
 
 # Pin configuration
 SPI_BUS = 2
@@ -79,7 +80,7 @@ mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
 
 # Touch handling:
-i2c_bus = i2c.I2C.Bus(host=0, scl=47, sda=48, freq=400000, use_locks=False)
+i2c_bus = i2c.I2C.Bus(host=0, scl=47, sda=48, freq=400000, use_locks=False, timeout=IMU_I2C_TIMEOUT_US)
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
 indev = cst816s.CST816S(touch_dev, startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
 InputManager.register_indev(indev)
