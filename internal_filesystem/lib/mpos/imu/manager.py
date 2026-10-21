@@ -12,6 +12,7 @@ from mpos.imu.constants import (
     FACING_SKY,
     GRAVITY,
     IMU_CALIBRATION_FILENAME,
+    IMU_PROBE_RETRY_MS,
 )
 from mpos.imu.sensor import Sensor
 
@@ -33,11 +34,13 @@ class ImuManager:
         self._i2c_address = None
         self._mounted_position = FACING_SKY
         self._has_mcu_temperature = False
+        self._next_probe_ms = 0
 
     def init(self, i2c_bus, address=0x6B, mounted_position=FACING_SKY):
         self._i2c_bus = i2c_bus
         self._i2c_address = address
         self._mounted_position = mounted_position
+        self._next_probe_ms = 0
 
         try:
             import esp32
@@ -165,6 +168,9 @@ class ImuManager:
             return self._imu_driver is not None
 
         if self._i2c_bus:
+            if time.ticks_diff(self._next_probe_ms, time.ticks_ms()) > 0:
+                return False
+
             try:
                 if __debug__: logger.debug("Try QMI8658 first (Waveshare board)")
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x00, 1)[0]
@@ -225,6 +231,7 @@ class ImuManager:
             except Exception as exc:
                 if __debug__: logger.debug("No MPU6886: %s", exc)
 
+        self._next_probe_ms = time.ticks_add(time.ticks_ms(), IMU_PROBE_RETRY_MS)
         return False
 
     def is_available(self):
@@ -289,9 +296,6 @@ class ImuManager:
             try:
                 return self.read_sensor_once(sensor)
             except Exception as exc:
-                import sys
-
-                sys.print_exception(exc)
                 error_msg = str(exc)
                 if "data not ready" in error_msg and attempt < max_retries - 1:
                     time.sleep_ms(retry_delay_ms)
