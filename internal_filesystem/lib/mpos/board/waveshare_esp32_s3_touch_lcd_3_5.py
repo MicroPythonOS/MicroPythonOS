@@ -28,6 +28,7 @@ import machine
 import mpos.ui
 from drivers.io_expander.pca9554 import PCA9554
 from mpos import InputManager
+from mpos.imu.constants import IMU_I2C_TIMEOUT_US
 
 # Pin configuration (from the Waveshare demo code / schematic)
 SPI_BUS = 2
@@ -51,7 +52,7 @@ IMU_ADDR = 0x6B        # QMI8658
 
 # Shared I2C bus: PCA9554 expander, FT6336 touch, AXP2101 PMU, QMI8658 IMU,
 # PCF85063 RTC (0x51), ES8311 codec.
-i2c_bus = i2c.I2C.Bus(host=0, scl=I2C_SCL, sda=I2C_SDA, freq=400000, use_locks=False)
+i2c_bus = i2c.I2C.Bus(host=0, scl=I2C_SCL, sda=I2C_SDA, freq=400000, use_locks=False, timeout=IMU_I2C_TIMEOUT_US)
 
 # Bring the LCD out of reset and assert its chip select via the expander,
 # BEFORE initializing the display controller over SPI.

@@ -16,6 +16,7 @@ import mpos.ui.focus_direction
 from machine import I2C, PWM, Pin
 from micropython import const
 from mpos import AudioManager, InputManager, SensorManager
+from mpos.imu.constants import IMU_I2C_TIMEOUT_US
 
 # Display settings:
 SPI_BUS = const(1)  # SPI2
@@ -67,7 +68,7 @@ if SharedPreferences("com.micropythonos.settings").get_string("startup_sound", "
 
 
 if __debug__: logger.debug("m5stack_fire.py init IMU")
-i2c_bus = I2C(0, scl=Pin(MPU6886_I2C_SCL), sda=Pin(MPU6886_I2C_SDA), freq=MPU6886_I2C_FREQ)
+i2c_bus = I2C(0, scl=Pin(MPU6886_I2C_SCL), sda=Pin(MPU6886_I2C_SDA), freq=MPU6886_I2C_FREQ, timeout=IMU_I2C_TIMEOUT_US)
 SensorManager.init(
     i2c_bus=i2c_bus,
     address=MPU6886_I2C_ADDR,

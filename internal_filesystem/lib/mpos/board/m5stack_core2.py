@@ -22,6 +22,7 @@ import mpos.ui
 from machine import I2C, Pin
 from micropython import const
 from mpos import AudioManager, InputManager, SensorManager
+from mpos.imu.constants import IMU_I2C_TIMEOUT_US
 
 # I2C bus (shared: AXP192, Touch, IMU, RTC)
 I2C_SDA = const(21)
@@ -57,7 +58,7 @@ MPU6886_ADDR = const(0x68)
 # ==============================
 if __debug__: logger.debug("m5stack_core2.py init AXP192 power management")
 # All I2C devices (AXP192, Touch, IMU) share one bus on host 0
-i2c_bus = I2C(0, scl=Pin(I2C_SCL), sda=Pin(I2C_SDA), freq=I2C_FREQ)
+i2c_bus = I2C(0, scl=Pin(I2C_SCL), sda=Pin(I2C_SDA), freq=I2C_FREQ, timeout=IMU_I2C_TIMEOUT_US)
 
 from drivers.power.axp192 import AXP192
 axp = AXP192(i2c_bus)

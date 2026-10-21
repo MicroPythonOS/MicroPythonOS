@@ -1,7 +1,9 @@
 # Unit tests for SensorManager service
 import unittest
 import sys
+import time
 
+from mpos.imu.sensor import Sensor
 from mpos.testing.mocks import (
     MockI2C,
     MockQMI8658,
@@ -10,6 +12,18 @@ from mpos.testing.mocks import (
     make_shared_preferences_module,
     make_machine_i2c_module,
 )
+
+
+class CountingI2C(MockI2C):
+    """MockI2C that counts readfrom_mem calls."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.read_calls = 0
+
+    def readfrom_mem(self, addr, reg, nbytes):
+        self.read_calls += 1
+        return super().readfrom_mem(addr, reg, nbytes)
 
 
 # Mock constants from drivers
@@ -321,3 +335,52 @@ class TestSensorManagerMultipleInit(unittest.TestCase):
 
         # Should still work normally
         self.assertTrue(SensorManager.is_available())
+
+
+class TestSensorManagerProbeThrottle(unittest.TestCase):
+    """Repeated sensor reads must not re-run the four-chip IMU probe."""
+
+    def setUp(self):
+        """Set up test fixtures before each test."""
+        SensorManager._instance = None
+        SensorManager._initialized = False
+        SensorManager._imu_driver = None
+        SensorManager._sensor_list = []
+        SensorManager._has_mcu_temperature = False
+        SensorManager._i2c_bus = None
+        SensorManager._i2c_address = None
+
+        self.i2c_bus = CountingI2C(0, sda=48, scl=47)
+        SensorManager.init(self.i2c_bus, address=0x6B)
+
+    def test_probe_runs_once_across_sensor_list_calls(self):
+        """A bus without an IMU is probed once, not on every call."""
+        SensorManager.get_sensor_list()
+        probed = self.i2c_bus.read_calls
+        self.assertEqual(probed, 4)
+
+        SensorManager.get_sensor_list()
+        SensorManager.get_sensor_list()
+        self.assertEqual(self.i2c_bus.read_calls, probed)
+
+    def test_read_sensor_does_not_reprobe(self):
+        """read_sensor on a missing IMU does not probe the bus again."""
+        SensorManager.get_sensor_list()
+        probed = self.i2c_bus.read_calls
+
+        sensor = Sensor(
+            "accel-test", SensorManager.TYPE_ACCELEROMETER, "test", 1, "?", "?", 0
+        )
+        self.assertIsNone(SensorManager.read_sensor(sensor))
+        self.assertEqual(self.i2c_bus.read_calls, probed)
+
+    def test_probe_retries_after_retry_interval(self):
+        """The probe is retried once the retry interval has elapsed."""
+        SensorManager.get_sensor_list()
+        probed = self.i2c_bus.read_calls
+
+        imu_manager = SensorManager.get()._imu_manager
+        imu_manager._next_probe_ms = time.ticks_add(time.ticks_ms(), -1)
+
+        SensorManager.get_sensor_list()
+        self.assertEqual(self.i2c_bus.read_calls, probed + 4)

@@ -16,6 +16,7 @@ import drivers.display.st7789 as st7789
 import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager, IRManager
+from mpos.imu.constants import IMU_I2C_TIMEOUT_US
 
 spi_bus = machine.SPI.Bus(
     host=2,
@@ -306,7 +307,7 @@ buzzer_output = AudioManager.add(
 from mpos import SensorManager
 # Create I2C bus for IMU (different pins from display)
 from machine import I2C
-imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
+imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18), timeout=IMU_I2C_TIMEOUT_US)
 from mpos import DeviceManager
 DeviceManager.registerBus(i2c_bus=imu_i2c) # register because Communicator needs it
 SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
