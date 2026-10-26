@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Testing:
+- unittest: lib/unittest is updated from micropython-lib's unittest 0.10.4 to 0.11.0, keeping the local change that records exceptions from setUp, tearDown, cleanups, setUpClass and tearDownClass instead of letting them abort the run. The assert methods now build their default message only when the assertion fails, so a passing assertion no longer formats its arguments with repr(); assertTrue() or assertIsNotNone() on a tuple of two or more items used to raise TypeError from that formatting even when it passed. Upstream also dropped CPython support, and the compiled module is about 400 bytes (6-7%) smaller
+
 0.21.0
 ======
 
