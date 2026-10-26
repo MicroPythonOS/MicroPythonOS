@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+0.21.0
+======
+
 Board Support:
 - Fri3d 2026 badge: B/Y buttons now also reach apps as ord("B")/ord("Y") KEY events (dual delivery), in addition to their NEXT/PREV focus-navigation role. Previously LVGL consumed NEXT/PREV for tabbing so apps never saw B/Y (e.g. Quasi Bird's FPS toggle and high-score reset did nothing). Tab navigation is unchanged; matches the fri3d 2024 badge and desktop SDL.
 

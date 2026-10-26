@@ -110,6 +110,8 @@ jobs:
             "MicroPythonOS_esp32-small_*.ota"
             "MicroPythonOS_esp32s3-unphone_*.bin"
             "MicroPythonOS_esp32s3-unphone_*.ota"
+            "MicroPythonOS_esp32p4_*.bin"
+            "MicroPythonOS_esp32p4_*.ota"
             "MicroPythonOS_x64_linux_*.elf"
             "MicroPythonOS_arm64_linux_*.elf"
             "MicroPythonOS_arm64_macOS_*.bin"
