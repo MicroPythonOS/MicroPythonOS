@@ -838,6 +838,107 @@ class TestSharedPreferences(unittest.TestCase):
         self.assertEqual(prefs2.get_int("volume"), 50)
         self.assertEqual(prefs2.get_string("name"), "test")
 
+    # ============================================================
+    # Nested changes and the no-op write guard
+    # ============================================================
+
+    def test_nested_change_from_get_dict_persists(self):
+        """A dict nested in a get_dict() value, changed in place, must be written.
+
+        get_dict() returns a shallow copy, so the nested dict is the one in
+        prefs.data. Changing it changed prefs.data too, so commit() found
+        nothing new and skipped the write; only a fresh load showed it.
+        """
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().put_dict("slots", {"a": {"count": 1}}).commit()
+
+        slots = prefs.get_dict("slots")
+        slots["a"]["count"] = 2
+        prefs.edit().put_dict("slots", slots).commit()
+
+        reloaded = SharedPreferences(self.test_app_name)
+        self.assertEqual(reloaded.get_dict("slots"), {"a": {"count": 2}})
+
+    def test_nested_change_from_get_list_persists(self):
+        """Same as above for a dict inside a get_list() value."""
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().put_list("rows", [{"count": 1}]).commit()
+
+        rows = prefs.get_list("rows")
+        rows[0]["count"] = 2
+        prefs.edit().put_list("rows", rows).commit()
+
+        reloaded = SharedPreferences(self.test_app_name)
+        self.assertEqual(reloaded.get_list("rows"), [{"count": 2}])
+
+    def test_change_to_get_dict_item_field_value_persists(self):
+        """Same for a dict from get_dict_item_field(), which returns the stored object itself."""
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().put_dict_item("buttons", "b1", {"opts": {"loop": False}}).commit()
+
+        opts = prefs.get_dict_item_field("buttons", "b1", "opts")
+        opts["loop"] = True
+        prefs.edit().put_dict_item("buttons", "b1", {"opts": opts}).commit()
+
+        reloaded = SharedPreferences(self.test_app_name)
+        self.assertEqual(reloaded.get_dict_item("buttons", "b1"), {"opts": {"loop": True}})
+
+    def test_value_changed_after_put_dict_persists(self):
+        """A dict kept after put_dict(), changed and put again, must be written."""
+        prefs = SharedPreferences(self.test_app_name)
+        config = {"count": 1}
+        prefs.edit().put_dict("config", config).commit()
+
+        config["count"] = 2
+        prefs.edit().put_dict("config", config).commit()
+
+        reloaded = SharedPreferences(self.test_app_name)
+        self.assertEqual(reloaded.get_dict("config"), {"count": 2})
+
+    def test_changed_constructor_default_persists(self):
+        """A get_dict() constructor default changed in place must be written, and the default kept."""
+        defaults = {"config": {"count": 1}}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        config = prefs.get_dict("config")
+        config["count"] = 2
+        prefs.edit().put_dict("config", config).commit()
+
+        self.assertEqual(defaults, {"config": {"count": 1}})
+        reloaded = SharedPreferences(self.test_app_name, defaults={"config": {"count": 1}})
+        self.assertEqual(reloaded.get_dict("config"), {"count": 2})
+
+    def test_unchanged_commit_still_skips_the_write(self):
+        """The no-op write guard must still skip commits that change nothing."""
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().put_dict("slots", {"a": {"count": 1}}).commit()
+
+        writes = []
+        prefs.save_config = lambda: writes.append(1)
+        prefs.edit().commit()
+        prefs.edit().put_dict("slots", {"a": {"count": 1}}).commit()
+        prefs.edit().put_dict("slots", {"a": {"count": 1}}).apply()
+
+        self.assertEqual(writes, [])
+
+    def test_unchanged_commit_keeps_write_from_other_instance(self):
+        """A no-op commit on a long-lived instance must not write its older data over the file.
+
+        Like the Settings app, which keeps one instance per session and
+        commits on every OK, after the top drawer saved a new brightness
+        through another instance.
+        """
+        settings = SharedPreferences(self.test_app_name)
+        settings.edit().put_string("theme_light_dark", "dark").put_int("display_brightness", 80).commit()
+
+        drawer = SharedPreferences(self.test_app_name)
+        drawer.edit().put_int("display_brightness", 30).commit()
+
+        settings.edit().put_string("theme_light_dark", "dark").commit()
+
+        reloaded = SharedPreferences(self.test_app_name)
+        self.assertEqual(reloaded.get_int("display_brightness"), 30)
+
 
 class TestSharedPreferencesMigration(unittest.TestCase):
     """Test migration of legacy data/{appname} preferences to prefs/{appname}."""

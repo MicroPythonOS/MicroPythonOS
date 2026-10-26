@@ -8,6 +8,15 @@ _PREFS_DIR = "prefs"
 _LEGACY_PREFS_DIR = "data"
 
 
+def _copy_nested(value):
+    """Copy nested dicts and lists; other values are returned as they are."""
+    if isinstance(value, dict):
+        return {k: _copy_nested(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_copy_nested(v) for v in value]
+    return value
+
+
 class SharedPreferences:
     # Track appnames already checked for legacy migration this process.
     _migrated_appnames = set()
@@ -20,6 +29,9 @@ class SharedPreferences:
         self.appdir = f"{_PREFS_DIR}/{self.appname}"
         self.filepath = f"{self.appdir}/{self.filename}"
         self.data = {}
+        # JSON text this instance last read from or wrote to its file (None
+        # when there is no file), for the no-op write guard in Editor
+        self._saved_json = None
         self.load()
 
     @staticmethod
@@ -32,6 +44,12 @@ class SharedPreferences:
 
     def _file_exists(self):
         return self._path_exists(self.filepath)
+
+    def _matches_saved(self, data):
+        """Check whether data equals what this instance last read from or wrote to its file."""
+        if self._saved_json is None:
+            return not data
+        return ujson.loads(self._saved_json) == data
 
     @staticmethod
     def _remove_if_exists(path):
@@ -71,7 +89,8 @@ class SharedPreferences:
         """Load preferences from the given JSON file path."""
         try:
             with open(path, 'r') as f:
-                self.data = ujson.load(f)
+                self._saved_json = f.read()
+                self.data = ujson.loads(self._saved_json)
                 # Deliberately log only the filepath and key count, NOT the
                 # values. Prefs often hold secrets (WiFi passwords in
                 # access_points, wallet API keys / NWC secrets / xpubs in
@@ -83,6 +102,7 @@ class SharedPreferences:
         except Exception as e:
             if __debug__: logger.debug("SharedPreferences.load didn't find preferences: %s", e)
             self.data = {}
+            self._saved_json = None
 
     def _migrate_legacy(self):
         """Move preferences from the legacy path to the new path, once per appname."""
@@ -134,6 +154,7 @@ class SharedPreferences:
         else:
             if __debug__: logger.debug("SharedPreferences.load didn't find preferences for %s", self.appname)
             self.data = {}
+            self._saved_json = None
 
     def get_string(self, key, default=None):
         """Retrieve a string value for the given key, with a default if not found."""
@@ -193,9 +214,11 @@ class SharedPreferences:
         # Method default takes precedence if provided
         if default is not None:
             return default
-        # Fall back to constructor default
+        # Fall back to a copy of the constructor default: if a caller changed
+        # the default itself in place, commit() would find the value equal to
+        # the default and not save it
         if key in self.defaults:
-            return self.defaults[key]
+            return _copy_nested(self.defaults[key])
         # Return empty list as hardcoded fallback
         return []
 
@@ -207,9 +230,9 @@ class SharedPreferences:
         # Method default takes precedence if provided
         if default is not None:
             return default
-        # Fall back to constructor default
+        # Fall back to a copy of the constructor default (see get_list)
         if key in self.defaults:
-            return self.defaults[key]
+            return _copy_nested(self.defaults[key])
         # Return empty dict as hardcoded fallback
         return {}
 
@@ -221,6 +244,7 @@ class SharedPreferences:
         """Save preferences to the JSON file, pruning empty files/dirs."""
         if not self.data:
             removed_file = self._remove_if_exists(self.filepath)
+            self._saved_json = None
             if removed_file:
                 if __debug__: logger.debug("save_config: Removed empty preferences file %s", self.filepath)
             self._remove_empty_preference_dirs()
@@ -229,8 +253,10 @@ class SharedPreferences:
         self.make_folder_structure()
         if __debug__: logger.debug("save_config: Saving preferences to %s", self.filepath)
         try:
+            text = ujson.dumps(self.data)
             with open(self.filepath, 'w') as f:
-                ujson.dump(self.data, f)
+                f.write(text)
+            self._saved_json = text
             if __debug__: logger.debug("save_config: Saved")
         except Exception as e:
             logger.error("save_config: Got exception %s", e)
@@ -384,7 +410,12 @@ class Editor:
 
         # No-op write guard: if filtered data did not change and there is no
         # legacy empty file to clean up, avoid touching the filesystem.
-        if filtered_data == self.preferences.data:
+        # "Did not change" must also hold against what this instance last
+        # read or wrote: preferences.data shares nested lists and dicts with
+        # callers (the getters return shallow copies, put_list()/put_dict()
+        # keep the caller's object), so a change made in place has already
+        # reached it.
+        if filtered_data == self.preferences.data and self.preferences._matches_saved(filtered_data):
             if filtered_data or not self.preferences._file_exists():
                 if __debug__: logger.debug("save_config: Skipping no-op apply")
                 self.preferences.data = filtered_data
@@ -398,8 +429,9 @@ class Editor:
         filtered_data = self._filter_defaults(self.temp_data)
 
         # No-op write guard: if filtered data did not change and there is no
-        # legacy empty file to clean up, avoid touching the filesystem.
-        if filtered_data == self.preferences.data:
+        # legacy empty file to clean up, avoid touching the filesystem (see
+        # apply).
+        if filtered_data == self.preferences.data and self.preferences._matches_saved(filtered_data):
             if filtered_data or not self.preferences._file_exists():
                 if __debug__: logger.debug("save_config: Skipping no-op commit")
                 self.preferences.data = filtered_data
