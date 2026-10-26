@@ -11,7 +11,7 @@ TIME_ZONE_MAP = {
     "Africa/Bangui": "WAT-1",  # Central African Republic’s capital
     "Africa/Brazzaville": "WAT-1",  # Republic of Congo’s capital
     "Africa/Cairo": "EET-2EEST,M4.5.5/0,M10.5.4/24",  # Egypt’s capital
-    "Africa/Casablanca": "<+01>-1",  # Morocco’s major city
+    "Africa/Casablanca": "<+00>0",  # Morocco’s major city
     "Africa/Dakar": "GMT0",  # Senegal’s capital
     "Africa/Dar_es_Salaam": "EAT-3",  # Tanzania’s major city
     "Africa/Djibouti": "EAT-3",  # Djibouti’s capital
@@ -37,7 +37,7 @@ TIME_ZONE_MAP = {
     "Africa/Windhoek": "CAT-2",  # Namibia’s capital
     "America/Anchorage": "AKST9AKDT,M3.2.0,M11.1.0",  # Alaska’s major city
     "America/Argentina/Buenos_Aires": "<-03>3",  # Argentina’s capital
-    "America/Asuncion": "<-04>4<-03>,M10.1.0/0,M3.4.0/0",  # Paraguay’s capital
+    "America/Asuncion": "<-03>3",  # Paraguay’s capital
     "America/Belize": "CST6",  # Belize’s capital
     "America/Bogota": "<-05>5",  # Colombia’s capital
     "America/Boise": "MST7MDT,M3.2.0,M11.1.0",  # US, Idaho’s major city
@@ -49,7 +49,7 @@ TIME_ZONE_MAP = {
     "America/Costa_Rica": "CST6",  # Costa Rica’s capital
     "America/Denver": "MST7MDT,M3.2.0,M11.1.0",  # US, major city for MST
     "America/Detroit": "EST5EDT,M3.2.0,M11.1.0",  # US, Michigan’s major city
-    "America/Edmonton": "MST7MDT,M3.2.0,M11.1.0",  # Canada, Alberta’s major city
+    "America/Edmonton": "CST6",  # Canada, Alberta’s major city
     "America/El_Salvador": "CST6",  # El Salvador’s capital
     "America/Fortaleza": "<-03>3",  # Brazil, Northeast
     "America/Guatemala": "CST6",  # Guatemala’s capital
@@ -80,8 +80,8 @@ TIME_ZONE_MAP = {
     "America/St_Johns": "NST3:30NDT,M3.2.0,M11.1.0",  # Canada, Newfoundland
     "America/Tegucigalpa": "CST6",  # Honduras’ capital
     "America/Toronto": "EST5EDT,M3.2.0,M11.1.0",  # Canada’s major city
-    "America/Vancouver": "PST8PDT,M3.2.0,M11.1.0",  # Canada’s major city for PST
-    "America/Winnipeg": "CST6CDT,M3.2.0,M11.1.0",  # Canada, Manitoba’s capital
+    "America/Vancouver": "MST7",  # Canada’s major city for PST
+    "America/Winnipeg": "EST5",  # Canada, Manitoba’s capital
     "Antarctica/McMurdo": "NZST-12NZDT,M9.5.0,M4.1.0/3",  # Major Antarctic base
     "Asia/Almaty": "<+05>-5",  # Kazakhstan’s major city
     "Asia/Amman": "<+03>-3",  # Jordan’s capital

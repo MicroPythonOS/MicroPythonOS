@@ -148,7 +148,7 @@ def tzoffset(timestamp: float, ptz_string: str):
 		std_offset_seconds = - _hours2secs(offsetHours[0])
 
 		if (len(offsetHours)>1):
-			dst_offset_seconds = _hours2secs(offsetHours[1])
+			dst_offset_seconds = - _hours2secs(offsetHours[1]) - std_offset_seconds
 		else:
 			dst_offset_seconds = 3600
 
@@ -328,6 +328,12 @@ def _hours2secs(hours: str):
 	int: seconds
 	"""
 	seconds = 0
+	sign = 1
+
+	if (hours[:1] in ("+", "-")):
+		if (hours[0] == "-"):
+			sign = -1
+		hours = hours[1:]
 
 	hours_parts = hours.split(':')
 
@@ -338,4 +344,4 @@ def _hours2secs(hours: str):
 			if (len(hours_parts)>2):
 				seconds += int(hours_parts[2])
 	
-	return seconds
+	return sign * seconds
