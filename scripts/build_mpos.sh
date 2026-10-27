@@ -40,9 +40,9 @@ apply_patch() {
 	# silently shipping a build without it (see the _webterm output bridge
 	# incident: `|| true` swallowed a failed unix_mphal.c patch and the
 	# deployed web build had a dead stdout mirror).
-	if patch -p1 --forward -d "$1" --dry-run < "$2" >/dev/null 2>&1; then
-		patch -p1 --forward -d "$1" < "$2"
-	elif patch -p1 --reverse -d "$1" --dry-run < "$2" >/dev/null 2>&1; then
+	if patch -p1 --forward --batch -d "$1" --dry-run < "$2" >/dev/null 2>&1; then
+		patch -p1 --forward --batch -d "$1" < "$2"
+	elif patch -p1 --reverse --force -d "$1" --dry-run < "$2" >/dev/null 2>&1; then
 		echo "Patch $2 already applied, skipping."
 	else
 		echo "FATAL: patch $2 does not apply in $1" >&2
