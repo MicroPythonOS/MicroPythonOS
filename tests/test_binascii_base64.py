@@ -380,8 +380,9 @@ class TestBase64Timing(unittest.TestCase):
         print(
             "base64 timing: %d x %d bytes: binascii %d ms, base64 %d ms" % (reps, len(data), via_binascii, via_base64)
         )
-        self.assertTrue(via_binascii < 1000, "binascii round-trips took %d ms" % via_binascii)
-        self.assertTrue(via_base64 < 1000, "base64 round-trips took %d ms" % via_base64)
+        budget = 15000 if sys.platform == "esp32" else 1000
+        self.assertTrue(via_binascii < budget, "binascii round-trips took %d ms" % via_binascii)
+        self.assertTrue(via_base64 < budget, "base64 round-trips took %d ms" % via_base64)
 
 
 if __name__ == "__main__":
