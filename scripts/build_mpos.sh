@@ -614,6 +614,17 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 			echo "Patching macOS builder for sdl2-compat..."
 			sed -i.backup "s/brew_path, 'info', 'sdl2'/brew_path, 'info', 'sdl2-compat'/g" "$macos_builder"
 		fi
+
+		# Homebrew 7.0.5 and later changed the `brew info libffi` output that
+		# the macOS builder parses for its compiler and linker flags, so the
+		# patch gets the Homebrew prefix from `brew --prefix` instead.
+		# Existence-guarded so MPOS still builds against older pinned
+		# lvgl_micropython SHAs that don't ship it.
+		brew_prefix_patch="$codebasedir"/lvgl_micropython/macos_brew_prefix.patch
+		if [ -f "$brew_prefix_patch" ]; then
+			echo "Applying lvgl_micropython macOS brew --prefix patch..."
+			apply_patch "$codebasedir"/lvgl_micropython "$brew_prefix_patch"
+		fi
 	fi
 
 	# Suppress warnings that newer Clang (17+) treats as errors on macOS.
