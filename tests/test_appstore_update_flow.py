@@ -1153,6 +1153,16 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
         self.assertFalse(label_a.has_flag(HIDDEN_FLAG))
         self.assertTrue(label_b.has_flag(HIDDEN_FLAG))
 
+    def test_on_update_state_change_dispatches_threadsafe(self):
+        from appstore_core import AppUpdateState
+        store = self._make_store()
+        calls = []
+        store.update_ui_threadsafe_if_foreground = lambda func, state, **kw: calls.append((func, state))
+        store._on_update_state_change(AppUpdateState.UPDATES_AVAILABLE)
+        self.assertEqual(len(calls), 1, "state change should marshal to the main thread")
+        self.assertEqual(calls[0][0], store._apply_update_state_change)
+        self.assertEqual(calls[0][1], AppUpdateState.UPDATES_AVAILABLE)
+
     def test_on_update_state_change_updates_banner(self):
         from appstore_core import AppUpdateManager, AppUpdateState
         store = self._make_store()
@@ -1162,7 +1172,7 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
         aum.updatable_apps = [{"fullname": "com.test.a", "name": "A"}]
         aum.current_state = AppUpdateState.UPDATES_AVAILABLE
         try:
-            store._on_update_state_change(AppUpdateState.UPDATES_AVAILABLE)
+            store._apply_update_state_change(AppUpdateState.UPDATES_AVAILABLE)
             self.assertEqual(store.update_all_label._text, "Update 1 App")
         finally:
             AppUpdateManager._instance = None
@@ -1180,7 +1190,7 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
         rebuild_calls = []
         store.create_apps_list = lambda: rebuild_calls.append(True)
         try:
-            store._on_update_state_change(AppUpdateState.UPDATES_AVAILABLE)
+            store._apply_update_state_change(AppUpdateState.UPDATES_AVAILABLE)
             self.assertEqual(store.update_all_label._text, "Update 1 App")
             self.assertEqual(len(rebuild_calls), 1,
                              "list should be rebuilt when updates arrive while viewing Updates category")
@@ -1200,7 +1210,7 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
         rebuild_calls = []
         store.create_apps_list = lambda: rebuild_calls.append(True)
         try:
-            store._on_update_state_change(AppUpdateState.UPDATES_AVAILABLE)
+            store._apply_update_state_change(AppUpdateState.UPDATES_AVAILABLE)
             self.assertEqual(store.update_all_label._text, "Update 1 App")
             self.assertEqual(len(rebuild_calls), 0,
                              "list should NOT be rebuilt when viewing non-Updates category")

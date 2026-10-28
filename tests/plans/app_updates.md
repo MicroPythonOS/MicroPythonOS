@@ -45,7 +45,7 @@ The six serious gaps from the previous analysis now have test coverage via `test
 | 21 | Notification click → `NotificationManager.trigger()` → `_dispatch_intent()` → launches `com.micropythonos.appstore` | *none* (requires integration: real or mocked ActivityNavigator + AppManager) | **GAP** |
 | 22 | `onResume()` — attaches state callback, sets `suppress_notifications=True`, calls `_sync_update_banner()` with current state | *none* (the `suppress_notifications` toggle is tested separately, but `onResume` integration is not) | **GAP** |
 | 23 | `onPause()` — detaches state callback, sets `suppress_notifications=False` | *none* | **GAP** |
-| 24 | `_on_update_state_change()` — calls `_sync_update_banner()` when app has foreground | `tests/test_appstore_update_flow.py` (`TestAppUpdatePostUpdate`) | ✅ Covered |
+| 24 | `_apply_update_state_change()` — called via `_on_update_state_change()` thread-safe dispatch; calls `_sync_update_banner()` when app has foreground | `tests/test_appstore_update_flow.py` (`TestAppUpdatePostUpdate`) | ✅ Covered |
 | 25 | `_sync_update_banner(UPDATES_AVAILABLE)` — shows button, sets "Update N App(s)" label, pushes list down | `tests/test_appstore_update_flow.py` (`TestAppUpdatePostUpdate`) | ✅ Covered |
 | 26 | `_sync_update_banner(any_other_state)` — hides button, moves list back up | `tests/test_appstore_update_flow.py` (`TestAppUpdatePostUpdate`) | ✅ Covered |
 | 27 | `_sync_update_banner()` — shows/hides per-app "Update available" labels based on updatable set | `tests/test_appstore_update_flow.py` (`TestAppUpdatePostUpdate`) | ✅ Covered |

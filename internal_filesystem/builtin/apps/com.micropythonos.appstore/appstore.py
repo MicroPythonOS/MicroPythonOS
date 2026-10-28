@@ -171,8 +171,11 @@ class AppStore(Activity):
     # ------------------------------------------------------------------
 
     def _on_update_state_change(self, state):
-        if not self.has_foreground():
-            return
+        # Invoked from the AppUpdateManager service loop thread: marshal the
+        # LVGL work to the main thread (LVGL is not thread-safe).
+        self.update_ui_threadsafe_if_foreground(self._apply_update_state_change, state)
+
+    def _apply_update_state_change(self, state):
         try:
             from appstore_core import AppUpdateManager
             um = AppUpdateManager.get_instance()
