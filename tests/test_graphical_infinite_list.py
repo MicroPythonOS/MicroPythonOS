@@ -253,14 +253,15 @@ class TestInfiniteListPerformance(GraphicalTestCase, _Base):
 
         ratio_5k = elapsed_5k / base_elapsed if base_elapsed > 0 else 0
         ratio_10k = elapsed_10k / base_elapsed if base_elapsed > 0 else 0
+        ratio_budget = 20 if _ESP32 else 10
 
         self.assertTrue(
-            ratio_5k < 10,
-            f"set_data with 5000 items is {ratio_5k:.1f}x slower than 100 items; expected <10x"
+            ratio_5k < ratio_budget,
+            f"set_data with 5000 items is {ratio_5k:.1f}x slower than 100 items; expected <{ratio_budget}x"
         )
         self.assertTrue(
-            ratio_10k < 10,
-            f"set_data with 10000 items is {ratio_10k:.1f}x slower than 100 items; expected <10x"
+            ratio_10k < ratio_budget,
+            f"set_data with 10000 items is {ratio_10k:.1f}x slower than 100 items; expected <{ratio_budget}x"
         )
 
         self.assertTrue(

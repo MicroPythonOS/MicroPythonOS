@@ -1,3 +1,4 @@
+import sys
 import unittest
 
 import micropython
@@ -42,6 +43,8 @@ class TestRenderGuard(unittest.TestCase):
         self.assertIs(render_guard.on_task_handler(1, None), False)
 
     def test_deeper_code_loses_headroom_first(self):
+        if sys.platform == "esp32":
+            self.skipTest("recursion deep enough to cross 9 KB cannot fit the ESP32's small Python stack")
         render_guard.RENDER_RESERVE = 9 * 1024
         render_guard.STACK_SIZE = micropython.stack_use() + render_guard.RENDER_RESERVE + 512
 
