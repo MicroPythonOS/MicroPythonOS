@@ -258,13 +258,15 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patch
 # without NULLing it, so a deinit→reinit cycle (host deactivate back to
 # CDC) double-frees and crashes in esp_intr_disable. Guard + clear.
 # The component is fetched at build time, so on a fresh checkout it may
-# not exist yet: build once to fetch, then rebuild to patch.
-_tinyusb_dwc2="$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__tinyusb/src/portable/synopsys/dwc2/dwc2_esp32.h
+# not exist yet, and fetching it again replaces a patched copy. The ESP32
+# build below checks again after building (#352).
+_tinyusb_dir="$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__tinyusb
+_tinyusb_dwc2="$_tinyusb_dir"/src/portable/synopsys/dwc2/dwc2_esp32.h
 if [ -f "$_tinyusb_dwc2" ]; then
 	echo "Applying tinyusb ISR double-free patch..."
-	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__tinyusb "$codebasedir"/patches/tinyusb_isr_double_free.patch
+	apply_patch "$_tinyusb_dir" "$codebasedir"/patches/tinyusb_isr_double_free.patch
 else
-	echo "WARNING: tinyusb component not fetched yet — skipping ISR patch; rebuild once to apply it."
+	echo "tinyusb component not fetched yet; if the ESP32 build fetches it, the ISR patch is applied after that build and the firmware is built again."
 fi
 
 # Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
@@ -507,14 +509,29 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	#   everything the OS and its apps talk to is reachable over IPv4, and it is
 	#   worth ~23 KB of flash plus the neighbour-discovery tables in RAM
 	extra_configs="$extra_configs CONFIG_LWIP_IPV6=n"
-	python3 make.py $ccache_arg $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
-		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
-		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
-		$usb_usermod \
-		CONFIG_ADC_MIC_TASK_CORE=1 \
-		$extra_configs \
-		"$frozenmanifest"
+	esp32_make() {
+		python3 make.py $ccache_arg $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+			USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
+			USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
+			$usb_usermod \
+			CONFIG_ADC_MIC_TASK_CORE=1 \
+			$extra_configs \
+			"$frozenmanifest"
+	}
+	esp32_make
 	build_status=$?
+	# If this build fetched the tinyusb component (ESP32-S3 and P4 targets),
+	# the ISR patch above was skipped or the patched copy was replaced. If
+	# the patch isn't in the component now, apply it (apply_patch stops the
+	# build if it doesn't fit) and build again, so the firmware has it
+	# (#352). --force keeps patch from asking whether to apply it forward.
+	if [ $build_status -eq 0 ] && [ -f "$_tinyusb_dwc2" ] &&
+		! patch -p1 --reverse --force --dry-run -d "$_tinyusb_dir" < "$codebasedir"/patches/tinyusb_isr_double_free.patch >/dev/null 2>&1; then
+		echo "Applying tinyusb ISR double-free patch to the fetched component and building again..."
+		apply_patch "$_tinyusb_dir" "$codebasedir"/patches/tinyusb_isr_double_free.patch
+		esp32_make
+		build_status=$?
+	fi
     set +x
     unset CFLAGS_EXTRA
     unset MPOS_NO_USBDEV
