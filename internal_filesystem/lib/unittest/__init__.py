@@ -1,11 +1,6 @@
 import io
 import sys
 
-try:
-    import traceback  # noqa: F401
-except ImportError:
-    traceback = None
-
 
 class SkipTest(Exception):
     pass
@@ -19,6 +14,9 @@ class AssertRaisesContext:
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
+        if self.expected is None:
+            # Used by assertWarns, do nothing.
+            return
         self.exception = exc_value
         if exc_type is None:
             raise AssertionError("%r not raised" % self.expected)
@@ -42,28 +40,20 @@ class SubtestContext:
     def __enter__(self):
         pass
 
-    def __exit__(self, *exc_info):
-        if exc_info[0] is not None:
+    def __exit__(self, exc_type, exc_value, tb):
+        if exc_type is not None:
             # Exception raised
             global __test_result__, __current_test__
             test_details = __current_test__
             if self.msg:
-                test_details += (f" [{self.msg}]",)
+                test_details += (" [%s]" % self.msg,)
             if self.params:
-                detail = ", ".join(f"{k}={v}" for k, v in self.params.items())
-                test_details += (f" ({detail})",)
+                detail = ", ".join("%s=%s" % k_v for k_v in self.params.items())
+                test_details += (" (%s)" % detail,)
 
-            _handle_test_exception(test_details, __test_result__, exc_info, False)
+            _handle_test_exception(test_details, __test_result__, exc_value, False)
         # Suppress the exception as we've captured it above
         return True
-
-
-class NullContext:
-    def __enter__(self):
-        pass
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
 
 
 class TestCase:
@@ -90,31 +80,23 @@ class TestCase:
     def fail(self, msg=""):
         raise AssertionError(msg)
 
-    def assertEqual(self, x, y, msg=""):
-        if not msg:
-            msg = "%r vs (expected) %r" % (x, y)
+    def assertEqual(self, x, y, msg=None):
         if not x == y:
-            raise AssertionError(msg)
+            raise AssertionError(msg or "%r vs (expected) %r" % (x, y))
 
-    def assertNotEqual(self, x, y, msg=""):
-        if not msg:
-            msg = "%r not expected to be equal %r" % (x, y)
+    def assertNotEqual(self, x, y, msg=None):
         if not x != y:
-            raise AssertionError(msg)
+            raise AssertionError(msg or "%r not expected to be equal %r" % (x, y))
 
     def assertLessEqual(self, x, y, msg=None):
-        if msg is None:
-            msg = "%r is expected to be <= %r" % (x, y)
         if not x <= y:
-            raise AssertionError(msg)
+            raise AssertionError(msg or "%r is expected to be <= %r" % (x, y))
 
     def assertGreaterEqual(self, x, y, msg=None):
-        if msg is None:
-            msg = "%r is expected to be >= %r" % (x, y)
         if not x >= y:
-            raise AssertionError(msg)
+            raise AssertionError(msg or "%r is expected to be >= %r" % (x, y))
 
-    def assertAlmostEqual(self, x, y, places=None, msg="", delta=None):
+    def assertAlmostEqual(self, x, y, places=None, msg=None, delta=None):
         if x == y:
             return
         if delta is not None and places is not None:
@@ -123,78 +105,56 @@ class TestCase:
         if delta is not None:
             if abs(x - y) <= delta:
                 return
-            if not msg:
-                msg = "%r != %r within %r delta" % (x, y, delta)
+            raise AssertionError(msg or "%r != %r within %r delta" % (x, y, delta))
         else:
             if places is None:
                 places = 7
             if round(abs(y - x), places) == 0:
                 return
-            if not msg:
-                msg = "%r != %r within %r places" % (x, y, places)
+            raise AssertionError(msg or "%r != %r within %r places" % (x, y, places))
 
-        raise AssertionError(msg)
-
-    def assertNotAlmostEqual(self, x, y, places=None, msg="", delta=None):
+    def assertNotAlmostEqual(self, x, y, places=None, msg=None, delta=None):
         if delta is not None and places is not None:
             raise TypeError("specify delta or places not both")
 
         if delta is not None:
             if not (x == y) and abs(x - y) > delta:
                 return
-            if not msg:
-                msg = "%r == %r within %r delta" % (x, y, delta)
+            raise AssertionError(msg or "%r == %r within %r delta" % (x, y, delta))
         else:
             if places is None:
                 places = 7
             if not (x == y) and round(abs(y - x), places) != 0:
                 return
-            if not msg:
-                msg = "%r == %r within %r places" % (x, y, places)
+            raise AssertionError(msg or "%r == %r within %r places" % (x, y, places))
 
-        raise AssertionError(msg)
+    def assertIs(self, x, y, msg=None):
+        if not x is y:
+            raise AssertionError(msg or "%r is not %r" % (x, y))
 
-    def assertIs(self, x, y, msg=""):
-        if not msg:
-            msg = "%r is not %r" % (x, y)
-        if x is not y:
-            raise AssertionError(msg)
+    def assertIsNot(self, x, y, msg=None):
+        if not x is not y:
+            raise AssertionError(msg or "%r is %r" % (x, y))
 
-    def assertIsNot(self, x, y, msg=""):
-        if not msg:
-            msg = "%r is %r" % (x, y)
-        if x is y:
-            raise AssertionError(msg)
+    def assertIsNone(self, x, msg=None):
+        if not x is None:
+            raise AssertionError(msg or "%r is not None" % x)
 
-    def assertIsNone(self, x, msg=""):
-        if not msg:
-            msg = "%r is not None" % x
-        if x is not None:
-            raise AssertionError(msg)
+    def assertIsNotNone(self, x, msg=None):
+        if not x is not None:
+            raise AssertionError(msg or "%r is None" % x)
 
-    def assertIsNotNone(self, x, msg=""):
-        if not msg:
-            msg = "%r is None" % x
-        if x is None:
-            raise AssertionError(msg)
-
-    def assertTrue(self, x, msg=""):
-        if not msg:
-            msg = "Expected %r to be True" % x
+    def assertTrue(self, x, msg=None):
         if not x:
-            raise AssertionError(msg)
+            raise AssertionError(msg or "Expected %r to be True" % x)
 
-    def assertFalse(self, x, msg=""):
-        if not msg:
-            msg = "Expected %r to be False" % x
+    def assertFalse(self, x, msg=None):
         if x:
-            raise AssertionError(msg)
+            raise AssertionError(msg or "Expected %r to be False" % x)
 
-    def assertIn(self, x, y, msg=""):
-        if not msg:
-            msg = "Expected %r to be in %r" % (x, y)
-        if x not in y:
-            raise AssertionError(msg)
+    def assertIn(self, x, y, msg=None):
+        if not x in y:
+            raise AssertionError(msg or "Expected %r to be in %r" % (x, y))
 
     def assertIsInstance(self, x, y, msg=""):
         if not isinstance(x, y):
@@ -214,7 +174,7 @@ class TestCase:
         raise AssertionError("%r not raised" % exc)
 
     def assertWarns(self, warn):
-        return NullContext()
+        return AssertRaisesContext(None)
 
 
 def skip(msg):
@@ -229,15 +189,11 @@ def skip(msg):
 
 
 def skipIf(cond, msg):
-    if not cond:
-        return lambda x: x
-    return skip(msg)
+    return skip(msg) if cond else lambda x: x
 
 
 def skipUnless(cond, msg):
-    if cond:
-        return lambda x: x
-    return skip(msg)
+    return skipIf(not cond, msg)
 
 
 def expectedFailure(test):
@@ -321,7 +277,7 @@ class TestResult:
         for c, e in lst:
             detail = " ".join((str(i) for i in c))
             print("======================================================================")
-            print(f"FAIL: {detail}")
+            print("FAIL:", detail)
             print(sep)
             print(e)
 
@@ -344,28 +300,19 @@ class TestResult:
         return self
 
 
-def _capture_exc(exc, exc_traceback):
-    buf = io.StringIO()
-    if hasattr(sys, "print_exception"):
-        sys.print_exception(exc, buf)
-    elif traceback is not None:
-        traceback.print_exception(None, exc, exc_traceback, file=buf)
-    return buf.getvalue()
-
-
 def _handle_test_exception(
-    current_test: tuple, test_result: TestResult, exc_info: tuple, verbose=True
+    current_test: tuple, test_result: TestResult, exc: Exception, verbose=True
 ):
-    exc = exc_info[1]
-    traceback = exc_info[2]
-    ex_str = _capture_exc(exc, traceback)
     if isinstance(exc, SkipTest):
         reason = exc.args[0]
         test_result.skippedNum += 1
         test_result.skipped.append((current_test, reason))
         print(" skipped:", reason)
         return
-    elif isinstance(exc, AssertionError):
+    buf = io.StringIO()
+    sys.print_exception(exc, buf)
+    ex_str = buf.getvalue()
+    if isinstance(exc, AssertionError):
         test_result.failuresNum += 1
         test_result.failures.append((current_test, ex_str))
         if verbose:
@@ -387,10 +334,11 @@ def _run_suite(c, test_result: TestResult, suite_name=""):
         o = c()
     else:
         o = c
-    set_up_class = getattr(o, "setUpClass", lambda: None)
-    tear_down_class = getattr(o, "tearDownClass", lambda: None)
-    set_up = getattr(o, "setUp", lambda: None)
-    tear_down = getattr(o, "tearDown", lambda: None)
+    nop = lambda: None
+    set_up_class = getattr(o, "setUpClass", nop)
+    tear_down_class = getattr(o, "tearDownClass", nop)
+    set_up = getattr(o, "setUp", nop)
+    tear_down = getattr(o, "tearDown", nop)
     exceptions = []
     try:
         suite_name += "." + c.__qualname__
@@ -401,9 +349,7 @@ def _run_suite(c, test_result: TestResult, suite_name=""):
     # (SkipTest included) are recorded like test exceptions. Letting them
     # propagate aborted the rest of the run.
     def record(test_name, ex):
-        _handle_test_exception(
-            current_test=(test_name, c), test_result=test_result, exc_info=(type(ex), ex, None)
-        )
+        _handle_test_exception((test_name, c), test_result, ex)
 
     def record_after_test(what, ex):
         # The test's own status is already printed, so this gets its own line.
@@ -435,7 +381,7 @@ def _run_suite(c, test_result: TestResult, suite_name=""):
             run_cleanups()
             return
         __test_result__ = test_result
-        test_container = f"({suite_name})"
+        test_container = "(%s)" % suite_name
         __current_test__ = (name, test_container)
         try:
             test_result._newFailures = 0
