@@ -1397,6 +1397,7 @@ class MockBLE:
 
     IRQ_SCAN_RESULT = 5
     IRQ_SCAN_DONE = 6
+    IRQ_GATTC_NOTIFY = 18
 
     def __init__(self, scan_results=None):
         self._active = False
@@ -1408,6 +1409,7 @@ class MockBLE:
         self._msg_handle = 10
         self._gatt_write_data = b""
         self._gatt_buffer = b""
+        self._notify_data = b""
         self._server_conn = None
         if scan_results is None:
             scan_results = [
@@ -1478,6 +1480,14 @@ class MockBLE:
         if self._irq:
             self._irq(11, (conn_handle, 2, self._msg_handle, 0x0008, 0xB2E5))
             self._irq(12, (conn_handle, 0))
+
+    def gatts_notify(self, conn_handle, value_handle, data):
+        self._notify_data = data
+        if self._irq:
+            self._irq(18, (conn_handle, value_handle, bytes(data)))
+
+    def gattc_read(self, conn_handle, value_handle):
+        return self._gatt_buffer
 
     def gattc_write(self, conn_handle, value_handle, data, mode=0):
         self._gatt_buffer = data

@@ -9,26 +9,11 @@ import sys
 
 import lvgl as lv
 from micropython import const
-from mpos import Activity, TaskManager
+from mpos import Activity, TaskManager, BLEManager
 
-try:
-    import bluetooth
-except ImportError:  # Linux test runner / desktop may not provide bluetooth module
-    bluetooth = None
-    from mpos.testing.mocks import MockBluetooth
-
-# Scan for 5 seconds,
-SCAN_DURATION_MS = const(5000)  # Duration of each BLE scan in milliseconds
-# with very low interval/window (to maximize detection rate):
+SCAN_DURATION_MS = const(5000)
 INTERVAL_US = const(30000)
 WINDOW_US = const(30000)
-
-_IRQ_SCAN_RESULT = const(5)
-_IRQ_SCAN_DONE = const(6)
-
-# BLE Advertising Data Types (Standardized by Bluetooth SIG)
-_ADV_TYPE_SHORT_NAME = const(8)
-_ADV_TYPE_NAME = const(9)
 
 # Column layout: key, title, width percentage
 _COLUMNS = (
@@ -41,30 +26,10 @@ _COLUMNS = (
 )
 
 
-def decode_name(payload: bytes) -> str | None:
-    i = 0
-    payload_len = len(payload)
-    while i < payload_len:
-        length = payload[i]
-        if length == 0 or i + length >= payload_len:
-            break
-        field_type = payload[i + 1]
-        if field_type in (_ADV_TYPE_SHORT_NAME, _ADV_TYPE_NAME):
-            if new_name := payload[i + 2 : i + length + 1]:
-                return str(new_name, "utf-8")
-        else:
-            print("Unsupported: field_type=%s with length=%s" % (field_type, length))
-        i += length + 1
-
-
 class ScanBluetooth(Activity):
     def onCreate(self):
-        self.simulation_mode = bluetooth is None
-        if self.simulation_mode:
-            ble_module = MockBluetooth()
-        else:
-            ble_module = bluetooth
-        self.ble = ble_module.BLE()
+        self.simulation_mode = BLEManager.is_simulation()
+        self.ble = BLEManager.get_ble()
 
         main_content = lv.obj()
         main_content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -141,18 +106,17 @@ class ScanBluetooth(Activity):
         self.info_label.set_text(text)
 
     async def ble_scan(self):
-        """Check sensor every second"""
         while self.scanning:
             print("async scan for %sms..." % SCAN_DURATION_MS)
-            self.ble.gap_scan(SCAN_DURATION_MS, INTERVAL_US, WINDOW_US, True)
+            BLEManager.start_scan(SCAN_DURATION_MS, INTERVAL_US, WINDOW_US, True)
             await TaskManager.sleep_ms(SCAN_DURATION_MS + 500)
 
     def onResume(self, screen):
         super().onResume(screen)
 
         self.info("Activating Bluetooth...")
-        self.ble.irq(self.ble_irq_handler)
-        self.ble.active(True)
+        BLEManager.register_irq(self.ble_irq_handler)
+        BLEManager.activate()
 
         self.scanning = True
         TaskManager.create_task(self.ble_scan())
@@ -163,9 +127,9 @@ class ScanBluetooth(Activity):
         self.scanning = False
 
         self.info("Stop scanning...")
-        self.ble.gap_scan(None)
+        BLEManager.stop_scan()
         self.info("Deactivating BLE...")
-        self.ble.active(False)
+        BLEManager.deactivate()
         self.info("BLE deactivated")
 
     def update_last_seen(self):
@@ -176,14 +140,17 @@ class ScanBluetooth(Activity):
             if labels:
                 labels["last"].set_text("%ss" % last_seen_sec)
 
-    def ble_irq_handler(self, event: int, data: tuple) -> None:
+    def ble_irq_handler(self, event, data):
         try:
-            if event == _IRQ_SCAN_RESULT:
+            if event == BLEManager.IRQ_SCAN_RESULT:
                 addr_type, addr, adv_type, rssi, adv_data = data
-                addr = ":".join("%02x" % b for b in addr)
+                addr = BLEManager.mac_str(addr)
                 print("addr=%s rssi=%s len(adv_data)=%s" % (addr, rssi, len(adv_data)))
                 self.mac2last_seen[addr] = int(time.time())
-                if name := decode_name(adv_data):
+                parsed = BLEManager.ad_parse(adv_data)
+                ad_name = parsed.get(9) or parsed.get(8)
+                if ad_name:
+                    name = str(ad_name, "utf-8")
                     self.mac2name[addr] = name
                 else:
                     name = self.mac2name.get(addr, "Unknown")
@@ -202,7 +169,7 @@ class ScanBluetooth(Activity):
                 labels["last"].set_text("0s")
                 labels["count"].set_text(str(self.mac2counts[addr]))
                 labels["name"].set_text(name)
-            elif event == _IRQ_SCAN_DONE:
+            elif event == BLEManager.IRQ_SCAN_DONE:
                 self.update_last_seen()
                 self.scan_count += 1
                 self.info(
