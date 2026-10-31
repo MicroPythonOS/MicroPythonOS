@@ -102,6 +102,46 @@ class TestMyKeyboard(KeyboardTestCase):
 - `assertTextareaText(expected)` - Assert textarea content
 - `assertTextareaEmpty()` - Assert textarea is empty
 
+## Camera-based screen verification
+
+`scripts/mpos_screen_camera.py` compares what a host webcam sees with the
+device's own framebuffer (`MPOSController.screenshot()`). Frames are aligned
+with SIFT + RANSAC, so rotation, scale and perspective do not matter, and the
+tool reports structural similarity (NCC), focus/sharpness and per-icon-cell
+likeness. It can also gate pass/fail against thresholds.
+
+Host requirements: `ffmpeg`, `v4l-utils` (`v4l2-ctl`), `numpy` and
+`opencv-python-headless`.
+
+```bash
+# list cameras, find and lock the sharpest manual focus, then verify the screen
+python3 scripts/mpos_screen_camera.py list
+python3 scripts/mpos_screen_camera.py focus-sweep --port /dev/ttyACM0 --start 30 --stop 55 --step 5
+python3 scripts/mpos_screen_camera.py verify --port /dev/ttyACM0 --out-dir tmp/camtests
+```
+
+Artifacts (raw frame, deskewed screen, device-vs-camera comparison, edge maps
+and `metrics.jsonl`) go to `--out-dir` (default `tmp/camtests`). The same
+features are available from Python via `MPOSController.screen_camera_frame()`,
+`.screen_camera_measure()`, `.screen_camera_verify()` and
+`.screen_camera_focus_sweep()`.
+
+The framebuffer reference is read from the device and cached by its SHA-1 under
+`~/.cache/mpos_screen_camera`, because a full frame can take minutes over
+USB-CDC on some hosts. To work from a saved image instead:
+
+```bash
+python3 scripts/mpos_screen_camera.py capture-reference --port /dev/ttyACM0 --out tmp/camtests/reference.png
+python3 scripts/mpos_screen_camera.py verify --port /dev/ttyACM0 --reference tmp/camtests/reference.png
+```
+
+The synthetic tests need no hardware and are skipped when numpy/opencv are
+missing:
+
+```bash
+python3 tests/cpython_screen_camera.py
+```
+
 ## Mock Classes
 
 Import mocks from `mpos.testing`:
