@@ -807,6 +807,8 @@ elif [ "$target" == "web" ]; then
 	else
 		cp -a "$codebasedir"/internal_filesystem/. "$staged_fs"/
 	fi
+	rm -rf "$staged_fs"/prefs "$staged_fs"/sdcard "$staged_fs"/cache_audio "$staged_fs"/tests \
+		"$staged_fs"/SDLPointer_2 "$staged_fs"/SDLPointer_3 "$staged_fs"/screenshot-*.bmp
 
 	broken_links=$(find "$staged_fs" -type l ! -exec test -e {} \; -print)
 	if [ -n "$broken_links" ]; then
