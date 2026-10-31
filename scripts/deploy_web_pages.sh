@@ -26,7 +26,7 @@ webdir="$codebasedir/web"
 
 # 1. Build unless told otherwise.
 if [ "${1:-}" != "--no-build" ]; then
-	"$mydir/build_mpos_web.sh"
+	"$mydir/build_mpos.sh" web
 fi
 
 if [ ! -f "$webdir/index.html" ]; then
