@@ -1709,6 +1709,48 @@ class MPOSController:
     def screenshot_image(self):
         return self._backend.screenshot_image()
 
+    @staticmethod
+    def _screen_camera():
+        try:
+            from . import mpos_screen_camera
+        except ImportError:
+            import mpos_screen_camera
+        return mpos_screen_camera
+
+    def screen_camera_frame(self, config=None):
+        """Capture the physical screen with a host webcam and align it.
+
+        Returns ``(reference_bgr, frame_bgr, align_result)`` where the reference
+        is this device's framebuffer. Host-only: needs numpy, opencv and ffmpeg
+        (see ``scripts/mpos_screen_camera.py``).
+        """
+        camera = self._screen_camera()
+        cfg = camera.coerce_config(config)
+        reference = camera.reference_from_controller(self, cfg)
+        frame = camera.capture(cfg.device, cfg.capture_size, cfg.pixel_format)
+        return reference, frame, camera.align(reference, frame)
+
+    def screen_camera_measure(self, config=None, out_dir=None, label="screen", thresholds=None,
+                              save_homography=None):
+        """Capture/align/score the physical screen; writes artifacts, returns metrics."""
+        return self._screen_camera().measure(
+            controller=self, config=config, out_dir=out_dir, label=label,
+            thresholds=thresholds, save_homography=save_homography,
+        )
+
+    def screen_camera_verify(self, config=None, thresholds=None, out_dir=None, label="screen"):
+        """Like screen_camera_measure but returns ``(ok, metrics)``."""
+        measured = self.screen_camera_measure(config=config, thresholds=thresholds,
+                                              out_dir=out_dir, label=label)
+        return bool(measured.get("ok")), measured
+
+    def screen_camera_focus_sweep(self, config=None, values=None, repeats=2, settle=1.0):
+        """Find and lock the sharpest manual focus for the current rig."""
+        camera = self._screen_camera()
+        cfg = camera.coerce_config(config)
+        return camera.focus_sweep(config=cfg, controller=self, values=values,
+                                  repeats=repeats, settle=settle)
+
     def check_free_space(self):
         return self._backend.check_free_space()
 
@@ -1832,6 +1874,11 @@ class MPOSController:
     @property
     def display_size(self):
         return self._backend.display_size
+
+    @property
+    def port(self):
+        """Serial port for the serial backend, or None for the process backend."""
+        return getattr(self._backend, "port", None)
 
     def __enter__(self):
         self.start()

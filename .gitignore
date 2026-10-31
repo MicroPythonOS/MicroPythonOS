@@ -7,6 +7,8 @@
 .opencode
 
 # generated:
+# local scratch: logs, screenshots and camera-validation artifacts
+tmp/
 web/.preload_bundled_apps/
 
 trash/
