@@ -63,7 +63,7 @@ jobs:
 
           for run_id in $RUN_IDS; do
             echo "Downloading artifacts from run $run_id ..."
-            gh run download -R "$GITHUB_REPOSITORY" "$run_id" -D release-artifacts || \
+            gh run download -R "$GITHUB_REPOSITORY" "$run_id" --pattern "MicroPythonOS_*" -D release-artifacts || \
               echo "WARNING: Could not download artifacts from run $run_id (may be in-progress or have none)"
           done
 
@@ -74,8 +74,12 @@ jobs:
             echo "Packaging web build from $WEB_DIR"
             ZIP_NAME="MicroPythonOS_web_${GITHUB_REF_NAME}.zip"
             (cd "$WEB_DIR" && zip -qr "/tmp/$ZIP_NAME" .)
-            mv "/tmp/$ZIP_NAME" "release-artifacts/$ZIP_NAME"
+            # Remove the extracted artifact directory before moving the zip:
+            # it is named after the artifact (which already ends in .zip), so
+            # mv would otherwise put the zip inside the directory and the rm
+            # below would delete it again.
             rm -rf "$WEB_DIR"
+            mv "/tmp/$ZIP_NAME" "release-artifacts/$ZIP_NAME"
           else
             echo "No web build found (micropython.wasm not present in any downloaded artifact)"
           fi
