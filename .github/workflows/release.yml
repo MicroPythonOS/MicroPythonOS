@@ -101,7 +101,8 @@ jobs:
           files: release-artifacts/*
           fail_on_unmatched_files: true
           generate_release_notes: true
-          make_latest: false
+          # Final releases become the repo's "latest"; GitHub never does this for prereleases.
+          make_latest: true
 
       - name: Warn if any expected artifacts are missing
         run: |
