@@ -737,14 +737,18 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
                 if usb_reset_hub:
                     _usb_reset_hub(log_f=log_f, settle=usb_settle)
                 print("Hard-resetting device...")
+
+                def _serial_hard_reset():
+                    SerialBackend(port=port, reset=False).hard_reset()
+
                 try:
-                    be.hard_reset()
+                    _serial_hard_reset()
                 except Exception as e:
                     _serial_log_write(log_f, "USB", "hard_reset failed: {}".format(e).encode())
                     if usb_recovery and ("Input/output error" in str(e) or "Errno 5" in str(e) or "could not open port" in str(e)):
                         _serial_log_write(log_f, "USB", b"hard_reset I/O error -> recovery")
                         _usb_recovery(relay_port, port, log_f=log_f, settle=usb_settle)
-                        be.hard_reset()
+                        _serial_hard_reset()
         # Create backend AFTER relay reset to avoid stale serial connection
         if backend == "serial":
             port = os.environ.get("MPOS_TEST_PORT", "/dev/ttyACM0")
