@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+0.21.1
+======
+
 Frameworks:
 - FontManager: an emoji that is first looked up while LVGL is drawing, such as in a textarea placeholder, no longer hangs the whole system (the snapshot that scales it waited for the draw that asked for it); it is scaled once the frame is done and shows on the next one
 
