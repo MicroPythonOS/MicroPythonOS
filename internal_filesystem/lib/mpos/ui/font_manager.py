@@ -35,6 +35,10 @@ class FontManager:
     _unknown_emoji_codepoints_logged = {}
     _emoji_similarity_group_members_by_cp = None
     _emoji_cp_bounds = None
+    _rendering = False
+    _render_events_hooked = False
+    _deferred_scales = []
+    _deferred_scale_scheduled = False
 
     # Paste/update emoji similarity groups here as CSV with header: group_id,emoji
     _EMOJI_SIMILARITY_GROUPS_CSV = """group_id,emoji
@@ -342,6 +346,7 @@ lips,🫦
             return None
         if font is None:
             return None
+        cls._hook_render_events()
 
         # Push the same codepoint accept/exclude ranges that _get_emoji_src
         # checks down into the C-level imgfont. Once set, LVGL stops calling
@@ -711,11 +716,50 @@ lips,🫦
             return 0
 
     @classmethod
+    def _hook_render_events(cls):
+        if cls._render_events_hooked:
+            return
+        try:
+            disp = lv.display_get_default()
+            if disp is None:
+                return
+            disp.add_event_cb(cls._on_render_event, lv.EVENT.RENDER_START, None)
+            disp.add_event_cb(cls._on_render_event, lv.EVENT.RENDER_READY, None)
+            cls._render_events_hooked = True
+        except Exception as err:
+            cls._debug("render event hook failed: " + repr(err))
+
+    @classmethod
+    def _on_render_event(cls, event):
+        cls._rendering = event.get_code() == lv.EVENT.RENDER_START
+
+    @classmethod
+    def _defer_scale(cls, src, target_height):
+        key = (src, target_height)
+        if key not in cls._deferred_scales:
+            cls._deferred_scales.append(key)
+        if not cls._deferred_scale_scheduled:
+            cls._deferred_scale_scheduled = True
+            lv.async_call(cls._run_deferred_scales, None)
+
+    @classmethod
+    def _run_deferred_scales(cls, _user_data):
+        cls._deferred_scale_scheduled = False
+        pending, cls._deferred_scales = cls._deferred_scales, []
+        for src, target_height in pending:
+            cls._get_scaled_imgfont_src(src, target_height)
+        lv.screen_active().invalidate()
+        lv.layer_top().invalidate()
+
+    @classmethod
     def _get_scaled_imgfont_src(cls, src, target_height):
         key = (src, target_height)
         cached = cls._imgfont_scaled_src_cache.get(key)
         if cached is not None:
             return cached[0]
+        if cls._rendering:
+            cls._defer_scale(src, target_height)
+            return cls._get_empty_imgfont_src(target_height)
 
         try:
             src_w, src_h = cls._get_image_size(src)
