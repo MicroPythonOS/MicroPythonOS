@@ -142,6 +142,16 @@ missing:
 python3 tests/cpython_screen_camera.py
 ```
 
+The release-validation flow (`scripts/validate_ota_release.py`) uses the same
+camera checkpoints to prove a previous release can install the new one through
+the notification → OSUpdate path. Its hardware-free helper tests are:
+
+```bash
+python3 tests/cpython_validate_ota_release.py
+```
+
+See `../docs/docs/other/ota-release-validation.md` for the full procedure.
+
 ## Mock Classes
 
 Import mocks from `mpos.testing`:
