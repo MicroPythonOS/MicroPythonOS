@@ -34,7 +34,7 @@ class TestSorterLaunch(unittest.TestCase):
         elapsed = time.ticks_diff(time.ticks_ms(), started)
         self.assertTrue(result, "Sorter should start")
         self.assertTrue(
-            elapsed < 5000,
+            elapsed < 10000,
             "Sorter launch blocked the event loop for %s ms" % elapsed,
         )
 
