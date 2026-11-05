@@ -16,7 +16,7 @@ import lvgl as lv
 import mpos
 import mpos.ui
 
-from mpos import App, AppManager
+from mpos import App, AppManager, DisplayMetrics
 from mpos.ui.testing import capture_screenshot, get_screen_widget_tree, wait_for_render
 
 
@@ -106,13 +106,15 @@ class TestAppStorePlaceholderIcon(unittest.TestCase):
                 wait_for_render(2)
                 continue
             wait_for_render(5)
-            buf = capture_screenshot(width=320, height=240)
+            width = DisplayMetrics.width()
+            height = DisplayMetrics.height()
+            buf = capture_screenshot(width=width, height=height)
             white = 0xFFFF
             all_rendered = True
             for icon in icons:
                 cx = (icon["x1"] + icon["x2"]) // 2
                 cy = (icon["y1"] + icon["y2"]) // 2
-                if _pixel_rgb565(buf, 320, cx, cy) == white:
+                if _pixel_rgb565(buf, width, cx, cy) == white:
                     all_rendered = False
                     break
             if all_rendered:
@@ -125,12 +127,14 @@ class TestAppStorePlaceholderIcon(unittest.TestCase):
         icons = self._wait_for_icons_rendered()
         self.assertTrue(len(icons) >= 2, "Expected at least two app icons on screen")
 
-        buf = capture_screenshot(width=320, height=240)
+        width = DisplayMetrics.width()
+        height = DisplayMetrics.height()
+        buf = capture_screenshot(width=width, height=height)
         white = 0xFFFF
         for icon in icons:
             cx = (icon["x1"] + icon["x2"]) // 2
             cy = (icon["y1"] + icon["y2"]) // 2
-            center = _pixel_rgb565(buf, 320, cx, cy)
+            center = _pixel_rgb565(buf, width, cx, cy)
             self.assertNotEqual(center, white,
                                 "Placeholder icon center is pure white")
 
@@ -139,11 +143,13 @@ class TestAppStorePlaceholderIcon(unittest.TestCase):
         icons = self._wait_for_icons_rendered()
         self.assertTrue(len(icons) >= 2, "Expected at least two app icons on screen")
 
-        buf = capture_screenshot(width=320, height=240)
+        width = DisplayMetrics.width()
+        height = DisplayMetrics.height()
+        buf = capture_screenshot(width=width, height=height)
         values = []
         for icon in icons[:2]:
             cx = (icon["x1"] + icon["x2"]) // 2
             cy = (icon["y1"] + icon["y2"]) // 2
-            values.append(_pixel_rgb565(buf, 320, cx, cy))
+            values.append(_pixel_rgb565(buf, width, cx, cy))
         self.assertNotEqual(values[0], values[1],
                             "Two different app names produced identical placeholder pixels")
