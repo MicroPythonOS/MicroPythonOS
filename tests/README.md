@@ -152,6 +152,21 @@ python3 tests/cpython_validate_ota_release.py
 
 See `../docs/docs/other/ota-release-validation.md` for the full procedure.
 
+## First-use and render-time paths
+
+Some UI code only runs the first time a feature is used, and some callbacks run
+*while LVGL is drawing*. Warm-cache tests miss both:
+
+- Clear the FontManager caches (`_composed_font_cache`, `_emoji_*`,
+  `_imgfont_*`) and render emoji in a textarea placeholder, a keyboard field and
+  a label. `tests/test_graphical_emoji_font_while_drawing.py` covers the
+  placeholder case.
+- Do not call `lv.snapshot_take*` from a draw callback (imgfont/style/event): it
+  waits for the draw that invoked it and hangs the system without a traceback.
+  Defer it with `lv.async_call`, as `FontManager` does.
+- A hang is a bug: rerun with `--timeout`, capture the last serial output, and
+  add a regression test.
+
 ## Mock Classes
 
 Import mocks from `mpos.testing`:
