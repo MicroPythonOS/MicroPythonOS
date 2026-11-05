@@ -1,6 +1,20 @@
 Future release (next version)
 =====
 
+0.21.2
+======
+
+Builtin Apps:
+- Emoji Sort: generating a level no longer freezes the UI or the USB-CDC console for ~23 s on ESP32 (#347)
+
+Testing:
+- Add a hardware OTA release-validation gate (webcam-verified) and make it a required release step; includes a local updates-metadata server and make targets
+- Cover cold-cache emoji paths and document render-time rules
+- AppStore placeholder icon test now scales to the actual display metrics
+
+Build:
+- Fail before building when a symlink under internal_filesystem/lib dangles, instead of silently shipping firmware without nostr/camera modules (#149)
+
 0.21.1
 ======
 
