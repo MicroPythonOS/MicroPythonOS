@@ -35,3 +35,11 @@ build-mpos-unix-coverage: ## Build MicroPythonOS for unix with sys.settrace cove
 .PHONY: usb-host-tests
 usb-host-tests: ## Host unit tests for the USB HID C transport (no hardware)
 	$(MAKE) -C c_mpos/usb/tests test
+
+.PHONY: ota-validation
+ota-validation: ## Run the hardware OTA release gate (ARGS='--port ... --camera ...')
+	./scripts/validate_ota_release.py $(ARGS)
+
+.PHONY: ota-validation-server
+ota-validation-server: ## Serve local osupdate metadata for the OTA gate (ARGS='--version ... --hardware-id ...')
+	./scripts/ota_validation_server.py $(ARGS)
