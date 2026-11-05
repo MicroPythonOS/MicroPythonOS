@@ -4,6 +4,7 @@ Test that Sorter launches and exits without errors.
 Usage:
 """
 
+import time
 import unittest
 
 from mpos import AppManager, wait_for_render
@@ -27,11 +28,17 @@ class TestSorterLaunch(unittest.TestCase):
             pass
 
     def test_app_launches(self):
-        """Sorter should render the level label after launch."""
+        """Sorter should return promptly and render the level label."""
+        started = time.ticks_ms()
         result = AppManager.start_app("com.micropythonos.sorter")
+        elapsed = time.ticks_diff(time.ticks_ms(), started)
         self.assertTrue(result, "Sorter should start")
+        self.assertTrue(
+            elapsed < 5000,
+            "Sorter launch blocked the event loop for %s ms" % elapsed,
+        )
 
-        self.assertTrue(wait_for_text("Level: 1", timeout=15), "Level label should appear")
+        self.assertTrue(wait_for_text("Level: 1", timeout=60), "Level label should appear")
 
 
 if __name__ == "__main__":

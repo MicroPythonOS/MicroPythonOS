@@ -123,13 +123,20 @@ def _shuffle_seeded(lst, rand_int):
         lst[i], lst[j] = lst[j], lst[i]
 
 
-def _solve_path(tubes, capacity, max_states):
+_YIELD_EVERY_STATES = 128
+
+
+def _solve_path_iter(tubes, capacity, max_states, out=None, yield_every=_YIELD_EVERY_STATES):
+    """Yield periodically while searching; append the path to *out*."""
     if _is_solved(tubes):
-        return []
+        if out is not None:
+            out.append([])
+        return
     start = tuple(tuple(t) for t in tubes)
     parent = {start: (None, None, None)}
     queue = [start]
     idx = 0
+    steps = 0
     while idx < len(queue) and len(parent) < max_states:
         state = queue[idx]
         idx += 1
@@ -146,6 +153,9 @@ def _solve_path(tubes, capacity, max_states):
                     new_state = tuple(tuple(t) for t in new_tubes)
                     if new_state not in parent:
                         parent[new_state] = (state, i, j)
+                        steps += 1
+                        if steps % yield_every == 0:
+                            yield None
                         if _is_solved(new_tubes):
                             path = [(i, j)]
                             cur = state
@@ -154,22 +164,31 @@ def _solve_path(tubes, capacity, max_states):
                                 path.append((s, t))
                                 cur = parent[cur][0]
                             path.reverse()
-                            return path
+                            if out is not None:
+                                out.append(path)
+                            return
                         queue.append(new_state)
-    return []
+    if out is not None:
+        out.append([])
 
 
-def _generate_level(filled, capacity, extra, rand_int, max_retries=30, progress_cb=None):
+def _solve_path(tubes, capacity, max_states):
+    out = []
+    for _ in _solve_path_iter(tubes, capacity, max_states, out=out):
+        pass
+    return out[0]
+
+
+def _generate_level_iter(filled, capacity, extra, rand_int, max_retries=30, out=None):
     balls = []
     for i in range(filled):
         balls.extend([i] * capacity)
 
-    num_tubes = filled + extra
     max_states = filled * 5000
 
+    tubes = []
     for attempt in range(1, max_retries + 1):
-        if progress_cb:
-            progress_cb(attempt)
+        yield attempt
         _shuffle_seeded(balls, rand_int)
         tubes = []
         pos = 0
@@ -180,11 +199,27 @@ def _generate_level(filled, capacity, extra, rand_int, max_retries=30, progress_
             tubes.append([])
         if _is_solved(tubes):
             continue
-        solution = _solve_path(tubes, capacity, max_states)
+        solution_out = []
+        for _ in _solve_path_iter(tubes, capacity, max_states, out=solution_out):
+            yield None
+        solution = solution_out[0]
         if solution:
-            return tubes, solution
+            if out is not None:
+                out.append((tubes, solution))
+            return
 
-    return tubes, []
+    if out is not None:
+        out.append((tubes, []))
+
+
+def _generate_level(filled, capacity, extra, rand_int, max_retries=30, progress_cb=None):
+    out = []
+    for tick in _generate_level_iter(
+        filled, capacity, extra, rand_int, max_retries=max_retries, out=out
+    ):
+        if tick is not None and progress_cb:
+            progress_cb(tick)
+    return out[0]
 
 
 def _level_params(level):
@@ -222,6 +257,11 @@ class Sorter(Activity):
         self.emoji_order = []
         self.shuffle_moves = []
         self._anim = None
+        self._generation_timer = None
+        self._generation_iter = None
+        self._generation_overlay = None
+        self._generation_label = None
+        self._generation_result = []
         self.prefs = SharedPreferences(self.appFullName)
         self.highscore = self.prefs.get_int("highscore", 0)
         self.sound_effects = self._load_sound_effects()
@@ -246,6 +286,8 @@ class Sorter(Activity):
             s = (s * 31 + val) & 0x7FFFFFFF
         rand = _make_lcg(s + self.level * 10007)
 
+        self._cancel_generation()
+
         overlay = lv.obj(lv.layer_top())
         overlay.set_size(lv.pct(100), lv.pct(100))
         overlay.set_style_bg_opa(lv.OPA._20, 0)
@@ -254,23 +296,73 @@ class Sorter(Activity):
         label.set_text("Generating level...")
         label.center()
         label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
-        lv.timer_handler()
 
-        def on_attempt(n):
-            label.set_text(f"Generating level, attempt {n}...")
-            lv.timer_handler()
-
-        self.tubes, self.shuffle_moves = _generate_level(
-            filled, capacity, extra, rand, progress_cb=on_attempt
+        self._generation_overlay = overlay
+        self._generation_label = label
+        self._generation_result = []
+        self._generation_iter = _generate_level_iter(
+            filled, capacity, extra, rand, out=self._generation_result
         )
+        self._generation_timer = lv.timer_create(self._generation_tick, 1, None)
+
+    def _generation_tick(self, timer):
+        if self._generation_iter is None:
+            self._finish_generation()
+            return
+        try:
+            attempt = next(self._generation_iter)
+        except StopIteration:
+            self._finish_generation()
+            return
+        except Exception:
+            self._cancel_generation()
+            return
+        if attempt is not None and self._generation_label is not None:
+            self._generation_label.set_text(f"Generating level, attempt {attempt}...")
+
+    def _finish_generation(self):
+        timer = self._generation_timer
+        self._generation_timer = None
+        if timer is not None:
+            try:
+                timer.delete()
+            except Exception:
+                pass
+        self._generation_iter = None
+        overlay = self._generation_overlay
+        self._generation_overlay = None
+        self._generation_label = None
+        result = self._generation_result[0] if self._generation_result else None
+        self._generation_result = []
+        if result is None:
+            if overlay is not None:
+                overlay.delete()
+            return
+        self.tubes, self.shuffle_moves = result
         self.initial_tubes = [list(t) for t in self.tubes]
+        if overlay is not None:
+            overlay.delete()
+        self.build_board()
+        self.refresh_labels()
 
-        if not self.shuffle_moves:
-            label.set_text("Could not generate a solvable level!")
-            lv.timer_handler()
-            time.sleep(2)
-
-        overlay.delete()
+    def _cancel_generation(self):
+        timer = self._generation_timer
+        self._generation_timer = None
+        if timer is not None:
+            try:
+                timer.delete()
+            except Exception:
+                pass
+        self._generation_iter = None
+        self._generation_result = []
+        overlay = self._generation_overlay
+        self._generation_overlay = None
+        self._generation_label = None
+        if overlay is not None:
+            try:
+                overlay.delete()
+            except Exception:
+                pass
 
     def create_ui(self):
         self.score_best_label = lv.label(self.screen)
@@ -314,6 +406,9 @@ class Sorter(Activity):
     def build_board(self):
         if self.container:
             self.container.delete()
+            self.container = None
+        if not self.tubes:
+            return
 
         self.container = lv.obj(self.screen)
         self.container.set_size(DisplayMetrics.width(), DisplayMetrics.pct_of_height(75))
@@ -459,13 +554,9 @@ class Sorter(Activity):
         saved_score = prefs.get_int("autosave_score", 0)
         if saved_level == 0 and saved_score == 0:
             self._new_game()
-            self.build_board()
-            self.refresh_labels()
             return
         if saved_level == 1 and saved_score == 0:
             self._new_game()
-            self.build_board()
-            self.refresh_labels()
             return
 
         mbox = lv.msgbox()
@@ -509,14 +600,10 @@ class Sorter(Activity):
         self.level = saved_level
         self.score = saved_score
         self._start_level()
-        self.build_board()
-        self.refresh_labels()
 
     def _on_autoload_no(self, event):
         self._close_popup()
         self._new_game()
-        self.build_board()
-        self.refresh_labels()
 
     def on_highscore_tap(self, event):
         self._show_confirm_popup("Reset highscore?", self._on_reset_highscore_yes, self._on_reset_highscore_no)
@@ -671,8 +758,6 @@ class Sorter(Activity):
         self._autosave()
         self._last_ts = time.ticks_ms()
         self._start_level()
-        self.build_board()
-        self.refresh_labels()
 
     def on_refresh(self, event):
         self._restart_level()
@@ -708,10 +793,9 @@ class Sorter(Activity):
         self._save_highscore()
         self._last_ts = time.ticks_ms()
         self._new_game()
-        self.build_board()
-        self.refresh_labels()
 
     def onDestroy(self, screen):
+        self._cancel_generation()
         self._autosave()
         self._save_highscore()
         self._close_popup()
