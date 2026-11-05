@@ -128,7 +128,26 @@ if [ "$target" == "clean" ]; then
 	exit 0
 fi
 
+check_dangling_symlinks() {
+	# A dangling symlink under internal_filesystem is silently skipped by the
+	# freezer, which produces a firmware that is missing modules (e.g. nostr)
+	# without failing the build. Fail fast and tell the user how to fix it.
+	local dangling
+	dangling=$(find "$codebasedir/internal_filesystem" -type l ! -exec test -e {} \; -print)
+	if [ -n "$dangling" ]; then
+		echo "FATAL: dangling symlink(s) in internal_filesystem:" >&2
+		while IFS= read -r link; do
+			echo "  ${link#$codebasedir/} -> $(readlink "$link")" >&2
+		done <<< "$dangling"
+		echo "Initialize the git submodules before building:" >&2
+		echo "    git submodule update --init --recursive" >&2
+		exit 1
+	fi
+}
+
 # This assumes all the git submodules have been checked out recursively
+check_dangling_symlinks
+
 
 echo "Fetch tags for lib/SDL, otherwise lvgl_micropython's make.py script can't checkout a specific tag..."
 pushd "$codebasedir"/lvgl_micropython/lib/SDL
