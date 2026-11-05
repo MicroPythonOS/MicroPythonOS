@@ -43,6 +43,13 @@ To keep it easy to manage/sync with upsteam lvgl_micropython, we keep the change
 `--no-usb-recovery` — disable automatic USB recovery on I/O error.  
 `--timeout <s>` — per-test timeout. `--tests-dir <dir>` — add dir to `sys.path` for test helpers.
 
+### First-use and render-time paths
+
+- Test **cold caches**, not just warm ones. Clear the FontManager caches (`_composed_font_cache`, `_emoji_*`, `_imgfont_*`) and render emoji in a textarea placeholder, a keyboard field and a label. A warm-cache test never exercises the imgfont callback path.
+- Never call `lv.snapshot_take*` (or anything that dispatches draws) from inside a draw callback: an imgfont/style callback runs while LVGL is drawing, and the snapshot waits for the draw that invoked it — the whole system hangs with no traceback. Defer it with `lv.async_call` (see `FontManager._defer_scale`).
+- A hang is a bug. When an on-device test stops responding with no traceback, rerun with `--timeout`, capture the last serial output, and add a regression test instead of just retrying.
+- Before releasing a FontManager/LVGL-drawing change, run `tests/test_graphical_emoji_font_while_drawing.py`, `tests/test_graphical_keyboard_emoji_font.py` and `tests/test_graphical_sorter_emoji_persistence.py` on at least one board.
+
 ### Deploying lib/ changes to device
 
 Frozen modules in the firmware shadow filesystem `.py` files even though `sys.path = ['lib', '', '.frozen']`. To test a modified framework file at `internal_filesystem/lib/mpos/ui/*.py` on device:
@@ -227,6 +234,7 @@ Critical gotchas:
 - Event callbacks: 3 args, `def method(self, event=None)` for dual use.
 - Use `remove_flag()`/`remove_state()` not `clear_flag()`/`clear_state()`.
 - `lv.OPA` values at steps of 10 only. No `_5` — use nearest step or raw int.
+- Never take a snapshot from inside a draw callback: an imgfont/style callback runs while LVGL draws, and `lv.snapshot_take_to_buf` waits for that draw forever (silent whole-system hang). Defer it with `lv.async_call` (see `FontManager._defer_scale`).
 - Make UI uniform: buttons in same flex row = same height.
 
 ### MicroPython @native / @viper
