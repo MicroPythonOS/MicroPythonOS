@@ -40,10 +40,15 @@ def _serial_port_from_argv():
     return os.environ.get("MPOS_TEST_PORT")
 
 
+# Strip --serial before unittest parses argv, which happens after this module
+# is imported but before setUp() runs.
+_SERIAL_PORT = _serial_port_from_argv()
+
+
 class TestConsoleProbeDoesNotStallConsole(unittest.TestCase):
 
     def setUp(self):
-        port = _serial_port_from_argv()
+        port = _SERIAL_PORT
         if port:
             self.mpos = MPOSController(backend="serial", port=port)
             self.answer_timeout = DEVICE_ANSWER_TIMEOUT_S
