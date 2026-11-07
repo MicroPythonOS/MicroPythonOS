@@ -319,7 +319,7 @@ def wait_for_render(iterations=10):
         time.sleep(0.01)  # Small delay to let SDL/OS events process
 
 
-def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565, all_layers=False):
+def capture_screenshot(filepath=None, width=None, height=None, color_format=lv.COLOR_FORMAT.RGB565, all_layers=False):
     """
     Capture screenshot of current screen using LVGL snapshot.
 
@@ -335,8 +335,8 @@ def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COL
 
     Args:
         filepath: Path where to save the raw screenshot data
-        width: Screen width in pixels (default: 320)
-        height: Screen height in pixels (default: 240)
+        width: Screen width in pixels (default: the active screen's width)
+        height: Screen height in pixels (default: the active screen's height)
         color_format: LVGL color format (default: RGB565 for memory efficiency)
         all_layers: If True, composite lv.layer_top() widgets onto the screenshot.
                     This is slower but captures overlays like notifications.
@@ -354,6 +354,12 @@ def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COL
     """
     if filepath:
         if __debug__: logger.debug("capture_screenshot writing to %s", filepath)
+
+    screen = lv.screen_active()
+    if width is None:
+        width = screen.get_width()
+    if height is None:
+        height = screen.get_height()
 
     # Calculate buffer size based on color format
     if color_format == lv.COLOR_FORMAT.RGB565:
