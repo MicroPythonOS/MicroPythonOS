@@ -64,7 +64,7 @@ jobs:
           for run_id in $RUN_IDS; do
             echo "Downloading artifacts from run $run_id ..."
             gh run download -R "$GITHUB_REPOSITORY" "$run_id" --pattern "MicroPythonOS_*" -D release-artifacts || \
-              echo "WARNING: Could not download artifacts from run $run_id (may be in-progress or have none)"
+              echo "::warning::Could not download artifacts from run $run_id (its job may still be queued, may have been cancelled, or may have failed)"
           done
 
       - name: Package web artifact as zip
@@ -93,18 +93,7 @@ jobs:
           mv flat release-artifacts
           ls -la release-artifacts/
 
-      - name: Create draft release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          draft: true
-          name: ${{ github.ref_name }}
-          files: release-artifacts/*
-          fail_on_unmatched_files: true
-          generate_release_notes: true
-          # Final releases become the repo's "latest"; GitHub never does this for prereleases.
-          make_latest: true
-
-      - name: Warn if any expected artifacts are missing
+      - name: Fail if any expected artifacts are missing
         run: |
           EXPECTED=(
             "MicroPythonOS_esp32_*.bin"
@@ -131,9 +120,32 @@ jobs:
           done
 
           if [ -n "$MISSING" ]; then
-            WARNING="⚠️  WARNING: Missing artifacts: $MISSING. Add them manually."
-            echo "$WARNING"
-            EXISTING=$(gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --json body -q '.body')
-            printf "%s\n\n%s" "$WARNING" "$EXISTING" | gh release edit "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -F -
-            echo "Warning prepended to release body."
+            echo "::error::Missing release artifacts:$MISSING"
+            echo "The CI runs for $COMMIT_SHA did not produce every artifact this release needs, so no draft release was created."
+            echo "A job that is still queued, was cancelled, or failed leaves its artifact missing."
+            echo "Build runs for this commit:"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$COMMIT_SHA&per_page=100" \
+              --jq '.workflow_runs[]
+                    | select(.name == "Build LVGL MicroPython for Linux x64, esp32 and esp32s3"
+                          or .name == "Build LVGL MicroPython on Linux for arm64"
+                          or .name == "Build LVGL MicroPython on Linux for special boards like esp32-small, unphone,..."
+                          or .name == "Build LVGL MicroPython for macOS arm64 (M1)"
+                          or .name == "Build LVGL MicroPython for macOS Intel"
+                          or .name == "Build web target and deploy to GitHub Pages")
+                    | "  \(.name): \(.status)/\(.conclusion)"'
+            echo "Wait for the build runs to pass, then re-run this release workflow:"
+            echo "  gh run rerun --repo $GITHUB_REPOSITORY <release-run-id>"
+            exit 1
           fi
+          echo "All expected artifacts are present."
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          draft: true
+          name: ${{ github.ref_name }}
+          files: release-artifacts/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          # Final releases become the repo's "latest"; GitHub never does this for prereleases.
+          make_latest: true
