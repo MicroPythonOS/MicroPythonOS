@@ -25,6 +25,89 @@ CHAR_CTRL_C = const(3)
 CHAR_CTRL_D = const(4)
 CHAR_CTRL_E = const(5)
 
+_CONSOLE_POLL_INTERVAL_MS = const(10)
+_CONSOLE_PARTIAL_TIMEOUT_MS = const(100)
+
+_USE_POLL_STDIN = True
+
+
+def _utf8_len(b):
+    if b < 0x80:
+        return 1
+    if 0xC2 <= b <= 0xDF:
+        return 2
+    if 0xE0 <= b <= 0xEF:
+        return 3
+    if 0xF0 <= b <= 0xF4:
+        return 4
+    return 0
+
+
+class _StdinReader:
+    POLL_INTERVAL_MS = _CONSOLE_POLL_INTERVAL_MS
+    PARTIAL_TIMEOUT_MS = _CONSOLE_PARTIAL_TIMEOUT_MS
+
+    def __init__(self, poll=None, stream=None):
+        if poll is None:
+            import select
+
+            poll = select.poll()
+            poll.register(sys.stdin, select.POLLIN)
+        self._poll = poll
+        self._stream = stream if stream is not None else sys.stdin.buffer
+        self._pending = b""
+        self._pending_at = 0
+
+    def _readable(self):
+        return bool(self._poll.poll(0))
+
+    async def read_char(self):
+        while True:
+            if self._pending:
+                want = _utf8_len(self._pending[0])
+                if want == 0:
+                    self._pending = b""
+                    return None
+                if len(self._pending) < want:
+                    if time.ticks_diff(time.ticks_ms(), self._pending_at) > self.PARTIAL_TIMEOUT_MS:
+                        self._pending = b""
+                        return None
+                else:
+                    try:
+                        ch = self._pending.decode()
+                    except UnicodeError:
+                        self._pending = b""
+                        return None
+                    self._pending = b""
+                    if ch == "\r":
+                        ch = "\n"
+                    return ch
+            if not self._readable():
+                await asyncio.sleep_ms(self.POLL_INTERVAL_MS)
+                continue
+            data = self._stream.read(1)
+            if not data:
+                return ""
+            self._pending = self._pending + data
+            self._pending_at = time.ticks_ms()
+
+
+class _StreamCharReader:
+    def __init__(self, stream):
+        self._stream = stream
+
+    async def read_char(self):
+        return await self._stream.read(1)
+
+
+def _new_console_reader(fallback_stream):
+    if _USE_POLL_STDIN:
+        try:
+            return _StdinReader()
+        except Exception:
+            pass
+    return _StreamCharReader(fallback_stream)
+
 
 async def execute(code, g, s):
     if not code.strip():
@@ -50,7 +133,8 @@ __exec_task = asyncio.create_task(__code())
 
             async def kbd_intr_task(exec_task, s):
                 while True:
-                    if ord(await s.read(1)) == CHAR_CTRL_C:
+                    b = await s.read_char()
+                    if b and ord(b) == CHAR_CTRL_C:
                         exec_task.cancel()
                         return
 
@@ -100,6 +184,7 @@ async def task(g=None, prompt="--> "):
     try:
         micropython.kbd_intr(-1)
         s = asyncio.StreamReader(sys.stdin)
+        reader = _new_console_reader(s)
         # clear = True
         hist = [None] * _HISTORY_LIMIT
         hist_i = 0  # Index of most recent entry.
@@ -113,7 +198,9 @@ async def task(g=None, prompt="--> "):
             paste = False
             curs = 0  # cursor offset from end of cmd buffer
             while True:
-                b = await s.read(1)
+                b = await reader.read_char()
+                if b is None:
+                    continue
                 # MPOS: on EOF (host disconnected or /dev/null), keep the task alive and
                 # poll for reconnection without re-printing the prompt (differs from upstream).
                 if not b:  # Handle EOF/empty read
@@ -147,7 +234,7 @@ async def task(g=None, prompt="--> "):
                             hist_n = min(_HISTORY_LIMIT - 1, hist_n + 1)
                             hist_i = (hist_i + 1) % _HISTORY_LIMIT
 
-                            result = await execute(cmd, g, s)
+                            result = await execute(cmd, g, reader)
                             if result is not None:
                                 sys.stdout.write(repr(result))
                                 sys.stdout.write("\n")
@@ -177,7 +264,7 @@ async def task(g=None, prompt="--> "):
                         break
                     elif c == CHAR_CTRL_D:
                         if paste:
-                            result = await execute(cmd, g, s)
+                            result = await execute(cmd, g, reader)
                             if result is not None:
                                 sys.stdout.write(repr(result))
                                 sys.stdout.write("\n")
@@ -201,7 +288,9 @@ async def task(g=None, prompt="--> "):
                         paste = True
                     elif c == 0x1B:
                         # Start of escape sequence.
-                        key = await s.read(2)
+                        key = await reader.read_char()
+                        key2 = await reader.read_char()
+                        key = (key or "") + (key2 or "")
                         if key in ("[A", "[B"):  # up, down
                             # Stash the current command.
                             hist[(hist_i - hist_b) % _HISTORY_LIMIT] = cmd

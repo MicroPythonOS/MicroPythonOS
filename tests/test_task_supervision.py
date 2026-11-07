@@ -205,9 +205,16 @@ class TestAioreplEofResilience(unittest.TestCase):
 
     def setUp(self):
         self._orig_stream_reader = asyncio.StreamReader
+        import aiorepl
+
+        self._orig_use_poll_stdin = aiorepl._USE_POLL_STDIN
+        aiorepl._USE_POLL_STDIN = False
 
     def tearDown(self):
         asyncio.StreamReader = self._orig_stream_reader
+        import aiorepl
+
+        aiorepl._USE_POLL_STDIN = self._orig_use_poll_stdin
 
     def test_ctrl_d_does_not_kill_the_asyncio_loop(self):
         """Ctrl-D outside the raw-REPL protocol must not tear down asyncio.
