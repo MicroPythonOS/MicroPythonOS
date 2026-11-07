@@ -30,7 +30,7 @@ on:
 
 jobs:
   build-arm64:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 120
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
@@ -95,7 +95,7 @@ jobs:
 
   stress-test-arm64:
     needs: build-arm64
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 360
 
     steps:

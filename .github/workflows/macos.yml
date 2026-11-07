@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-14 # 15 was giving a blank screen for some MacOS users
+    runs-on: macos-15 # macos-14 is retired; 15 is the oldest supported arm64 image (15 previously gave a blank screen for some MacOS users)
     timeout-minutes: 120
     outputs:
       os-version: ${{ steps.version.outputs.OS_VERSION }}
@@ -93,7 +93,7 @@ jobs:
 
   test:
     needs: build
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
 
     steps:
