@@ -22,15 +22,19 @@ jobs:
       COMMIT_SHA: ${{ github.sha }}
 
     steps:
-      - name: Skip if manual release already exists
+      - name: Check for an existing release
+        id: existing_release
         run: |
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
             echo "Release already exists for $GITHUB_REF_NAME — manual release detected, skipping auto-draft."
-            exit 0
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No existing release for $GITHUB_REF_NAME, proceeding."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-          echo "No existing release for $GITHUB_REF_NAME, proceeding."
 
       - name: Download artifacts from CI runs on this commit
+        if: steps.existing_release.outputs.exists != 'true'
         run: |
           RESPONSE=$(curl -sS -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
@@ -68,6 +72,7 @@ jobs:
           done
 
       - name: Package web artifact as zip
+        if: steps.existing_release.outputs.exists != 'true'
         run: |
           WEB_DIR=$(find release-artifacts -name 'micropython.wasm' -print -quit | xargs dirname 2>/dev/null)
           if [ -n "$WEB_DIR" ]; then
@@ -85,6 +90,7 @@ jobs:
           fi
 
       - name: Flatten artifact directories
+        if: steps.existing_release.outputs.exists != 'true'
         run: |
           mkdir -p flat
           find release-artifacts -type f -exec mv {} flat/ \;
@@ -94,6 +100,7 @@ jobs:
           ls -la release-artifacts/
 
       - name: Fail if any expected artifacts are missing
+        if: steps.existing_release.outputs.exists != 'true'
         run: |
           EXPECTED=(
             "MicroPythonOS_esp32_*.bin"
@@ -140,6 +147,7 @@ jobs:
           echo "All expected artifacts are present."
 
       - name: Create draft release
+        if: steps.existing_release.outputs.exists != 'true'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           draft: true
