@@ -9,8 +9,9 @@ Usage:
 import os
 import sys
 import unittest
+import lvgl as lv
 import mpos.ui
-from mpos import AppManager, DeviceInfo, DisplayMetrics, capture_screenshot, wait_for_text
+from mpos import AppManager, DeviceInfo, DisplayMetrics, capture_screenshot, wait_for_render, wait_for_text
 
 
 class TestScreenshotCapture(unittest.TestCase):
@@ -81,3 +82,26 @@ class TestScreenshotCapture(unittest.TestCase):
                 pass
 
         print("\n=== About app screenshot test completed successfully ===")
+
+
+class TestScreenshotDefaultSize(unittest.TestCase):
+    """capture_screenshot() must size its buffer from the screen it captures."""
+
+    def setUp(self):
+        self.disp = lv.display_get_default()
+        self.orig_size = (self.disp.get_horizontal_resolution(),
+                          self.disp.get_vertical_resolution())
+
+    def tearDown(self):
+        self.disp.set_resolution(self.orig_size[0], self.orig_size[1])
+        wait_for_render(5)
+
+    def test_default_size_follows_active_screen(self):
+        """A screen that is not 320x240 still yields a full-size capture."""
+        self.disp.set_resolution(400, 300)
+        wait_for_render(2)
+
+        buffer = capture_screenshot()
+
+        self.assertEqual(len(buffer), 400 * 300 * 2,
+                         "capture_screenshot() did not use the active screen size")
