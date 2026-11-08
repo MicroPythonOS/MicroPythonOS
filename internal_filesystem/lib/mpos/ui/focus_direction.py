@@ -355,6 +355,11 @@ def move_focus_direction(angle):
         logger.warning("move_focus_direction: could not focus on anything, returning...")
         return
     if isinstance(current_focused, lv.keyboard):
+        # The keyboard is focused programmatically when it is shown, so LVGL
+        # never set FOCUS_KEY on it and the theme did not highlight the
+        # selected key. The user is navigating with direction keys now, so
+        # show it (issue #274).
+        current_focused.add_state(lv.STATE.FOCUS_KEY)
         if __debug__: logger.debug("focus is on a keyboard, which has its own move_focus_direction: NOT moving")
         return
     if isinstance(current_focused, lv.dropdown) and current_focused.is_open():
