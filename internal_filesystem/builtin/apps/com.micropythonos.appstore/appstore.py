@@ -143,6 +143,11 @@ class AppStore(Activity):
             self.refresh_list()
         elif self._data_loaded and hasattr(self, "apps_list") and self.apps_list:
             self._stop_all_timers()
+            if self._sync_installed_state():
+                # An install or uninstall happened on the detail screen while
+                # this list was paused: rebuild it with the new state.
+                self.create_apps_list()
+                return
             if self._icon_pipeline != "none" and any(getattr(app, "image_icon_widget", None) is None for app in self.apps):
                 # Rows were built while icons were disabled and have no icon
                 # slots: rebuild once with slots (the rebuild restarts the
@@ -155,6 +160,25 @@ class AppStore(Activity):
                 self.create_apps_list()
                 return
             self._start_icon_timer()
+
+    def _sync_installed_state(self):
+        """Refresh the cached installed state after the detail screen changed it.
+
+        AppManager.uninstall_app() and download_and_install_package() both call
+        AppManager.refresh_apps(), which replaces the cache with new App
+        objects. The objects this list holds keep their old installed_path, so
+        an uninstalled app would stay in the Installed list (and an install
+        would not show up there). Returns True if anything changed.
+        """
+        changed = False
+        by_fullname = {app.fullname: app for app in AppManager.get_app_list()}
+        for app in self.apps:
+            current = by_fullname.get(app.fullname)
+            installed_path = current.installed_path if current is not None else None
+            if app.installed_path != installed_path:
+                app.installed_path = installed_path
+                changed = True
+        return changed
 
     def onPause(self, screen):
         self._stop_all_timers()
