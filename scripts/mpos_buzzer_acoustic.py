@@ -560,6 +560,33 @@ def relay_cycle(port, off_seconds=3.0, wait_seconds=60.0, settle_seconds=8.0, de
     return True
 
 
+def open_controller(port, relayport=None, attempts=3):
+    """Open the serial controller, power-cycling the badge between attempts."""
+    controller = _controller(port)
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            if controller.start():
+                return controller
+            last_error = "controller.start() returned false"
+        except Exception as exc:
+            last_error = exc
+        try:
+            controller.stop()
+        except Exception:
+            pass
+        if attempt < attempts - 1:
+            if relayport:
+                relay_cycle(relayport, device_port=port)
+            else:
+                time.sleep(3.0)
+        controller = _controller(port)
+    raise BuzzerError(
+        "could not open %s: %s (is the badge connected? try --relayport /dev/ttyUSB0)"
+        % (port, last_error)
+    )
+
+
 def _play_notes(controller, rtttl, volume):
     code = (
         "from mpos import AudioManager\n"
@@ -612,30 +639,7 @@ def verify(port=DEFAULT_PORT, device=None, notes=DEFAULT_NOTES, volume=DEFAULT_V
     os.makedirs(out_dir, exist_ok=True)
     wav_path = os.path.join(out_dir, "%s-%s.wav" % (label, time.strftime("%Y%m%d-%H%M%S")))
     if owns_controller:
-        controller = _controller(port)
-        last_error = None
-        for attempt in range(3):
-            try:
-                if controller.start():
-                    break
-                last_error = "controller.start() returned false"
-            except Exception as exc:
-                last_error = exc
-            try:
-                controller.stop()
-            except Exception:
-                pass
-            if attempt < 2:
-                if relayport:
-                    relay_cycle(relayport, device_port=port)
-                else:
-                    time.sleep(3.0)
-            controller = _controller(port)
-        else:
-            raise BuzzerError(
-                "could not open %s: %s (is the badge connected? try --relayport /dev/ttyUSB0)"
-                % (port, last_error)
-            )
+        controller = open_controller(port, relayport)
     try:
         time.sleep(max(0.0, float(settle)))
         process = start_recording(capture, wav_path, sample_rate)

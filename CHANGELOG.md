@@ -6,6 +6,7 @@ Frameworks:
 
 Testing:
 - buzzer: acoustic verification from a host USB microphone — the badge plays a known note sequence and `scripts/mpos_buzzer_acoustic.py` segments the recording and folds each strongest spectral peak to the expected harmonic, so low notes work despite the piezo resonance; manual entry point `tests/manual_test_buzzer.py`, synthetic tests `tests/cpython_buzzer_acoustic.py`, and `MPOSController.buzzer_acoustic_measure/verify()`.
+- dac: acoustic verification of the headphone/DAC jack through a host capture input — `scripts/mpos_dac_acoustic.py` renders a tone WAV on the badge, plays it through an i2s output and checks the recording (optionally `--file` to score an existing audio file); manual entry point `tests/manual_test_dac.py`, synthetic tests `tests/cpython_dac_acoustic.py`, and `MPOSController.dac_acoustic_measure/verify()`.
 
 0.21.2
 ======

@@ -1791,6 +1791,44 @@ class MPOSController:
         )
         return bool(measured.get("ok")), measured
 
+    @staticmethod
+    def _dac_acoustic():
+        try:
+            from . import mpos_dac_acoustic
+        except ImportError:
+            import mpos_dac_acoustic
+        return mpos_dac_acoustic
+
+    def dac_acoustic_measure(self, notes=None, file=None, volume=100, device=None,
+                             out_dir=None, label="dac", output=None, thresholds=None,
+                             capture_gain=None):
+        """Play tones (or *file*) on the badge DAC and score a host recording.
+
+        Host-only: the badge headphone jack must be wired to a capture input,
+        and the host needs ``arecord`` and numpy (see
+        ``scripts/mpos_dac_acoustic.py``). Returns a metrics dict with one
+        entry per detected segment and ``ok``/``failures``.
+        """
+        dac = self._dac_acoustic()
+        if notes is None and file is None:
+            notes = dac.DEFAULT_NOTES
+        return dac.verify(
+            controller=self, notes=notes, file=file, volume=volume, device=device,
+            out_dir=out_dir or dac.DEFAULT_OUT_DIR, label=label,
+            output=output or dac.DEFAULT_OUTPUT, thresholds=thresholds,
+            capture_gain=capture_gain,
+        )
+
+    def dac_acoustic_verify(self, notes=None, file=None, volume=100, device=None,
+                            out_dir=None, label="dac", output=None, thresholds=None,
+                            capture_gain=None):
+        """Like dac_acoustic_measure but returns ``(ok, metrics)``."""
+        measured = self.dac_acoustic_measure(
+            notes=notes, file=file, volume=volume, device=device, out_dir=out_dir,
+            label=label, output=output, thresholds=thresholds, capture_gain=capture_gain,
+        )
+        return bool(measured.get("ok")), measured
+
     def check_free_space(self):
         return self._backend.check_free_space()
 
