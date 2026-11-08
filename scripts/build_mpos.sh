@@ -428,7 +428,11 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		# Espressif's P4 display examples: the MIPI-DSI panel is scanned out
 		# of PSRAM continuously (480x800 RGB565 at 60 Hz is 46 MB/s) and
 		# MicroPython's default 20 MHz PSRAM clock cannot feed it.
-		extra_configs="CONFIG_IDF_EXPERIMENTAL_FEATURES=y CONFIG_SPIRAM_SPEED_200M=y CONFIG_CACHE_L2_CACHE_256KB=y CONFIG_CACHE_L2_CACHE_LINE_128B=y"
+		# Rev <3.0: from ESP-IDF 5.5.3 on this option defaults to n, which
+		# builds a v3-only image and overrides MicroPython's own
+		# CONFIG_ESP32P4_REV_MIN_0=y (sdkconfig.p4). ESP-IDF 5.5.1 does not
+		# have the option yet, so it is ignored there.
+		extra_configs="CONFIG_IDF_EXPERIMENTAL_FEATURES=y CONFIG_SPIRAM_SPEED_200M=y CONFIG_CACHE_L2_CACHE_256KB=y CONFIG_CACHE_L2_CACHE_LINE_128B=y CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y"
 	else # esp32s3 or unphone
         if [ "$target" == "unphone" ]; then
             flash_size="8"
