@@ -346,6 +346,13 @@ class MposKeyboard:
         default_group = lv.group_get_default()
         if default_group:
             lv.group_focus_obj(self._keyboard)
+        # lv_group_focus_obj() does not set LV_STATE_FOCUS_KEY, and the theme
+        # only highlights the selected key in that state. Add it once the user
+        # navigates with direction keys, so keypad users can see their
+        # selection while touch-only use keeps a clean keyboard (issue #274).
+        from .focus import is_focus_nav_active
+        if is_focus_nav_active():
+            self._keyboard.add_state(lv.STATE.FOCUS_KEY)
 
     def scroll_back_after_hide(self, timer):
         self._parent.scroll_to_y(self._saved_scroll_y, True)

@@ -17,6 +17,11 @@ def enable_focus_borders():
     _focus_nav_active = True
 
 
+def is_focus_nav_active():
+    """Return True once the user has navigated with direction keys."""
+    return _focus_nav_active
+
+
 def _focus_border_handler(event, width, color, opacity, radius):
     if not _focus_nav_active:
         # No directional navigation yet (e.g. touch-only use): no highlight.
