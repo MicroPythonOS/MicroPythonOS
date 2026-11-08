@@ -550,6 +550,14 @@ class WAVStream:
     # ----------------------------------------------------------------------
     #  Desktop playback (non-ESP32)
     # ----------------------------------------------------------------------
+    def _desktop_player(self):
+        """Name of the external player to use, or None to simulate timing."""
+        return _detect_desktop_player()
+
+    def _desktop_audio_path(self):
+        """Path handed to the external player (overridden for decoded formats)."""
+        return self.file_path
+
     def _play_desktop(self):
         """Play audio on desktop platforms via web audio or shell player."""
         webio = None
@@ -566,8 +574,8 @@ class WAVStream:
             asyncio.get_event_loop().create_task(self._monitor_web_audio(webio))
             return
 
-        player = _detect_desktop_player()
-        quoted = _shell_quote(self.file_path)
+        player = self._desktop_player()
+        quoted = _shell_quote(self._desktop_audio_path())
 
         if player is None:
             logger.warning("Desktop audio: no player found (afplay/ffplay/aplay/paplay); simulating timing")
@@ -612,6 +620,10 @@ class WAVStream:
                     )
                 elif player == "aplay":
                     cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
+                elif player == "mpg123":
+                    cmd = "mpg123 -q -f %d %s >/dev/null 2>&1 & echo $! > %s" % (
+                        int(self.volume * 327.68), quoted, qpid
+                    )
                 else:
                     cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
 
@@ -732,30 +744,7 @@ class WAVStream:
 
                 # Initialize I2S (always 16-bit output), or reuse a warm one.
                 try:
-                    i2s_format = machine.I2S.MONO if channels == 1 else machine.I2S.STEREO
-                    if __debug__: logger.debug("I2S config: format=%s, ibuf=%s, has_sck=%s, mck_pin=%s, warm_ms=%s", 'MONO' if channels == 1 else 'STEREO', ibuf, bool(self.i2s_pins.get('sck')), self.i2s_pins.get('mck'), self.warm_ms)
-                    keep_warm = self.warm_ms > 0
-                    pins_key = (self.i2s_pins.get('mck'), self.i2s_pins.get('sck'),
-                                self.i2s_pins.get('ws'), self.i2s_pins.get('sd'))
-                    warm = WAVStream._warm
-                    if keep_warm and warm and warm["rate"] == playback_rate \
-                            and warm["fmt"] == i2s_format and warm["pins"] == pins_key:
-                        # Same clocks and format as the previous clip: reuse them. No
-                        # MCLK/I2S restart and no DAC re-unmute, so nothing clicks.
-                        WAVStream._warm_busy = True
-                        WAVStream._cancel_warm_timer()
-                        self._i2s = warm["i2s"]
-                        self._mck_pwm = warm["mck"]
-                        if __debug__: logger.debug("Reusing warm I2S/MCLK")
-                    else:
-                        if warm:
-                            WAVStream.release_warm()
-                        self._open_i2s_output(playback_rate, i2s_format, ibuf, keep_warm)
-                        if keep_warm and self._i2s:
-                            WAVStream._warm = {"i2s": self._i2s, "mck": self._mck_pwm,
-                                               "rate": playback_rate, "fmt": i2s_format,
-                                               "pins": pins_key, "on_close": self.on_close}
-                            WAVStream._warm_busy = True
+                    self._open_or_reuse_i2s(playback_rate, channels, ibuf, self.warm_ms > 0)
                 except Exception as e:
                     logger.error("I2S init failed: %s", e)
                     return
@@ -842,30 +831,60 @@ class WAVStream:
         finally:
             if not self.runs_async:
                 self._is_playing = False
-                warm = WAVStream._warm
-                if warm and self._i2s is warm["i2s"]:
-                    # Warm output: leave the clocks running and the codec unmuted;
-                    # the idle timer (or release_warm()) tears them down later.
-                    self._i2s = None
+                self._teardown_i2s()
+
+    def _open_or_reuse_i2s(self, playback_rate, channels, ibuf, keep_warm):
+        """Start I2S for this format, or reuse a matching warm output."""
+        i2s_format = machine.I2S.MONO if channels == 1 else machine.I2S.STEREO
+        if __debug__: logger.debug("I2S config: format=%s, ibuf=%s, has_sck=%s, mck_pin=%s, warm_ms=%s", 'MONO' if channels == 1 else 'STEREO', ibuf, bool(self.i2s_pins.get('sck')), self.i2s_pins.get('mck'), self.warm_ms)
+        pins_key = (self.i2s_pins.get('mck'), self.i2s_pins.get('sck'),
+                    self.i2s_pins.get('ws'), self.i2s_pins.get('sd'))
+        warm = WAVStream._warm
+        if keep_warm and warm and warm["rate"] == playback_rate \
+                and warm["fmt"] == i2s_format and warm["pins"] == pins_key:
+            # Same clocks and format as the previous clip: reuse them. No
+            # MCLK/I2S restart and no DAC re-unmute, so nothing clicks.
+            WAVStream._warm_busy = True
+            WAVStream._cancel_warm_timer()
+            self._i2s = warm["i2s"]
+            self._mck_pwm = warm["mck"]
+            if __debug__: logger.debug("Reusing warm I2S/MCLK")
+        else:
+            if warm:
+                WAVStream.release_warm()
+            self._open_i2s_output(playback_rate, i2s_format, ibuf, keep_warm)
+            if keep_warm and self._i2s:
+                WAVStream._warm = {"i2s": self._i2s, "mck": self._mck_pwm,
+                                   "rate": playback_rate, "fmt": i2s_format,
+                                   "pins": pins_key, "on_close": self.on_close}
+                WAVStream._warm_busy = True
+
+    def _teardown_i2s(self):
+        """Close I2S, or leave a matching warm output running."""
+        warm = WAVStream._warm
+        if warm and self._i2s is warm["i2s"]:
+            # Warm output: leave the clocks running and the codec unmuted;
+            # the idle timer (or release_warm()) tears them down later.
+            self._i2s = None
+            self._mck_pwm = None
+            WAVStream._warm_busy = False
+            WAVStream._arm_warm_timer(self.warm_ms)
+        else:
+            if self.on_close:
+                try:
+                    self.on_close()
+                except Exception as e:
+                    logger.error("on_close failed: %s", e)
+            if self._i2s:
+                if __debug__: logger.debug("Done playing, doing i2s deinit")
+                self._i2s.deinit() # disabling this does not fix the "play just once" issue
+                self._i2s = None
+            if self._mck_pwm:
+                try:
+                    if __debug__: logger.debug("Done playing, stopping MCLK PWM")
+                    self._mck_pwm.deinit()
+                finally:
                     self._mck_pwm = None
-                    WAVStream._warm_busy = False
-                    WAVStream._arm_warm_timer(self.warm_ms)
-                else:
-                    if self.on_close:
-                        try:
-                            self.on_close()
-                        except Exception as e:
-                            logger.error("on_close failed: %s", e)
-                    if self._i2s:
-                        if __debug__: logger.debug("Done playing, doing i2s deinit")
-                        self._i2s.deinit() # disabling this does not fix the "play just once" issue
-                        self._i2s = None
-                    if self._mck_pwm:
-                        try:
-                            if __debug__: logger.debug("Done playing, stopping MCLK PWM")
-                            self._mck_pwm.deinit()
-                        finally:
-                            self._mck_pwm = None
 
     def _open_i2s_output(self, playback_rate, i2s_format, ibuf, keep_warm):
         """Start MCLK, notify the codec and open I2S TX.

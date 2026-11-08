@@ -3,8 +3,10 @@ Future release (next version)
 
 Frameworks:
 - aiorepl: the console no longer freezes every asyncio task when a host program opens the USB-CDC port and writes bytes that are not a REPL session (device-detection probes send CBOR such as `0xA6` + `get_version_info` and then hold the port, previously stalling the loop for ~28 s per probe). Such bytes are discarded instead of echoing and blocking a text-mode read (#297).
+- AudioManager: MP3 playback through the native `mp3dec` module (minimp3) — MPEG-1/2/2.5 Layer III, CBR and VBR, mono/stereo, 8-48 kHz. Decoding releases the GIL so the UI keeps rendering, the file's own sample rate is used (no resampling), and volume is applied as a fixed-point right shift. ID3v2/ID3v1 tags are skipped. `get_info()` reads rate, channels and duration in pure Python, and the music player lists `.mp3` files. On desktop, MP3 is played by `ffplay`/`mpg123`/`afplay`, or decoded to a temporary WAV when only `aplay`/`paplay` exists.
 
 Testing:
+- mp3: frame-accurate streaming decoder tests over five generated fixtures (MPEG-1/2/2.5, CBR/VBR, mono/stereo, 8/22.05/44.1/48 kHz) that must give identical frame and sample totals for any feed chunk size, a CPython header/Xing/ID3 parser test checked against ffprobe, AudioManager `.mp3` routing tests, and `--file` support in the DAC acoustic check.
 - buzzer: acoustic verification from a host USB microphone — the badge plays a known note sequence and `scripts/mpos_buzzer_acoustic.py` segments the recording and folds each strongest spectral peak to the expected harmonic, so low notes work despite the piezo resonance; manual entry point `tests/manual_test_buzzer.py`, synthetic tests `tests/cpython_buzzer_acoustic.py`, and `MPOSController.buzzer_acoustic_measure/verify()`.
 - dac: acoustic verification of the headphone/DAC jack through a host capture input — `scripts/mpos_dac_acoustic.py` renders a tone WAV on the badge, plays it through an i2s output and checks the recording (optionally `--file` to score an existing audio file); manual entry point `tests/manual_test_dac.py`, synthetic tests `tests/cpython_dac_acoustic.py`, and `MPOSController.dac_acoustic_measure/verify()`.
 

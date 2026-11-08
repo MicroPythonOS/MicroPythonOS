@@ -188,7 +188,7 @@ class MusicPlayer(Activity):
     def _open_file_clicked(self, event):
         intent = Intent(
             action="pick_file",
-            extras={"start_dir": "/data/audio/", "path_pattern": [".wav", ".rtttl"]},
+            extras={"start_dir": "/data/audio/", "path_pattern": [".wav", ".mp3", ".rtttl"]},
         )
         self.startActivityForResult(intent, self._on_file_picked)
 
@@ -222,7 +222,8 @@ class MusicPlayer(Activity):
     @staticmethod
     def _is_audio_path(path):
         lower_path = path.lower()
-        return lower_path.endswith(".wav") or lower_path.endswith(".rtttl")
+        return (lower_path.endswith(".wav") or lower_path.endswith(".mp3")
+                or lower_path.endswith(".rtttl"))
 
     def _repeat_checkbox_changed(self, event):
         self._apply_repeat()
