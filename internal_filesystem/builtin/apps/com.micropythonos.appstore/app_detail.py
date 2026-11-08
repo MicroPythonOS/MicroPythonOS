@@ -290,6 +290,17 @@ class AppDetail(Activity):
                 self.installed_version_label.add_flag(lv.obj.FLAG.HIDDEN)
 
     def add_action_buttons(self, buttoncont, app):
+        # clean() below deletes the current install button. If that is the
+        # focused widget, LVGL would move focus to the next widget in the
+        # group (the description label) when the details finish loading, so
+        # remember it and put it back on the rebuilt button (issue #256).
+        group = lv.group_get_default()
+        install_had_focus = False
+        if group is not None and self.install_button is not None:
+            try:
+                install_had_focus = group.get_focused() == self.install_button
+            except lv.LvReferenceError:
+                install_had_focus = False
         buttoncont.clean()
         buttoncont.set_style_pad_all(4, lv.PART.MAIN)
         buttoncont.set_style_pad_column(3, lv.PART.MAIN)
@@ -326,6 +337,8 @@ class AppDetail(Activity):
         self._sync_open_button()
         self._sync_rate_cont()
         self._update_version_labels()
+        if install_had_focus:
+            lv.group_focus_obj(self.install_button)
 
     async def fetch_and_set_app_details(self):
         await self.fetch_badgehub_app_details(self.app)
