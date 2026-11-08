@@ -86,6 +86,7 @@ def run_tests(mpos, only=None, is_serial=False, cli_binary=None, serial_port=Non
         "readuntil": test_read_until,
         "timeouts": test_timeouts,
         "mpremoteport": test_mpremote_port,
+        "staging": test_staging_failure,
         "assertguard": test_assert_guard,
     }
     if only:
@@ -396,6 +397,49 @@ def test_mpremote_port(mpos, is_serial=False, cli_binary=None, serial_port=None)
         )
     finally:
         builtins.__import__ = real_import
+
+
+def test_staging_failure(mpos, is_serial=False, cli_binary=None, serial_port=None):
+    # Unit test: staging the test file must not fail silently. mpremote's `cp`
+    # result used to be ignored, so a failed copy left the previous
+    # _runner_test.py on the device: the device re-ran the old tests and the
+    # runner still reported the requested file as a success.
+    section("test file staging failure")
+    import scripts.mpos_controller as mc
+
+    if mc._serial is None:
+        print("  (skipped: pyserial is not installed)")
+        return
+
+    be = mc.SerialBackend(port="/dev/ttyACM0")
+    be.repl = object()
+    real_run = subprocess.run
+
+    def failing_run(*a, **k):
+        return subprocess.CompletedProcess(
+            args=a[0] if a else [],
+            returncode=1,
+            stdout=b"",
+            stderr=b"python3: can't open file '/x/mpremote.py'",
+        )
+
+    subprocess.run = failing_run
+    raised = None
+    try:
+        be.run_test_file(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "test_graphical_screenshot.py"),
+            timeout=5,
+        )
+    except RuntimeError as exc:
+        raised = str(exc)
+    finally:
+        subprocess.run = real_run
+
+    check(raised is not None,
+          "a failed staging raises instead of running stale tests")
+    check(bool(raised) and "mpremote.py" in raised,
+          "the failure includes mpremote's own error")
 
 
 def test_assert_guard(mpos, is_serial=False, cli_binary=None, serial_port=None):
@@ -785,7 +829,7 @@ for a in AppManager.get_app_list():
 def main():
     parser = argparse.ArgumentParser(description="Test MPOSController backends")
     parser.add_argument("--serial", help="Serial port for device backend")
-    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement,helpers,readuntil,timeouts,mpremoteport")
+    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement,helpers,readuntil,timeouts,mpremoteport,staging")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
     args = parser.parse_args()
 
