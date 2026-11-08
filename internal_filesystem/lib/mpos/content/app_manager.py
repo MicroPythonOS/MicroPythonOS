@@ -192,6 +192,63 @@ class AppManager:
         for k in keys:
             del sys.modules[k]
 
+    @staticmethod
+    def _module_names_in(path):
+        """Return the bare module names of the .py/.mpy files in ``path``."""
+        names = []
+        try:
+            entries = os.listdir(path)
+        except OSError:
+            return names
+        for entry in entries:
+            if entry.endswith(".py") or entry.endswith(".mpy"):
+                name = entry.rsplit(".", 1)[0]
+                if AppManager._is_valid_identifier(name):
+                    names.append(name)
+        return names
+
+    @staticmethod
+    def _del_shadowed_modules(module_dir):
+        """Drop cached modules that the app is about to import under a bare name.
+
+        Flat (non-package) apps import their helpers by bare module name, and
+        MicroPython checks sys.modules before sys.path. So once one app has
+        imported its ``lora.py``, every later app with a ``lora.py`` of its own
+        would silently get the first one. Deleting the cached entries for the
+        names this app provides makes the next import read this app's file.
+        Modules already part of this app are kept, so state a still-running
+        app holds stays intact.
+        """
+        import sys
+        if not module_dir:
+            return
+        prefix = module_dir.rstrip("/") + "/"
+        for name in AppManager._module_names_in(module_dir):
+            module = sys.modules.get(name)
+            if module is None:
+                continue
+            path = getattr(module, "__file__", None)
+            if not path or not path.startswith(prefix):
+                del sys.modules[name]
+
+    @staticmethod
+    def _del_modules_from_dir(app_dir):
+        """Drop every cached module that was imported from ``app_dir``.
+
+        Called when an app is installed, updated or uninstalled so the next
+        launch imports the new files instead of the previously cached modules.
+        Object instances that are still running keep their references.
+        """
+        import sys
+        if not app_dir:
+            return
+        prefix = app_dir.rstrip("/") + "/"
+        for name in list(sys.modules):
+            module = sys.modules[name]
+            path = getattr(module, "__file__", None) if module is not None else None
+            if path and path.startswith(prefix):
+                del sys.modules[name]
+
     @classmethod
     def _import_handler_class(cls, spec):
         """Import the activity class for a file-handler spec, caching the result."""
@@ -233,6 +290,7 @@ class AppManager:
             cwd = entrypoint_path.rsplit("/", 1)[0]
 
         module_name = spec["entrypoint"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        cls._del_shadowed_modules(cwd)
         previous_module = sys.modules.get(module_name, None)
         had_previous_module = module_name in sys.modules
         try:
@@ -539,6 +597,7 @@ class AppManager:
             raise RuntimeError(f"Download failed for {fullname}: {e}")
 
         if __debug__: logger.debug("installed %s successfully", fullname)
+        AppManager._del_modules_from_dir(dest_folder)
         return True
 
     @staticmethod
@@ -581,6 +640,7 @@ class AppManager:
         except Exception as e:
             if __debug__:
                 logger.debug("Removing cache/%s got error: %s", app_fullname, e)
+        AppManager._del_modules_from_dir(f"apps/{app_fullname}")
         AppManager.refresh_apps()
 
     @staticmethod
@@ -644,6 +704,7 @@ class AppManager:
                 import sys
                 sys.print_exception(e)
             raise
+        AppManager._del_modules_from_dir(dest_folder)
         AppManager.refresh_apps()
 
     @staticmethod
@@ -757,6 +818,8 @@ class AppManager:
                 if path_to_add in sys.path:
                     sys.path.remove(path_to_add)
                 sys.path.insert(0, path_to_add)
+            if not is_package:
+                AppManager._del_shadowed_modules(path_to_add)
             try:
                 if is_package:
                     try:
