@@ -1638,10 +1638,18 @@ for s in t:
         try:
             os.write(fd, test_content.encode("utf-8"))
             os.close(fd)
-            subprocess.run(
+            staged = subprocess.run(
                 _mpremote_cmd(self.port, "cp", tmpname, ":_runner_test.py"),
                 capture_output=True, timeout=120,
             )
+            if staged.returncode != 0:
+                detail = (staged.stderr or staged.stdout).decode("utf-8", "replace").strip()
+                raise RuntimeError(
+                    "could not stage {} on the device: {}".format(
+                        os.path.basename(test_path),
+                        detail or "mpremote exited {}".format(staged.returncode),
+                    )
+                )
         finally:
             try:
                 os.remove(tmpname)
