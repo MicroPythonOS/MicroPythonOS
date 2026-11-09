@@ -68,4 +68,46 @@ class DisplayMetrics:
     def max_dimension(cls):
         """Get maximum dimension (width or height)."""
         return max(cls._width, cls._height)
+
+    DENSITY_MDPI = "mdpi"
+    DENSITY_HDPI = "hdpi"
+
+    # Density class boundaries for authored bitmaps, by the smaller screen
+    # dimension so portrait and landscape variants of a panel resolve
+    # identically. Add further buckets (e.g. xhdpi) here without changing the
+    # mechanism.
+    _DENSITY_BUCKETS = (
+        (300, DENSITY_HDPI, 1.5),
+    )
+
+    @classmethod
+    def density_bucket(cls):
+        """Get the density class of the current screen ("mdpi" or "hdpi").
+
+        Apps pick a matching bitmap variant with this. The mdpi art is the
+        universal baseline; hdpi is for screens whose small dimension is at
+        least 300 pixels.
+        """
+        if cls._width is None or cls._height is None:
+            return cls.DENSITY_MDPI
+        small_side = min(cls._width, cls._height)
+        for min_side, bucket, _factor in cls._DENSITY_BUCKETS:
+            if small_side >= min_side:
+                return bucket
+        return cls.DENSITY_MDPI
+
+    @classmethod
+    def density_factor(cls):
+        """Get the scale factor for the current density class (1.0 or 1.5).
+
+        Used to scale mdpi art on an hdpi screen when the app ships no native
+        hdpi variant.
+        """
+        if cls._width is None or cls._height is None:
+            return 1.0
+        small_side = min(cls._width, cls._height)
+        for min_side, _bucket, factor in cls._DENSITY_BUCKETS:
+            if small_side >= min_side:
+                return factor
+        return 1.0
     
