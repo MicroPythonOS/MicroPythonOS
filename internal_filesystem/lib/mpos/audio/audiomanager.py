@@ -591,8 +591,12 @@ class AudioManager:
 
         from mpos.audio.stream_wav import WAVStream
 
-        info = WAVStream.get_wav_info(player.file_path)
-        original_rate = info["sample_rate"]
+        if player.file_path.lower().endswith(".mp3"):
+            from mpos.audio.mp3 import get_info
+
+            original_rate = get_info(player.file_path)["sample_rate"]
+        else:
+            original_rate = WAVStream.get_wav_info(player.file_path)["sample_rate"]
         playback_rate, _ = WAVStream.compute_playback_rate(original_rate, preferred)
         return playback_rate
 
@@ -803,7 +807,14 @@ class Player:
         self._stream.play()
 
     def _play_wav(self):
-        from mpos.audio.stream_wav import WAVStream
+        if self.file_path.lower().endswith(".mp3"):
+            from mpos.audio.stream_mp3 import MP3Stream
+
+            stream_class = MP3Stream
+        else:
+            from mpos.audio.stream_wav import WAVStream
+
+            stream_class = WAVStream
 
         on_complete = self.on_complete
         try:
@@ -818,7 +829,7 @@ class Player:
         except ImportError:
             pass
 
-        self._stream = WAVStream(
+        self._stream = stream_class(
             file_path=self.file_path,
             stream_type=self.stream_type,
             volume=self.volume if self.volume is not None else self._manager._volume,

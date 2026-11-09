@@ -152,6 +152,45 @@ python3 tests/cpython_validate_ota_release.py
 
 See `../docs/docs/other/ota-release-validation.md` for the full procedure.
 
+## MP3 playback
+
+MP3 decoding is done by the `mp3dec` native module (`c_mpos/src/mp3dec.c`,
+wrapping the public-domain minimp3 decoder in `c_mpos/minimp3/`). The Python
+side lives in `mpos/audio/mp3.py` (header parsing plus whole-file decode
+helpers) and `mpos/audio/stream_mp3.py` (the playback stream).
+
+`tests/data/mp3/` holds five short tone renders (0.25 s silence, then A4/A5/A6
+at 440/880/1760 Hz) covering MPEG-1/2/2.5, CBR and VBR (Xing), mono and
+stereo, and 8/22.05/44.1/48 kHz. They were generated with:
+
+```bash
+ffmpeg -i tones.wav -codec:a libmp3lame -b:a 128k -write_xing 0 \
+    tone_a4a5a6_44100_stereo_128cbr.mp3
+ffmpeg -i tones.wav -codec:a libmp3lame -q:a 4 \
+    tone_a4a5a6_44100_stereo_vbr.mp3
+ffmpeg -i tones.wav -ac 1 -ar 22050 -codec:a libmp3lame -b:a 64k \
+    tone_a4_22050_mono_64cbr.mp3
+ffmpeg -i tones.wav -ac 1 -ar 8000 -codec:a libmp3lame -b:a 16k \
+    tone_a4_8000_mono_16cbr.mp3
+ffmpeg -i tones.wav -ar 48000 -codec:a libmp3lame -b:a 320k \
+    tone_a4_48000_stereo_320cbr.mp3
+```
+
+- `tests/test_mp3dec.py` decodes them at several feed chunk sizes and checks
+  frame and sample totals, sample rate/channels, ID3 skipping, volume shift,
+  reset, and the tone frequency of the decoded PCM. A partial frame at a chunk
+  boundary must be kept, not dropped, so the totals have to be identical for
+  1 KiB, 4 KiB and 8 KiB feeds.
+- `tests/cpython_mp3_info.py` runs under CPython and checks the pure-Python
+  header/Xing/ID3 parser (and `get_info()` durations and bitrates) against
+  ffprobe values.
+- `tests/test_stream_mp3.py` covers AudioManager routing (`.mp3` →
+  `MP3Stream`, `.wav` → `WAVStream`), sample-rate negotiation from the MP3
+  header, and the desktop player fallback (decode to a temporary WAV when only
+  `aplay`/`paplay` is available).
+- `tests/manual_test_dac.py --file /music/test.mp3 --notes a4,a5,a6` plays an
+  MP3 through the headphone/DAC jack and scores it acoustically on the host.
+
 ## Buzzer acoustic verification
 
 `scripts/mpos_buzzer_acoustic.py` plays a known note sequence on the badge
