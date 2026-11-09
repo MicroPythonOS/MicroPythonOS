@@ -4,6 +4,12 @@ import time
 
 import lvgl as lv
 
+try:
+    import mp3dec  # noqa: F401
+    _MP3_SUPPORTED = True
+except ImportError:
+    _MP3_SUPPORTED = False
+
 logger = logging.getLogger(__name__)
 
 from mpos import Activity, AppManager, DisplayMetrics, Intent, SDCardManager, AudioManager, add_focus_border
@@ -119,6 +125,15 @@ class MusicPlayer(Activity):
     def _start_playback(self, filename):
         if __debug__: logger.debug("MusicPlayer: playing file %s", filename)
 
+        if filename.lower().endswith(".mp3") and not _MP3_SUPPORTED:
+            error_msg = "Error: MP3 playback needs a newer firmware"
+            logger.error(error_msg)
+            self.update_ui_threadsafe_if_foreground(
+                self._filename_label.set_text,
+                error_msg
+            )
+            return
+
         AudioManager.stop()
         time.sleep(0.1)
 
@@ -186,9 +201,12 @@ class MusicPlayer(Activity):
         return None
 
     def _open_file_clicked(self, event):
+        path_pattern = [".wav", ".rtttl"]
+        if _MP3_SUPPORTED:
+            path_pattern.append(".mp3")
         intent = Intent(
             action="pick_file",
-            extras={"start_dir": "/data/audio/", "path_pattern": [".wav", ".mp3", ".rtttl"]},
+            extras={"start_dir": "/data/audio/", "path_pattern": path_pattern},
         )
         self.startActivityForResult(intent, self._on_file_picked)
 
@@ -222,8 +240,9 @@ class MusicPlayer(Activity):
     @staticmethod
     def _is_audio_path(path):
         lower_path = path.lower()
-        return (lower_path.endswith(".wav") or lower_path.endswith(".mp3")
-                or lower_path.endswith(".rtttl"))
+        if lower_path.endswith(".mp3"):
+            return _MP3_SUPPORTED
+        return lower_path.endswith(".wav") or lower_path.endswith(".rtttl")
 
     def _repeat_checkbox_changed(self, event):
         self._apply_repeat()
