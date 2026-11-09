@@ -4,6 +4,9 @@ Future release (next version)
 Frameworks:
 - aiorepl: the console no longer freezes every asyncio task when a host program opens the USB-CDC port and writes bytes that are not a REPL session (device-detection probes send CBOR such as `0xA6` + `get_version_info` and then hold the port, previously stalling the loop for ~28 s per probe). Such bytes are discarded instead of echoing and blocking a text-mode read (#297).
 
+Testing:
+- buzzer: acoustic verification from a host USB microphone — the badge plays a known note sequence and `scripts/mpos_buzzer_acoustic.py` segments the recording and folds each strongest spectral peak to the expected harmonic, so low notes work despite the piezo resonance; manual entry point `tests/manual_test_buzzer.py`, synthetic tests `tests/cpython_buzzer_acoustic.py`, and `MPOSController.buzzer_acoustic_measure/verify()`.
+
 0.21.2
 ======
 

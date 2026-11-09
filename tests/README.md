@@ -152,6 +152,41 @@ python3 tests/cpython_validate_ota_release.py
 
 See `../docs/docs/other/ota-release-validation.md` for the full procedure.
 
+## Buzzer acoustic verification
+
+`scripts/mpos_buzzer_acoustic.py` plays a known note sequence on the badge
+buzzer and confirms it from a USB microphone recording made on the host. Each
+loud segment is matched to the expected note: the strongest spectral peak is
+folded down to the nearest harmonic, which also works for low notes whose
+fundamental sits under the piezo resonance (a buzzer is a square-wave PWM
+output, and small piezo discs peak around 3-4 kHz).
+
+Host requirements: `arecord` (`alsa-utils`) and `numpy`. Run it on the machine
+the sound card and the badge are attached to; the manual entry point is
+`tests/manual_test_buzzer.py`:
+
+```bash
+# list capture devices
+python3 scripts/mpos_buzzer_acoustic.py list
+
+# play a4,a5,a6,a7 and gate pass/fail on the recording
+python3 tests/manual_test_buzzer.py --notes a4,a5,a6,a7 --volume 100
+
+# re-analyze an earlier recording without a device
+python3 scripts/mpos_buzzer_acoustic.py analyze --wav tmp/buzzertests/manual-<stamp>.wav --notes a4,a5,a6,a7
+```
+
+Recordings and `metrics.json` / `metrics.jsonl` go to `--out-dir` (default
+`tmp/buzzertests`). The same feature is available from Python via
+`MPOSController.buzzer_acoustic_measure()` and `.buzzer_acoustic_verify()`.
+Without `--relayport` a four-note run takes about twenty seconds; adding
+`--relayport /dev/ttyUSB0` power-cycles the badge first and takes about forty.
+The synthetic analyzer tests need no hardware:
+
+```bash
+python3 tests/cpython_buzzer_acoustic.py
+```
+
 ## First-use and render-time paths
 
 Some UI code only runs the first time a feature is used, and some callbacks run

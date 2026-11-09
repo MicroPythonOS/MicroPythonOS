@@ -1759,6 +1759,38 @@ class MPOSController:
         return camera.focus_sweep(config=cfg, controller=self, values=values,
                                   repeats=repeats, settle=settle)
 
+    @staticmethod
+    def _buzzer_acoustic():
+        try:
+            from . import mpos_buzzer_acoustic
+        except ImportError:
+            import mpos_buzzer_acoustic
+        return mpos_buzzer_acoustic
+
+    def buzzer_acoustic_measure(self, notes=None, volume=100, device=None, out_dir=None,
+                                label="buzzer", thresholds=None):
+        """Play notes on the badge buzzer and score a host microphone recording.
+
+        Host-only: needs a USB microphone on the host, ``arecord`` and numpy
+        (see ``scripts/mpos_buzzer_acoustic.py``). Returns a metrics dict with
+        one entry per detected note and ``ok``/``failures``.
+        """
+        buzzer = self._buzzer_acoustic()
+        return buzzer.verify(
+            controller=self, notes=notes or buzzer.DEFAULT_NOTES, volume=volume,
+            device=device, out_dir=out_dir or buzzer.DEFAULT_OUT_DIR, label=label,
+            thresholds=thresholds,
+        )
+
+    def buzzer_acoustic_verify(self, notes=None, volume=100, device=None, out_dir=None,
+                               label="buzzer", thresholds=None):
+        """Like buzzer_acoustic_measure but returns ``(ok, metrics)``."""
+        measured = self.buzzer_acoustic_measure(
+            notes=notes, volume=volume, device=device, out_dir=out_dir, label=label,
+            thresholds=thresholds,
+        )
+        return bool(measured.get("ok")), measured
+
     def check_free_space(self):
         return self._backend.check_free_space()
 
