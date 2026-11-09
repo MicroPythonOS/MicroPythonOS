@@ -187,6 +187,38 @@ The synthetic analyzer tests need no hardware:
 python3 tests/cpython_buzzer_acoustic.py
 ```
 
+## DAC acoustic verification
+
+`scripts/mpos_dac_acoustic.py` checks the analogue path: the badge renders a
+known tone sequence through an i2s output (the on-board DAC / headphone jack),
+a capture device on the host records it, and the analyzer confirms each tone.
+It is the counterpart of the buzzer check: same recording helpers, but the
+audio goes through the codec instead of a PWM pin, so the fundamentals are
+clean and the measured SNR is much higher (about 60 dB on zbox1).
+
+The cabling is manual: the badge jack must feed a capture input. On zbox1 that
+is the on-board ALC892 microphone jack (`plughw:0,0`); run with
+`--capture-gain 20` (+4 dB) so the line-level signal fits the mic input. The
+tool restores the previous mixer value afterwards and generates the tone WAV on
+the badge, so nothing has to be uploaded:
+
+```bash
+python3 tests/manual_test_dac.py --capture-gain 20
+python3 tests/manual_test_dac.py --notes a4,a5,a6 --relayport /dev/ttyUSB0
+python3 tests/manual_test_dac.py --file /music/test.mp3 --notes a4,a5,a6
+```
+
+`--file` plays an existing file on the badge instead of generated tones; with-
+out `--notes` it just reports what was captured (peak frequency per loud
+segment), which is useful when bringing up a new decoder or output. Metrics are
+written to `--out-dir` (default `tmp/dactests`) and the same feature is
+available as `MPOSController.dac_acoustic_measure()` /
+`.dac_acoustic_verify()`. Synthetic tests need no hardware:
+
+```bash
+python3 tests/cpython_dac_acoustic.py
+```
+
 ## First-use and render-time paths
 
 Some UI code only runs the first time a feature is used, and some callbacks run
