@@ -16,6 +16,10 @@ lint-fix: ## Check & fix code style by run: "ruff check --fix"
 syntax-tests: ## Run syntax tests
 	./tests/syntax.sh
 
+.PHONY: check-app-versions
+check-app-versions: ## check-app-versions (ARGS='--changed') — apps changed without a MANIFEST bump
+	./scripts/check_app_versions.py $(ARGS)
+
 .PHONY: unittest-tests
 unittest-tests: ## Run unit tests (Needs to build MicroPythonOS for unix first)
 	./scripts/test_runner.py
