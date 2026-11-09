@@ -150,14 +150,27 @@ class TestStreamDispatch(unittest.TestCase):
         self.assertEqual(_FakeStream.instances[0]["file_path"], "/music/song.wav")
 
 
+class _FakeSys:
+    def __init__(self, platform):
+        self.platform = platform
+
+
 class TestMP3StreamDesktop(unittest.TestCase):
 
     def setUp(self):
         self.stream = stream_mp3.MP3Stream("/music/song.mp3", 0, 70, I2S_PINS, None)
         self.real_system = os.system
+        # The player selection is host specific: pin a Linux platform so the
+        # ffplay/mpg123/aplay paths are exercised on every CI runner.
+        self.real_sys = stream_mp3.sys
+        self.real_wav_sys = stream_wav.sys
+        stream_mp3.sys = _FakeSys("linux")
+        stream_wav.sys = _FakeSys("linux")
 
     def tearDown(self):
         os.system = self.real_system
+        stream_mp3.sys = self.real_sys
+        stream_wav.sys = self.real_wav_sys
 
     def _only(self, *available):
         def fake_system(command):
@@ -168,6 +181,16 @@ class TestMP3StreamDesktop(unittest.TestCase):
     def test_prefers_ffplay(self):
         self._only("ffplay")
         self.assertEqual(self.stream._desktop_player(), "ffplay")
+
+    def test_prefers_afplay_on_macos(self):
+        stream_mp3.sys = _FakeSys("darwin")
+        self._only("ffplay")
+        self.assertEqual(self.stream._desktop_player(), "afplay")
+
+    def test_macos_path_needs_no_decoding(self):
+        stream_mp3.sys = _FakeSys("darwin")
+        self._only("aplay")
+        self.assertEqual(self.stream._desktop_audio_path(), "/music/song.mp3")
 
     def test_falls_back_to_mpg123(self):
         self._only("mpg123")
