@@ -4,6 +4,7 @@ This table tracks board definitions from `internal_filesystem/lib/mpos/board/`.
 
 | Board Module                                         | Board / Target                                  | Maintained By            | GitHub           | Telegram      |
 |------------------------------------------------------|-------------------------------------------------|--------------------------|------------------|---------------|
+| `d_shell.py` | D-Shell ESP32-S3 N16R8 | YangCong | @yangcong-bit | Unknown |
 | `freenove_esp32s3_display.py`                        | Freenove ESP32-S3 Display                       | Rohansi                  | @Rohansi         | Unknown       |
 | `fri3d_2024.py`                                      | Fri3d Camp 2024 badge                           | Thomas Farstrike         | @ThomasFarstrike | @ThomasF7e    |
 | `fri3d_2026.py`                                      | Fri3d Camp 2026 badge                           | Thomas Farstrike         | @ThomasFarstrike | @ThomasF7e    |
