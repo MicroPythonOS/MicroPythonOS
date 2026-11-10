@@ -115,10 +115,35 @@ def _capture_task(coro):
 
 **`asyncio.core` stores the event loop in module-level globals.** `_task_queue`, `_io_queue`, `cur_task`, and the `SingletonGenerator` (created once as a default-argument in `sleep_ms`) are all shared. `asyncio.new_event_loop()` replaces `_task_queue` and `_io_queue` globally — if called from a test setUp running inside the TaskManager's event loop (paste mode via aiorepl), the outer loop's orphaned queue is GC'd and its tasks become dangling pointers. `asyncio.run()` also shares these globals; when the inner `run_until_complete` sets `cur_task = None` on exit, the outer loop resumes with a stale task pointer → SIGSEGV. **For tests that need `asyncio.run()` inside a running event loop:** save/restore `cur_task` around the call. For tests that call `new_event_loop()`, restore all three globals after `unittest.main()`. See `_build_import_runner_code()` in `mpos_controller.py` for the standard monkeypatches applied to all tests.
 
+## Lab tooling
+
+Check here before writing a new measurement script; these exist and are maintained.
+
+| Tool | What it does |
+|------|--------------|
+| `scripts/mpos_dac_acoustic.py` | Plays a tone sequence (or `--file <wav>`) through an i2s output and scores a recording from a host capture input. Also the way to prove the badge actually makes sound. |
+| `scripts/mpos_buzzer_acoustic.py` | Records the PWM buzzer with a host mic and folds each peak to the expected harmonic, so low notes work despite the piezo resonance. |
+| `scripts/mpos_screen_camera.py` | Aligns a webcam view to the device framebuffer (SIFT+RANSAC) and reports NCC, sharpness and per-icon-cell metrics. |
+| `scripts/ota_validation_server.py` | Serves throwaway osupdate metadata so an older upgrade path can be re-validated. |
+| `video_samples/tools/capture_measure.py` | Webcam recorder plus ruler-strip analyzer: `presented_fps` (pictures actually seen) separate from `clip_rate_fps` (how fast the clip timeline advanced). |
+| `video_samples/tools/generate_assets.py` | Regenerates the clips, sidecars and the AVI/MOV/MKV muxes. |
+| `video_samples/tools/probe_matrix.py` | On-device SD/display matrix; run it from a fresh boot. |
+| `tests/cpython_*.py`, `tests/manual_test_*.py` | Host-side and manual entry points for the acoustic and camera tools. |
+
+Hardware facts that cost time to rediscover:
+
+- **The badge's headset jack is wired to this host's line input, card 0 (`hw:0,0`).** That is how to record what the badge plays (full scale, clean). Card 2 (`hw:2,0`) is the C925e webcam mic and refuses mono; card 3 (`hw:3,0`) is a Generalplus USB audio device that is *not* wired to the badge. Recording the wrong card makes healthy audio look silent.
+- **v4l2 timestamps are `CLOCK_MONOTONIC`, ALSA's are the wall clock.** A one-shot webcam+line-in capture therefore cannot be aligned: ffmpeg rebases each stream to zero (losing the difference), `-copyts` pushes the absolute values past what Matroska can hold, and the UVC stream arrives with seconds of buffered frames. Measuring an A/V offset needs one marker in both streams (clap board, or an LED driven from the beep event).
+- The I2S DMA ring starts full of silence that plays out in real time, so the first write after opening only lands as the ring drains (~22 ms per KB). Wait `ibuf` before priming.
+- Firmware `machine.I2S.write()` does not release the GIL, so an audio thread buys nothing; feed the sink from the same loop that presents frames.
+- **Copying files to the badge's SD card over USB-CDC runs at about 2 KB/s** (`mpremote cp` is the fastest serial path; chunked base64 through the REPL is no better): 500 KB takes ~5 minutes, so do not move media that way. The card itself writes at ~345 KB/s, so the link is the limit.
+- **To put megabytes on the card, pull them over WiFi instead.** Serve the directory on the host (`cd dir && python3 -m http.server 8765`) and fetch it on the device with a raw socket GET (~200 KB/s: a 2.6 MB clip in 12.5 s). `DownloadManager` needs the async stack and failed with `ENOENT` when called from the REPL; a plain `socket` + `GET ... HTTP/1.0` writing to `/sdcard/...` works. Mount the card first (`SDCardManager.mount()`), or the path does not resolve.
+
 ## Development rules
 
 - **TDD:** write failing test → fix → test passes.
 - **Lint:** every change must pass `make lint`. Ruff, double quotes.
+- **Names:** use descriptive names, never bare numbers or opaque suffixes. When a framework forces a numeric variant (e.g. display drivers select `_<driver>_init_type<N>.py` through `init(type=N)`), export named constants from the package and use those at every call site (`init(st7789.PROFILE_LEGACY)`), keeping the numeric mapping in one documented place.
 - **Comments/docstrings:** never add/remove/modify unless explicitly asked.
 - **GitHub comments:** always very polite and gentle (issues, PRs, reviews).
 - **Batch edits:** constrain to exact patterns. Broad edits can silently delete unrelated code. If damage occurs, restore from git and re-apply a precise script.

@@ -1458,7 +1458,7 @@ class SerialBackend:
             f.write(data)
         subprocess.run(
             _mpremote_cmd(self.port, "cp", tmppath, ":{}".format(path)),
-            capture_output=True, timeout=60
+            capture_output=True, timeout=120 + len(data) // 1024
         )
         _os.unlink(tmppath)
 
