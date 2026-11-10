@@ -146,6 +146,7 @@ Hardware facts that cost time to rediscover:
 - **Names:** use descriptive names, never bare numbers or opaque suffixes. When a framework forces a numeric variant (e.g. display drivers select `_<driver>_init_type<N>.py` through `init(type=N)`), export named constants from the package and use those at every call site (`init(st7789.PROFILE_LEGACY)`), keeping the numeric mapping in one documented place.
 - **Comments/docstrings:** never add/remove/modify unless explicitly asked.
 - **GitHub comments:** always very polite and gentle (issues, PRs, reviews).
+- **CI strips `@micropython.native` / `@micropython.viper`**: the workflow comments those decorator lines out before running the suite, so a module must still work as ordinary Python. Pointer builtins (`ptr8`, `ptr16`) only exist inside a viper-compiled function and raise `NameError` there — probe viper once at import (see `adpcm_ima._viper_available`) and fall back to a plain-Python implementation. Reproduce locally with the same `sed` over `internal_filesystem` before pushing.
 - **Batch edits:** constrain to exact patterns. Broad edits can silently delete unrelated code. If damage occurs, restore from git and re-apply a precise script.
 - **Implement missing functionality** rather than working around it.
 - **USB host:** DisplayLink display + HID support lives in `c_mpos/usb/` — read its `README.md` before touching USB, display, touch, or topmenu code; build with `./scripts/build_mpos.sh esp32s3 --usb`.

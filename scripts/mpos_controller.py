@@ -1768,7 +1768,7 @@ class MPOSController:
         return mpos_buzzer_acoustic
 
     def buzzer_acoustic_measure(self, notes=None, volume=100, device=None, out_dir=None,
-                                label="buzzer", thresholds=None):
+                                channels=None, label="buzzer", thresholds=None):
         """Play notes on the badge buzzer and score a host microphone recording.
 
         Host-only: needs a USB microphone on the host, ``arecord`` and numpy
@@ -1779,15 +1779,16 @@ class MPOSController:
         return buzzer.verify(
             controller=self, notes=notes or buzzer.DEFAULT_NOTES, volume=volume,
             device=device, out_dir=out_dir or buzzer.DEFAULT_OUT_DIR, label=label,
+            channels=channels,
             thresholds=thresholds,
         )
 
     def buzzer_acoustic_verify(self, notes=None, volume=100, device=None, out_dir=None,
-                               label="buzzer", thresholds=None):
+                               channels=None, label="buzzer", thresholds=None):
         """Like buzzer_acoustic_measure but returns ``(ok, metrics)``."""
         measured = self.buzzer_acoustic_measure(
             notes=notes, volume=volume, device=device, out_dir=out_dir, label=label,
-            thresholds=thresholds,
+            channels=channels, thresholds=thresholds,
         )
         return bool(measured.get("ok")), measured
 
@@ -1800,6 +1801,7 @@ class MPOSController:
         return mpos_dac_acoustic
 
     def dac_acoustic_measure(self, notes=None, file=None, volume=100, device=None,
+                             channels=None,
                              out_dir=None, label="dac", output=None, thresholds=None,
                              capture_gain=None):
         """Play tones (or *file*) on the badge DAC and score a host recording.
@@ -1814,6 +1816,7 @@ class MPOSController:
             notes = dac.DEFAULT_NOTES
         return dac.verify(
             controller=self, notes=notes, file=file, volume=volume, device=device,
+            channels=channels,
             out_dir=out_dir or dac.DEFAULT_OUT_DIR, label=label,
             output=output or dac.DEFAULT_OUTPUT, thresholds=thresholds,
             capture_gain=capture_gain,
@@ -1821,11 +1824,12 @@ class MPOSController:
 
     def dac_acoustic_verify(self, notes=None, file=None, volume=100, device=None,
                             out_dir=None, label="dac", output=None, thresholds=None,
-                            capture_gain=None):
+                            capture_gain=None, channels=None):
         """Like dac_acoustic_measure but returns ``(ok, metrics)``."""
         measured = self.dac_acoustic_measure(
             notes=notes, file=file, volume=volume, device=device, out_dir=out_dir,
             label=label, output=output, thresholds=thresholds, capture_gain=capture_gain,
+            channels=channels,
         )
         return bool(measured.get("ok")), measured
 
