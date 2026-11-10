@@ -216,6 +216,10 @@ def detect_board():
             return None
 
         if is_esp32s3:
+            from mpos.board.d_shell_detect import detect as detect_d_shell
+            if detect_d_shell():
+                return "d_shell"
+
             if __debug__: logger.debug("lilygo_t_hmi ?")
             if detect_lilygo_t_hmi():
                 return "lilygo_t_hmi"
