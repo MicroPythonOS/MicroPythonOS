@@ -121,7 +121,7 @@ Check here before writing a new measurement script; these exist and are maintain
 
 | Tool | What it does |
 |------|--------------|
-| `scripts/mpos_dac_acoustic.py` | Plays a tone sequence (or `--file <wav>`) through an i2s output and scores a recording from a host capture input. Also the way to prove the badge actually makes sound. |
+| `scripts/mpos_dac_acoustic.py` | Plays a tone sequence (or `--file <wav>`) through an i2s output and scores a recording from a host capture input. Also the way to prove the badge actually makes sound. Needs no cable: the tools default to a USB microphone and pick the channel count from the device, so the webcam mic records both the DAC speaker and the buzzer. |
 | `scripts/mpos_buzzer_acoustic.py` | Records the PWM buzzer with a host mic and folds each peak to the expected harmonic, so low notes work despite the piezo resonance. |
 | `scripts/mpos_screen_camera.py` | Aligns a webcam view to the device framebuffer (SIFT+RANSAC) and reports NCC, sharpness and per-icon-cell metrics. |
 | `scripts/ota_validation_server.py` | Serves throwaway osupdate metadata so an older upgrade path can be re-validated. |
@@ -132,7 +132,7 @@ Check here before writing a new measurement script; these exist and are maintain
 
 Hardware facts that cost time to rediscover:
 
-- **The badge's headset jack is wired to this host's line input, card 0 (`hw:0,0`).** That is how to record what the badge plays (full scale, clean). Card 2 (`hw:2,0`) is the C925e webcam mic and refuses mono; card 3 (`hw:3,0`) is a Generalplus USB audio device that is *not* wired to the badge. Recording the wrong card makes healthy audio look silent.
+- **The badge's headset jack is wired to this host's line input, card 0 (`hw:0,0`)** — full scale and clean, and the right choice for precision (`--device plughw:0,0`). Card 2 (`hw:2,0`) is the C925e webcam mic: it refuses mono (the tools ask for stereo automatically) and it hears the buzzer and the speaker the badge drives, so it is the tools' default and one microphone is enough. Card 3 (`hw:3,0`) is a Generalplus USB audio device that is *not* wired to the badge. Recording the wrong card makes healthy audio look silent.
 - **v4l2 timestamps are `CLOCK_MONOTONIC`, ALSA's are the wall clock.** A one-shot webcam+line-in capture therefore cannot be aligned: ffmpeg rebases each stream to zero (losing the difference), `-copyts` pushes the absolute values past what Matroska can hold, and the UVC stream arrives with seconds of buffered frames. Measuring an A/V offset needs one marker in both streams (clap board, or an LED driven from the beep event).
 - The I2S DMA ring starts full of silence that plays out in real time, so the first write after opening only lands as the ring drains (~22 ms per KB). Wait `ibuf` before priming.
 - Firmware `machine.I2S.write()` does not release the GIL, so an audio thread buys nothing; feed the sink from the same loop that presents frames.

@@ -235,7 +235,7 @@ class TestVerifyOrchestration(unittest.TestCase):
         original = (buzzer.find_capture_device, buzzer.start_recording, buzzer.stop_recording,
                     buzzer.wait_for_recording, buzzer._play_notes, buzzer.time.sleep)
 
-        def fake_start(device, out_path, rate):
+        def fake_start(device, out_path, rate, channels=None):
             return out_path
 
         def fake_stop(process, out_path=None):
@@ -290,7 +290,7 @@ class TestVerifyOrchestration(unittest.TestCase):
         try:
             buzzer._controller = lambda port: Flaky()
             buzzer.find_capture_device = lambda spec=None: buzzer.CaptureDevice(3, 0, "USB Audio Device", "USB Audio")
-            buzzer.start_recording = lambda device, out_path, rate: out_path
+            buzzer.start_recording = lambda device, out_path, rate, channels=None: out_path
             buzzer.stop_recording = lambda process, out_path=None: buzzer.write_wav(
                 out_path, synth_recording([880.0]), 44100)
             buzzer.wait_for_recording = lambda process, out_path, timeout=8.0: True
