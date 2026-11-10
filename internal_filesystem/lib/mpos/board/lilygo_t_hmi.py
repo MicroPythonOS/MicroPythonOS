@@ -102,7 +102,7 @@ indev = XPT2046(
     startup_rotation=lv.DISPLAY_ROTATION._0
 )
 
-mpos.ui.main_display.init()
+mpos.ui.main_display.init(st7789.PROFILE_LEGACY)
 mpos.ui.main_display.set_color_inversion(False)
 mpos.ui.main_display.set_backlight(100)
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._0) # must be done after initializing display and creating the touch drivers, to ensure proper handling
