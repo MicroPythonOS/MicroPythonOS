@@ -194,12 +194,60 @@ def _decode_stereo_into(src, block_align: int, dst, out_offset: int) -> int:
 
 
 @micropython.native
+def _decode_block_py(data, channels, block_align, out, out_offset):
+    """Reference decoder: plain Python, used when viper is not in effect.
+
+    CI comments out the `@micropython.viper` decorators so the test runner can
+    execute every module as ordinary Python; the pointer builtins the fast path
+    relies on do not exist then, so this implementation is what runs there.
+    """
+    ns_per_ch = samples_per_block(block_align, channels)
+    preds = [0] * channels
+    idxs = [0] * channels
+    for ch in range(channels):
+        off = ch * 4
+        preds[ch] = _read_s16_le(data, off)
+        idxs[ch] = max(0, min(88, data[off + 2]))
+    for ch in range(channels):
+        _write_s16_le(out, out_offset + ch * 2, preds[ch])
+    dp = 4 * channels
+    oi = [out_offset + ch * 2 + channels * 2 for ch in range(channels)]
+    for _ in range((ns_per_ch - 1) // 8):
+        for ch in range(channels):
+            start = dp
+            dp += 4
+            for byte_offset in range(4):
+                value = data[start + byte_offset]
+                for nibble in (value & 0x0F, value >> 4):
+                    preds[ch], idxs[ch] = _expand(preds[ch], idxs[ch], nibble)
+                    _write_s16_le(out, oi[ch], preds[ch])
+                    oi[ch] += channels * 2
+
+
+@micropython.viper
+def _viper_probe(buf) -> int:
+    return ptr8(buf)[0]
+
+
+def _viper_available():
+    try:
+        return _viper_probe(bytearray(1)) == 0
+    except Exception:
+        return False
+
+
+_VIPER = _viper_available()
+
+
+@micropython.native
 def decode_block_into(data, channels, block_align, out, out_offset):
     """Decode one ADPCM-IMA block into the provided bytearray at out_offset."""
     frames = 1 + (block_align - 4 * channels) * 2 // channels
     if len(data) < block_align or out_offset + frames * channels * 2 > len(out):
         raise IndexError("truncated IMA block")
-    if channels == 1:
+    if not _VIPER:
+        _decode_block_py(data, channels, block_align, out, out_offset)
+    elif channels == 1:
         _decode_mono_into(data, block_align, out, out_offset)
     else:
         _decode_stereo_into(data, block_align, out, out_offset)
