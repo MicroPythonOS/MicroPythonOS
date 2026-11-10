@@ -202,7 +202,7 @@ class VideoPlayer(Activity):
         open_lbl.set_text("Open")
         open_lbl.center()
         self._bar = lv.obj(screen)
-        self._bar.set_size(lv.pct(100), 40)
+        self._bar.set_size(lv.pct(100), 48)
         self._bar.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         self._bar.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
         self._bar.set_style_bg_opa(lv.OPA._70, lv.PART.MAIN)
@@ -211,13 +211,15 @@ class VideoPlayer(Activity):
         self._bar.set_style_pad_all(0, lv.PART.MAIN)
         self._bar.remove_flag(lv.obj.FLAG.SCROLLABLE)
         self._bar.add_flag(lv.obj.FLAG.HIDDEN)
-        # Evenly spread across the bar: -5s, play/pause in the middle, +5s.
-        self._make_control(self._bar, lv.SYMBOL.PREV, lambda e: self._seek_by(-self.SEEK_STEP_MS), -120)
-        self._make_control(self._bar, lv.SYMBOL.REFRESH, lambda e: self._request_seek(0), -60)
+        # Evenly spread across the bar: rewind, restart, play/pause, forward,
+        # close. The FF/REW glyphs are not in the badge font, so the seek
+        # controls are drawn as "<<" / ">>".
+        self._make_control(self._bar, "<<", lambda e: self._seek_by(-self.SEEK_STEP_MS), -124)
+        self._make_control(self._bar, lv.SYMBOL.REFRESH, lambda e: self._request_seek(0), -62)
         self._play_icon = self._make_control(self._bar, lv.SYMBOL.PLAY,
                                              self._toggle_pause, 0)
-        self._make_control(self._bar, lv.SYMBOL.NEXT, lambda e: self._seek_by(self.SEEK_STEP_MS), 60)
-        self._make_control(self._bar, lv.SYMBOL.CLOSE, lambda e: self._request_exit(), 120)
+        self._make_control(self._bar, ">>", lambda e: self._seek_by(self.SEEK_STEP_MS), 62)
+        self._make_control(self._bar, lv.SYMBOL.CLOSE, lambda e: self._request_exit(), 124)
 
         self._overlays = [self.title_label, self.status_label, self.fps_label,
                           open_btn, full_btn, half_btn, self._bar]
@@ -267,7 +269,7 @@ class VideoPlayer(Activity):
 
     def _make_control(self, parent, symbol, callback, x_offset):
         button = lv.button(parent)
-        button.set_size(44, 34)
+        button.set_size(56, 44)
         button.align(lv.ALIGN.CENTER, x_offset, 0)
         button.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         button.set_style_border_width(0, lv.PART.MAIN)
@@ -276,6 +278,7 @@ class VideoPlayer(Activity):
         label = lv.label(button)
         label.set_text(symbol)
         label.set_style_text_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
+        label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
         label.center()
         return label
 
@@ -534,7 +537,7 @@ class VideoPlayer(Activity):
 
     # ----- seeking and looping -------------------------------------------
 
-    SEEK_STEP_MS = 5000
+    SEEK_STEP_MS = 15000
 
     def _position_ms(self):
         pacer = self._pacer
