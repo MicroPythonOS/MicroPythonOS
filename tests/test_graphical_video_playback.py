@@ -385,6 +385,37 @@ class TestVideoPlayback(unittest.TestCase):
         self.assertTrue(activity._playing, "finish ran inside the pump")
         activity._stop_playback()
 
+    def test_seek_bar_scrubs_to_a_position(self):
+        self._make_avi()
+        intent = Intent(action="view", data=AVI, extras={"loop": "1"})
+        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        activity = self._current_activity()
+        for _ in range(20):
+            lv.timer_handler()
+            time.sleep_ms(2)
+        self.assertTrue(activity._duration_ms() >= 1200,
+                        "duration %s" % activity._duration_ms())
+
+        activity._toggle_pause()
+        self.assertFalse(activity._bar.has_flag(lv.obj.FLAG.HIDDEN),
+                         "seeking needs the bar on screen")
+
+        class _Event:
+            def __init__(self, code):
+                self.code = code
+
+            def get_code(self):
+                return self.code
+
+        activity._seek.set_value(900, False)
+        activity._seek_event(_Event(lv.EVENT.RELEASED))
+        for _ in range(30):
+            lv.timer_handler()
+            time.sleep_ms(2)
+        self.assertTrue(activity._paused, "a seek while paused resumed playback")
+        self.assertTrue(activity._position_ms() >= 800,
+                        "position %s" % activity._position_ms())
+
     def test_sidecar_audio_is_streamed_with_the_frames(self):
         self._make_sidecar()
         intent = Intent(action="view", data=CLIP)

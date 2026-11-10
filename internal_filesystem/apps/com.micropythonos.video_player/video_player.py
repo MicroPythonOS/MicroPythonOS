@@ -138,6 +138,7 @@ class VideoPlayer(Activity):
         self._pause_frame = 0
         self._controls_until = 0
         self._exit_requested = False
+        self._seek_dragging = False
         self._reported = True
         self._own_pump = False
         self._pump_timer = None
@@ -202,7 +203,7 @@ class VideoPlayer(Activity):
         open_lbl.set_text("Open")
         open_lbl.center()
         self._bar = lv.obj(screen)
-        self._bar.set_size(lv.pct(100), 48)
+        self._bar.set_size(lv.pct(100), 66)
         self._bar.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         self._bar.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
         self._bar.set_style_bg_opa(lv.OPA._70, lv.PART.MAIN)
@@ -211,6 +212,13 @@ class VideoPlayer(Activity):
         self._bar.set_style_pad_all(0, lv.PART.MAIN)
         self._bar.remove_flag(lv.obj.FLAG.SCROLLABLE)
         self._bar.add_flag(lv.obj.FLAG.HIDDEN)
+        self._seek = lv.slider(self._bar)
+        self._seek.set_size(lv.pct(100) - 16, 18)
+        self._seek.align(lv.ALIGN.TOP_MID, 0, 3)
+        self._seek.set_range(0, 1000)
+        self._seek.set_value(0, False)
+        self._seek.add_event_cb(self._seek_event, lv.EVENT.PRESSED, None)
+        self._seek.add_event_cb(self._seek_event, lv.EVENT.RELEASED, None)
         # Evenly spread across the bar: rewind, restart, play/pause, forward,
         # close. The FF/REW glyphs are not in the badge font, so the seek
         # controls are drawn as "<<" / ">>".
@@ -269,8 +277,8 @@ class VideoPlayer(Activity):
 
     def _make_control(self, parent, symbol, callback, x_offset):
         button = lv.button(parent)
-        button.set_size(56, 44)
-        button.align(lv.ALIGN.CENTER, x_offset, 0)
+        button.set_size(56, 40)
+        button.align(lv.ALIGN.BOTTOM_MID, x_offset, -2)
         button.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         button.set_style_border_width(0, lv.PART.MAIN)
         button.set_style_shadow_width(0, lv.PART.MAIN)
@@ -563,7 +571,7 @@ class VideoPlayer(Activity):
             ms = 0
         if self._fps <= 0:
             self._fps = self.DEFAULT_FPS
-        return self._restart_at(ms * self._fps // 1000)
+        return self._restart_at(ms * self._fps // 1000, resume=not self._paused)
 
     def _toggle_pause(self):
         if not self._playing:
@@ -586,13 +594,14 @@ class VideoPlayer(Activity):
         """Loop: start the clip again from the first frame."""
         return self._restart_at(0)
 
-    def _restart_at(self, frame):
+    def _restart_at(self, frame, resume=True):
         """Rewind and resume at `frame`, reopening the sound like a fresh start.
 
         The sink keeps ~180ms of the old sound queued, so priming on top of it
         would leave the new position mixed with the old one; closing and
         reopening it is the same path a normal start takes and costs the ring's
-        drain (~370ms).
+        drain (~370ms). With resume=False (a seek while paused) it shows the
+        frame at the new position and stays paused.
         """
         reader = self._reader
         if not self._playing or reader is None:
@@ -611,6 +620,15 @@ class VideoPlayer(Activity):
         except Exception as e:
             logger.error("video_player: seek failed: %s", e)
             return False
+        if not resume:
+            # Scrub preview: present the frame at the new position, no sound.
+            self._close_audio()
+            self._pacer = Pacer(self._fps, time.ticks_ms() - frame * 1000 // self._fps)
+            self._pacer.frame = frame
+            self._paused = False
+            self._frame_tick()
+            self._paused = True
+            return True
         self._close_audio()
         if isinstance(reader, AviReader):
             try:
@@ -917,6 +935,8 @@ class VideoPlayer(Activity):
         try:
             if self._exit_requested:
                 return
+            # A seek must land even while paused: that is how scrubbing works.
+            self._service_seek()
             if self._paused:
                 # Keep the UI alive (the bar's buttons are LVGL widgets) without
                 # touching the frame timeline.
@@ -987,11 +1007,45 @@ class VideoPlayer(Activity):
         finally:
             self._pass_pending = False
 
+    def _seek_event(self, event):
+        if event.get_code() == lv.EVENT.PRESSED:
+            self._seek_dragging = True
+        elif event.get_code() == lv.EVENT.RELEASED:
+            self._seek_dragging = False
+            self._request_seek(self._seek.get_value())
+
+    def _duration_ms(self):
+        """Length of the clip, or 0 when it cannot be known yet."""
+        reader = self._reader
+        if reader is None or self._fps <= 0:
+            return 0
+        frames = getattr(reader, "frame_count", 0) or 0
+        if not frames:
+            # Raw MJPEG has no index: estimate from the average frame size.
+            size = getattr(reader, "_size", 0) or 0
+            seen = getattr(reader, "frames", 0) or 0
+            if size and seen:
+                frames = size * seen // reader.sum_frame_bytes
+        return frames * 1000 // self._fps
+
+    def _sync_scrubber(self):
+        if self._seek_dragging:
+            return
+        duration = self._duration_ms()
+        if duration > 0:
+            self._seek.set_range(0, duration)
+            position = self._position_ms()
+            if position > duration:
+                position = duration
+            self._seek.set_value(position, False)
+
     def _service_controls(self):
         """Hide the bar once its time is up, unless playback is paused."""
         if self._controls_until and not self._paused:
             if time.ticks_ms() >= self._controls_until:
                 self._hide_controls()
+            else:
+                self._sync_scrubber()
 
     def _service_seek(self):
         ms = self._seek_request_ms
@@ -1006,10 +1060,10 @@ class VideoPlayer(Activity):
             return
         if self._exit_requested:
             return
+        self._service_seek()
         if self._paused:
             return
         self._service_controls()
-        self._service_seek()
         stats = self._stats
         stats["ticks"] += 1
         pass_start = time.ticks_us()
