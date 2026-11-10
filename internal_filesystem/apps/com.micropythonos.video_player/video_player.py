@@ -134,6 +134,10 @@ class VideoPlayer(Activity):
         self._play_path = ""
         self._preloaded = False
         self._preload_forced = None
+        self._paused = False
+        self._pause_frame = 0
+        self._controls_until = 0
+        self._exit_requested = False
         self._reported = True
         self._own_pump = False
         self._pump_timer = None
@@ -165,6 +169,7 @@ class VideoPlayer(Activity):
         screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
         self.image = lv.image(screen)
         self.image.center()
+        self.image.add_flag(lv.obj.FLAG.CLICKABLE)
         self.image.add_event_cb(self._image_clicked, lv.EVENT.CLICKED, None)
         screen.add_event_cb(self._key_pressed, lv.EVENT.KEY, None)
         self.title_label = lv.label(screen)
@@ -196,8 +201,26 @@ class VideoPlayer(Activity):
         open_lbl = lv.label(open_btn)
         open_lbl.set_text("Open")
         open_lbl.center()
+        self._bar = lv.obj(screen)
+        self._bar.set_size(lv.pct(100), 40)
+        self._bar.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self._bar.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
+        self._bar.set_style_bg_opa(lv.OPA._70, lv.PART.MAIN)
+        self._bar.set_style_border_width(0, lv.PART.MAIN)
+        self._bar.set_style_radius(0, lv.PART.MAIN)
+        self._bar.set_style_pad_all(0, lv.PART.MAIN)
+        self._bar.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        self._bar.add_flag(lv.obj.FLAG.HIDDEN)
+        # Evenly spread across the bar: -5s, play/pause in the middle, +5s.
+        self._make_control(self._bar, lv.SYMBOL.PREV, lambda e: self._seek_by(-self.SEEK_STEP_MS), -120)
+        self._make_control(self._bar, lv.SYMBOL.REFRESH, lambda e: self._request_seek(0), -60)
+        self._play_icon = self._make_control(self._bar, lv.SYMBOL.PLAY,
+                                             self._toggle_pause, 0)
+        self._make_control(self._bar, lv.SYMBOL.NEXT, lambda e: self._seek_by(self.SEEK_STEP_MS), 60)
+        self._make_control(self._bar, lv.SYMBOL.CLOSE, lambda e: self._request_exit(), 120)
+
         self._overlays = [self.title_label, self.status_label, self.fps_label,
-                          open_btn, full_btn, half_btn]
+                          open_btn, full_btn, half_btn, self._bar]
         self.setContentView(screen)
 
     def onResume(self, screen):
@@ -239,6 +262,60 @@ class VideoPlayer(Activity):
             self._start_at_ms = int(extras.get("seek", 0) or 0)
         except (TypeError, ValueError):
             self._start_at_ms = 0
+
+    CONTROLS_MS = 3000
+
+    def _make_control(self, parent, symbol, callback, x_offset):
+        button = lv.button(parent)
+        button.set_size(44, 34)
+        button.align(lv.ALIGN.CENTER, x_offset, 0)
+        button.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+        button.set_style_border_width(0, lv.PART.MAIN)
+        button.set_style_shadow_width(0, lv.PART.MAIN)
+        button.add_event_cb(lambda event, action=callback: action(event), lv.EVENT.CLICKED, None)
+        label = lv.label(button)
+        label.set_text(symbol)
+        label.set_style_text_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
+        label.center()
+        return label
+
+    def _focus_image(self):
+        """Make the picture the focused object for the duration of playback.
+
+        A/ENTER then sends CLICKED to it (pause) instead of activating an
+        overlay button that is not even on screen.
+        """
+        group = lv.group_get_default()
+        if group is None:
+            return
+        try:
+            group.add_obj(self.image)
+            group.focus(self.image)
+        except Exception as e:
+            logger.error("video_player: cannot focus the picture: %s", e)
+
+    def _show_controls(self, ms=None):
+        self._bar.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._controls_until = 0 if ms is None else time.ticks_ms() + ms
+        self._update_play_icon()
+
+    def _hide_controls(self):
+        self._bar.add_flag(lv.obj.FLAG.HIDDEN)
+        self._controls_until = 0
+
+    def _update_play_icon(self):
+        self._play_icon.set_text(lv.SYMBOL.PLAY if self._paused else lv.SYMBOL.PAUSE)
+
+    def _request_exit(self):
+        """Leave after the current LVGL pass, never from inside the pump.
+
+        Tearing the activity down while its own timer callback is drawing left
+        the panel showing torn, scaled garbage until the app was re-entered.
+        """
+        if self._exit_requested:
+            return
+        self._exit_requested = True
+        lv.async_call(lambda _: self.finish(), None)
 
     def _pick_file(self, event=None):
         self.status_label.set_text("pick a clip")
@@ -289,8 +366,10 @@ class VideoPlayer(Activity):
         self._play(path)
 
     def _image_clicked(self, event):
-        if self._playing:
-            self.finish()
+        if not self._playing:
+            return
+        self._toggle_pause()
+        self._show_controls(self.CONTROLS_MS)
 
     def _key_pressed(self, event):
         if not self._playing:
@@ -298,8 +377,12 @@ class VideoPlayer(Activity):
         key = event.get_key()
         if key == lv.KEY.NEXT:
             self._seek_by(self.SEEK_STEP_MS)
+            self._show_controls(self.CONTROLS_MS)
         elif key == lv.KEY.PREV:
             self._seek_by(-self.SEEK_STEP_MS)
+            self._show_controls(self.CONTROLS_MS)
+        elif key == lv.KEY.ESC:
+            self._request_exit()
 
     # ------------------------------------------------------------------
     #  MJPEG playback: read -> decode -> set_src -> refr_now -> pace.
@@ -309,6 +392,10 @@ class VideoPlayer(Activity):
     def _play(self, path):
         self._read_play_extras()
         self._playing = True
+        self._paused = False
+        self._exit_requested = False
+        self._hide_controls()
+        self._focus_image()
         self._reported = False
         self._play_path = path
         self._play_started_ms = time.ticks_ms()
@@ -474,6 +561,23 @@ class VideoPlayer(Activity):
         if self._fps <= 0:
             self._fps = self.DEFAULT_FPS
         return self._restart_at(ms * self._fps // 1000)
+
+    def _toggle_pause(self):
+        if not self._playing:
+            return
+        if self._paused:
+            frame = self._pause_frame
+            self._paused = False
+            self._restart_at(frame)
+            self._show_controls(self.CONTROLS_MS)
+        else:
+            self._paused = True
+            self._pause_frame = self._pacer.frame if self._pacer else 0
+            # Stop the sound with the picture; resuming reopens the sink, which
+            # also gets rid of the ~180ms still queued before the pause.
+            self._close_audio()
+            self._show_controls(None)
+        self._update_play_icon()
 
     def _restart(self):
         """Loop: start the clip again from the first frame."""
@@ -808,6 +912,17 @@ class VideoPlayer(Activity):
 
     def _pump_pass(self, _):
         try:
+            if self._exit_requested:
+                return
+            if self._paused:
+                # Keep the UI alive (the bar's buttons are LVGL widgets) without
+                # touching the frame timeline.
+                try:
+                    lv.task_handler()
+                except Exception as e:
+                    logger.error("video_player: LVGL pass failed: %s", e)
+                time.sleep_ms(self.PUMP_TICK_MS)
+                return
             # Present every frame that is due in one callback. Waiting for the
             # next tick between frames would add up to a tick of dead time to
             # each one, which at 320x240 is 5ms out of a 66ms budget.
@@ -848,6 +963,7 @@ class VideoPlayer(Activity):
                         if stats is not None:
                             stats["sleep_us"] += time.ticks_diff(time.ticks_us(), t)
                     return
+                self._service_controls()
                 stats = self._stats
                 stats["ticks"] += 1
                 pass_start = time.ticks_us()
@@ -868,6 +984,12 @@ class VideoPlayer(Activity):
         finally:
             self._pass_pending = False
 
+    def _service_controls(self):
+        """Hide the bar once its time is up, unless playback is paused."""
+        if self._controls_until and not self._paused:
+            if time.ticks_ms() >= self._controls_until:
+                self._hide_controls()
+
     def _service_seek(self):
         ms = self._seek_request_ms
         if ms is None:
@@ -879,6 +1001,11 @@ class VideoPlayer(Activity):
         # Desktop fallback: the framework keeps passing, an LVGL timer pumps.
         if not self._playing:
             return
+        if self._exit_requested:
+            return
+        if self._paused:
+            return
+        self._service_controls()
         self._service_seek()
         stats = self._stats
         stats["ticks"] += 1
@@ -889,7 +1016,7 @@ class VideoPlayer(Activity):
 
     def _frame_tick(self):
         """Present one frame if it is due; return ms until the next check."""
-        if not self._playing:
+        if not self._playing or self._paused:
             return 1
         stats = self._stats
         now = time.ticks_ms()
@@ -976,6 +1103,9 @@ class VideoPlayer(Activity):
     def _stop_playback(self):
         was_playing = self._playing
         self._playing = False
+        self._paused = False
+        self._exit_requested = False
+        self._hide_controls()
         self._stop_pump()
         self._close_audio()
         if self._reader is not None:

@@ -329,6 +329,62 @@ class TestVideoPlayback(unittest.TestCase):
         self.assertEqual(second._play_path, AVI)
         self.assertFalse(first._playing, "the old clip kept running behind the new one")
 
+    def test_tap_pauses_and_resumes(self):
+        self._make_avi()
+        intent = Intent(action="view", data=AVI)
+        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        activity = self._current_activity()
+        self.assertTrue(activity._playing)
+        self.assertTrue(activity._bar.has_flag(lv.obj.FLAG.HIDDEN))
+
+        activity._image_clicked(None)
+        self.assertTrue(activity._paused)
+        self.assertFalse(activity._bar.has_flag(lv.obj.FLAG.HIDDEN),
+                         "the controls should show while paused")
+        self.assertIsNone(activity._audio)
+
+        # Frame ticking stops, so the picture stays put.
+        before = activity._stats["presented"]
+        activity._frame_tick()
+        self.assertEqual(activity._stats["presented"], before)
+
+        activity._image_clicked(None)
+        self.assertFalse(activity._paused)
+        self.assertIsNotNone(activity._audio, "resuming should reopen the sound")
+        activity._stop_playback()
+
+    def test_controls_hide_after_a_few_seconds(self):
+        intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
+        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        activity = self._current_activity()
+        activity._show_controls(0)
+        self.assertFalse(activity._bar.has_flag(lv.obj.FLAG.HIDDEN))
+        deadline = time.ticks_ms() + 3000
+        while time.ticks_ms() < deadline and not activity._bar.has_flag(lv.obj.FLAG.HIDDEN):
+            lv.timer_handler()
+            time.sleep_ms(2)
+        self.assertTrue(activity._bar.has_flag(lv.obj.FLAG.HIDDEN),
+                        "controls never auto-hid")
+        activity.finish()
+
+    def test_play_button_toggles_and_close_is_deferred(self):
+        intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
+        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        activity = self._current_activity()
+        # The bar's play/pause button drives the same toggle as a tap.
+        activity._toggle_pause()
+        self.assertTrue(activity._paused)
+        self.assertEqual(activity._play_icon.get_text(), lv.SYMBOL.PLAY)
+        activity._toggle_pause()
+        self.assertFalse(activity._paused)
+        self.assertEqual(activity._play_icon.get_text(), lv.SYMBOL.PAUSE)
+
+        # Closing from the pump must not tear the screen down inside the pass.
+        activity._request_exit()
+        self.assertTrue(activity._exit_requested)
+        self.assertTrue(activity._playing, "finish ran inside the pump")
+        activity._stop_playback()
+
     def test_sidecar_audio_is_streamed_with_the_frames(self):
         self._make_sidecar()
         intent = Intent(action="view", data=CLIP)
