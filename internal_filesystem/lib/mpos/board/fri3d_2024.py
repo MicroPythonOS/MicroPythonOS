@@ -57,7 +57,7 @@ mpos.ui.main_display = st7789.ST7789(
     reset_state=0
 )
 
-mpos.ui.main_display.init()
+mpos.ui.main_display.init(st7789.PROFILE_LEGACY)
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
 mpos.ui.main_display.set_color_inversion(False)

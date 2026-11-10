@@ -55,7 +55,7 @@ mpos.ui.main_display = st7789.ST7789(
     offset_y=35
 ) # this will trigger lv.init()
 mpos.ui.main_display.set_power(True) # set RD pin to high before the rest, otherwise garbled output
-mpos.ui.main_display.init()
+mpos.ui.main_display.init(st7789.PROFILE_LEGACY)
 mpos.ui.main_display.set_backlight(100) # works
 
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
