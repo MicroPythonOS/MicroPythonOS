@@ -96,12 +96,7 @@ InputManager.register_indev(keypad)
 sensor_i2c = SoftI2C(scl=Pin(21), sda=Pin(14), freq=100000, timeout=20000)
 imu_i2c = I2C(1, scl=Pin(7), sda=Pin(6), freq=100000, timeout=20000)
 imu_address = 0x6A
-try:
-    if imu_i2c.readfrom_mem(imu_address, 0, 1) != b"\x05":
-        raise OSError("Unexpected QMI8658 identity")
-    SensorManager.init(imu_i2c, address=imu_address, mounted_position=SensorManager.FACING_SKY)
-except OSError as error:
-    logger.warning("D-Shell IMU unavailable: %s", error)
+SensorManager.init(imu_i2c, address=imu_address, mounted_position=SensorManager.FACING_SKY)
 
 try:
     LightsManager.init(46)

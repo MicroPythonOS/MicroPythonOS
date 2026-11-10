@@ -41,6 +41,7 @@ python3 tests/cpython_d_shell_detection.py
 python3 tests/cpython_d_shell_bootstrap.py
 python3 tests/cpython_st7789v_pr.py
 python3 tests/cpython_d_shell_hardware_guard.py
+python3 tests/cpython_d_shell_review.py
 ```
 
 On a D-Shell running this profile, with both keys released, no audio playing, the board stationary and the RTC oscillator running:

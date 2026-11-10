@@ -29,7 +29,7 @@ with MPOSController(backend="serial", port=port, reset=False) as controller:
         output.extend(captured + b"\n")
         print(captured.decode(errors="replace"), flush=True)
     results = controller.eval("dshell_results")
-    passed = all(value == "passed" for value in results.values())
+    passed = all(results.get(name) == "passed" for name in names)
     (outdir / "hardware-tests.log").write_bytes(output)
     print(output.decode(errors="replace"), flush=True)
     print("HARDWARE_TESTS_PASSED", passed, flush=True)
