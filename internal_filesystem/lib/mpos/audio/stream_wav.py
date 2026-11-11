@@ -75,6 +75,11 @@ class WAVStream:
     WAVE_FORMAT_ADPCM = 0x0011
     WAVE_FORMAT_EXTENSIBLE = 0xFFFE # often used for 24 and 32 bits per sample
 
+    # Subclasses that feed their own PCM sink (the piezo buzzer driver) set
+    # this so the normal playback loop also runs on desktop, where the default
+    # behaviour is to hand the file to an external player instead.
+    force_pcm = False
+
     # Warm output (opt-in per board via AudioManager.Output(warm_ms=N)): after a
     # clip ends, the MCLK PWM and I2S peripheral keep running and the codec stays
     # unmuted for N ms, so the next clip starts without the click that restarting
@@ -738,7 +743,7 @@ class WAVStream:
 
                 if __debug__: logger.debug("I2S init params: requested_rate=%s, playback_rate=%s, original_rate=%s, channels=%s, bits=16, i2s_pins=%s", self.requested_sample_rate, playback_rate, original_rate, channels, self.i2s_pins)
 
-                if sys.platform != "esp32":
+                if sys.platform != "esp32" and not self.force_pcm:
                     self._play_desktop()
                     return
 

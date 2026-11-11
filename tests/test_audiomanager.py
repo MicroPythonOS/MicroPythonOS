@@ -19,6 +19,11 @@ inject_mocks({
 
 # Now import the module to test
 from mpos.audio.audiomanager import AudioManager
+from mpos.audio import audiomanager as _audiomanager
+
+# mpos/__init__.py imports AudioManager before the mocks above are installed,
+# so audiomanager already holds a reference to the real _thread module.
+_audiomanager._thread = MockThread
 
 
 class TestAudioManager(unittest.TestCase):
@@ -109,15 +114,23 @@ class TestAudioManager(unittest.TestCase):
         with self.assertRaises(ValueError):
             AudioManager.player(rtttl="Test:d=4,o=5,b=120:c").start()
 
-    def test_buzzer_only_rejects_wav(self):
-        """Test that buzzer-only config rejects I2S playback."""
-        # Re-initialize with buzzer only
+    def test_buzzer_accepts_wav_via_pcm_driver(self):
+        """A buzzer output now plays WAV/MP3 through the PCM driver."""
+        AudioManager._instance = None
+        AudioManager()
+        AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=self.buzzer_pin))
+
+        player = AudioManager.player(file_path="test.wav")
+        player.start()
+        self.assertEqual(len(MockThread._started_threads), 1)
+
+    def test_buzzer_rejects_playback_without_a_source(self):
         AudioManager._instance = None
         AudioManager()
         AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=self.buzzer_pin))
 
         with self.assertRaises(ValueError):
-            AudioManager.player(file_path="test.wav").start()
+            AudioManager.player().start()
 
     def test_is_playing_initially_false(self):
         """Test that is_playing() returns False initially."""

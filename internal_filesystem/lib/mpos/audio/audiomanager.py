@@ -45,6 +45,7 @@ class AudioManager:
             channels=1,
             i2s_pins=None,
             buzzer_pin=None,
+            buzzer_gain=800,
             preferred_sample_rate=None,
             on_open=None,
             on_close=None,
@@ -63,6 +64,7 @@ class AudioManager:
             self.name = name
             self.kind = kind
             self.channels = channels
+            self.buzzer_gain = int(buzzer_gain)
             self.preferred_sample_rate = preferred_sample_rate
             self.on_open = on_open
             self.on_close = on_close
@@ -193,6 +195,8 @@ class AudioManager:
     def _add_device(self, device):
         if isinstance(device, AudioManager.Output):
             self._outputs.append(device)
+            if device.kind == "buzzer":
+                self._reserve_buzzer_driver()
             if self._default_output is None:
                 self._default_output = device
             return device
@@ -210,6 +214,25 @@ class AudioManager:
     @classmethod
     def get_inputs(cls):
         return list(cls.get()._inputs)
+
+    @staticmethod
+    def _reserve_buzzer_driver():
+        """Reserve the piezo PCM driver's timer interrupt.
+
+        Registering a buzzer output happens at boot, while CPU interrupt
+        vectors are still available; by the time an app actually plays a file
+        the low/medium pool can be exhausted by the rest of the firmware. The
+        driver keeps the vector for the lifetime of the firmware, so reserving
+        it here makes playback fail-proof.
+        """
+        if sys.platform != "esp32":
+            return
+        try:
+            import buzzer
+
+            buzzer.reserve()
+        except Exception as e:
+            logger.warning("could not reserve the buzzer driver: %s", e)
 
     @classmethod
     def get_default_output(cls):
@@ -556,8 +579,8 @@ class AudioManager:
                 self.STREAM_NOTIFICATION if player.rtttl else self.STREAM_MUSIC
             )
 
-        if player.output.kind == "buzzer" and not player.rtttl:
-            raise ValueError("RTTTL string required for buzzer output")
+        if player.output.kind == "buzzer" and not player.rtttl and not player.file_path:
+            raise ValueError("RTTTL string or file_path required for buzzer output")
         if player.output.kind == "i2s" and not player.file_path:
             raise ValueError("file_path required for i2s output")
 
@@ -736,7 +759,7 @@ class Player:
 
     def _play_thread(self):
         try:
-            if self.output.kind == "buzzer":
+            if self.output.kind == "buzzer" and self.rtttl:
                 self._play_rtttl()
             else:
                 self._play_wav()
@@ -807,6 +830,10 @@ class Player:
         self._stream.play()
 
     def _play_wav(self):
+        if self.output.kind == "buzzer":
+            self._play_buzzer_pcm()
+            return
+
         if self.file_path.lower().endswith(".mp3"):
             from mpos.audio.stream_mp3 import MP3Stream
 
@@ -839,6 +866,29 @@ class Player:
             on_open=getattr(self.output, "on_open", None),
             on_close=getattr(self.output, "on_close", None),
             warm_ms=getattr(self.output, "warm_ms", 0),
+            repeat_count=self._repeat_count,
+        )
+        self._stream.play()
+
+    def _play_buzzer_pcm(self):
+        """Play a WAV/MP3 file through a piezo buzzer instead of an I2S codec."""
+        if self.file_path.lower().endswith(".mp3"):
+            from mpos.audio.stream_buzzer import BuzzerMP3Stream
+
+            stream_class = BuzzerMP3Stream
+        else:
+            from mpos.audio.stream_buzzer import BuzzerStream
+
+            stream_class = BuzzerStream
+
+        on_complete = self.on_complete
+        self._stream = stream_class(
+            file_path=self.file_path,
+            stream_type=self.stream_type,
+            volume=self.volume if self.volume is not None else self._manager._volume,
+            buzzer_pin=self.output.buzzer_pin,
+            buzzer_gain=getattr(self.output, "buzzer_gain", 800),
+            on_complete=on_complete,
             repeat_count=self._repeat_count,
         )
         self._stream.play()

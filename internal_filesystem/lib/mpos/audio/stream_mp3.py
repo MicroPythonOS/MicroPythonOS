@@ -54,7 +54,7 @@ class MP3Stream(WAVStream):
             self._duration_ms = info["duration_ms"]
             self._playback_rate = self._original_rate
 
-            if sys.platform != "esp32":
+            if sys.platform != "esp32" and not self.force_pcm:
                 self._play_desktop()
                 return
 
