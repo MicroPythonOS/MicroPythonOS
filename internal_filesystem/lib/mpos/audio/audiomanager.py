@@ -45,7 +45,7 @@ class AudioManager:
             channels=1,
             i2s_pins=None,
             buzzer_pin=None,
-            buzzer_gain=100,
+            buzzer_gain=800,
             preferred_sample_rate=None,
             on_open=None,
             on_close=None,
@@ -887,7 +887,7 @@ class Player:
             stream_type=self.stream_type,
             volume=self.volume if self.volume is not None else self._manager._volume,
             buzzer_pin=self.output.buzzer_pin,
-            buzzer_gain=getattr(self.output, "buzzer_gain", 100),
+            buzzer_gain=getattr(self.output, "buzzer_gain", 800),
             on_complete=on_complete,
             repeat_count=self._repeat_count,
         )

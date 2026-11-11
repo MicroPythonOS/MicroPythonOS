@@ -263,6 +263,41 @@ class TestBuzzerStream(unittest.TestCase):
         self.assertEqual(stream.captured_samples, 176256)
 
 
+class TestBuzzerSink(unittest.TestCase):
+    """Streaming sink used by apps that pump their own audio (video player)."""
+
+    def test_ring_fits_the_video_lead(self):
+        from mpos.audio.stream_buzzer import BuzzerSink
+
+        out = _FakeOutput()
+        for rate in (8000, 22050, 44100, 48000):
+            sink = BuzzerSink(out, rate, 1)
+            # The video player keeps 180 ms queued; the ring must absorb it.
+            self.assertTrue(sink.capacity_ms >= 200, "capacity %s at %s" % (sink.capacity_ms, rate))
+            self.assertEqual(sink.bufsize & (sink.bufsize - 1), 0)
+
+    def test_rate_and_channels_are_normalized(self):
+        from mpos.audio.stream_buzzer import BuzzerSink
+
+        sink = BuzzerSink(_FakeOutput(), 22050, 2)
+        self.assertEqual(sink.channels, 2)
+        self.assertEqual(sink.rate, 22050)
+        self.assertEqual(sink.written, 0)
+
+    def test_write_before_open_is_a_noop(self):
+        from mpos.audio.stream_buzzer import BuzzerSink
+
+        sink = BuzzerSink(_FakeOutput(), 22050, 1)
+        self.assertEqual(sink.write(bytearray(64)), 0)
+        sink.close()
+
+
+class _FakeOutput:
+    kind = "buzzer"
+    buzzer_pin = 46
+    buzzer_gain = 100
+
+
 class TestAudioManagerRouting(unittest.TestCase):
 
     def setUp(self):

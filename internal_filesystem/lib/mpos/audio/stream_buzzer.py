@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 _DEVICE_BITS = 10
 _DEVICE_BUFSIZE = 4096
+# Upper bound for the ring when an app streams its own audio (see BuzzerSink).
+_DEVICE_MAX_BUFSIZE = 32768
 
 # The sink that owns the native driver right now. A clip that is stopped or
 # superseded can finish its deinit() after the next clip already called
@@ -52,7 +54,7 @@ class _BuzzerSink:
 class _DeviceBuzzerSink(_BuzzerSink):
     """Drives the ESP32 `buzzer` C module (LEDC PWM + timer ISR)."""
 
-    def __init__(self, pin, rate, channels, gain=100):
+    def __init__(self, pin, rate, channels, gain=100, bufsize=_DEVICE_BUFSIZE):
         import buzzer as _buzzer
 
         global _active_sink
@@ -61,7 +63,7 @@ class _DeviceBuzzerSink(_BuzzerSink):
         self.rate = rate
         # A 4096-sample ring holds ~186 ms at 22 kHz: enough to ride out a GC
         # pause or a slow flash read without an underrun.
-        _buzzer.init(pin, rate=rate, bits=_DEVICE_BITS, bufsize=_DEVICE_BUFSIZE)
+        _buzzer.init(pin, rate=rate, bits=_DEVICE_BITS, bufsize=bufsize)
         _buzzer.set_gain(gain)
         _active_sink = self
 
@@ -251,6 +253,64 @@ class _BuzzerOutput:
             os.remove(sink.path)
         except OSError:
             pass
+
+
+class BuzzerSink:
+    """PCM sink for apps that pump their own audio frames.
+
+    Same shape as the I2S sink the video player uses (open(), wait_ready(),
+    write(bytes) -> bytes accepted, close(), plus `written`), so an app can
+    stream to a buzzer output without going through AudioManager.player().
+
+    The ring is sized for LEAD_MS of audio, which is more than the ~180 ms lead
+    a video player keeps queued, so write() lands in free space instead of
+    blocking the frame loop while the ring drains.
+    """
+
+    LEAD_MS = 250
+
+    def __init__(self, output, rate, channels=2, bufsize=None):
+        self.output = output
+        self.rate = int(rate)
+        self.channels = 1 if int(channels) == 1 else 2
+        self.written = 0
+        self._sink = None
+        if bufsize is None:
+            frames = (self.rate * self.LEAD_MS + 999) // 1000
+            bufsize = 4096
+            while bufsize < frames and bufsize < _DEVICE_MAX_BUFSIZE:
+                bufsize <<= 1
+        self.bufsize = bufsize
+        self.capacity_ms = bufsize * 1000 // self.rate
+
+    def open(self):
+        if sys.platform != "esp32":
+            raise RuntimeError("the buzzer output only exists on the device")
+        self._sink = _DeviceBuzzerSink(
+            self.output.buzzer_pin,
+            self.rate,
+            self.channels,
+            getattr(self.output, "buzzer_gain", 800),
+            self.bufsize,
+        )
+
+    def wait_ready(self):
+        # The buzzer has no DMA ring to prime: the ISR starts as soon as the
+        # first samples arrive.
+        pass
+
+    def write(self, data):
+        if self._sink is None:
+            return 0
+        written = self._sink.write(data)
+        self.written += written
+        return written
+
+    def close(self):
+        sink = self._sink
+        self._sink = None
+        if sink is not None:
+            sink.deinit()
 
 
 class BuzzerStream(_BuzzerOutput, WAVStream):
