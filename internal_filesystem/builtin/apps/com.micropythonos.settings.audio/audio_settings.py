@@ -1,5 +1,78 @@
 from mpos import AudioManager, Intent, SettingsActivity, SharedPreferences
 
+# The piezo disc only reproduces a narrow band around its resonance (~3-4 kHz),
+# so harmonic-poor material is inaudible at unity gain. Overdriving the samples
+# hard-clips them into square waves whose harmonics the disc can reproduce:
+# 100 leaves the samples untouched, 3200 is the maximum boost.
+BUZZER_GAIN_OPTIONS = [
+    ("Off (clean)", "100"),
+    ("Low", "200"),
+    ("Medium", "400"),
+    ("Strong", "800"),
+    ("Max", "1600"),
+    ("Extreme", "3200"),
+]
+
+# Carrier frequency of the PWM that drives the disc. "Auto" follows the sample
+# rate (at least 16 kHz). Higher carriers give finer duty control and move the
+# switching noise out of the audible band, at the cost of duty resolution; a
+# carrier slower than the sample clock cannot represent the samples at all.
+BUZZER_CARRIER_OPTIONS = [
+    ("Auto (sample rate)", "0"),
+    ("16 kHz", "16000"),
+    ("22 kHz", "22050"),
+    ("32 kHz", "32000"),
+    ("44 kHz", "44100"),
+    ("62 kHz", "62500"),
+    ("78 kHz", "78125"),
+]
+
+# First-order high-pass before the overdrive, which pushes the 1-3 kHz part of
+# speech up towards the disc's resonance.
+BUZZER_EMPHASIS_OPTIONS = [
+    ("Off", "0"),
+    ("Low", "30"),
+    ("Medium", "55"),
+    ("High", "75"),
+    ("Max", "90"),
+]
+
+# Ring modulation with a square carrier: moves the baseband into the disc's
+# 2-5 kHz window. Sounds buzzy ("Donald Duck"), but puts far more energy where
+# the disc can reproduce it.
+BUZZER_MOD_OPTIONS = [
+    ("Off", "0"),
+    ("2 kHz", "2000"),
+    ("2.5 kHz", "2500"),
+    ("3 kHz", "3000"),
+    ("3.5 kHz", "3500"),
+    ("4 kHz", "4000"),
+]
+
+
+def _apply_buzzer_gain(value):
+    if not value:
+        return
+    AudioManager.set_buzzer_tuning("buzzer_gain", value)
+
+
+def _apply_buzzer_carrier(value):
+    if not value:
+        return
+    AudioManager.set_buzzer_tuning("buzzer_carrier", value)
+
+
+def _apply_buzzer_emphasis(value):
+    if not value:
+        return
+    AudioManager.set_buzzer_tuning("buzzer_emphasis", value)
+
+
+def _apply_buzzer_mod(value):
+    if not value:
+        return
+    AudioManager.set_buzzer_tuning("buzzer_mod", value)
+
 
 def _apply_input_device(name):
     if not name:
@@ -8,6 +81,10 @@ def _apply_input_device(name):
         if device.name == name:
             AudioManager.set_default_input(device)
             return
+
+
+def _has_buzzer_output(setting=None):
+    return AudioManager.find_output_by_kind("buzzer") is not None
 
 
 def _apply_output_device(name):
@@ -59,6 +136,42 @@ class AudioSettings(SettingsActivity):
                     "ui_options": output_options,
                     "default_value": default_output.name if default_output else "",
                     "changed_callback": _apply_output_device,
+                },
+                {
+                    "title": "Buzzer Gain",
+                    "key": "buzzer_gain",
+                    "ui": "radiobuttons",
+                    "ui_options": BUZZER_GAIN_OPTIONS,
+                    "default_value": "800",
+                    "changed_callback": _apply_buzzer_gain,
+                    "should_show": _has_buzzer_output,
+                },
+                {
+                    "title": "Buzzer Carrier",
+                    "key": "buzzer_carrier",
+                    "ui": "radiobuttons",
+                    "ui_options": BUZZER_CARRIER_OPTIONS,
+                    "default_value": "0",
+                    "changed_callback": _apply_buzzer_carrier,
+                    "should_show": _has_buzzer_output,
+                },
+                {
+                    "title": "Buzzer Emphasis",
+                    "key": "buzzer_emphasis",
+                    "ui": "radiobuttons",
+                    "ui_options": BUZZER_EMPHASIS_OPTIONS,
+                    "default_value": "0",
+                    "changed_callback": _apply_buzzer_emphasis,
+                    "should_show": _has_buzzer_output,
+                },
+                {
+                    "title": "Buzzer Ring Mod",
+                    "key": "buzzer_mod",
+                    "ui": "radiobuttons",
+                    "ui_options": BUZZER_MOD_OPTIONS,
+                    "default_value": "0",
+                    "changed_callback": _apply_buzzer_mod,
+                    "should_show": _has_buzzer_output,
                 },
             ],
         )

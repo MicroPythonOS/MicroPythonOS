@@ -54,7 +54,8 @@ class _BuzzerSink:
 class _DeviceBuzzerSink(_BuzzerSink):
     """Drives the ESP32 `buzzer` C module (LEDC PWM + timer ISR)."""
 
-    def __init__(self, pin, rate, channels, gain=100, bufsize=_DEVICE_BUFSIZE):
+    def __init__(self, pin, rate, channels, gain=100, bufsize=_DEVICE_BUFSIZE,
+                 carrier=0, emphasis=0, mod=0):
         import buzzer as _buzzer
 
         global _active_sink
@@ -63,7 +64,8 @@ class _DeviceBuzzerSink(_BuzzerSink):
         self.rate = rate
         # A 4096-sample ring holds ~186 ms at 22 kHz: enough to ride out a GC
         # pause or a slow flash read without an underrun.
-        _buzzer.init(pin, rate=rate, bits=_DEVICE_BITS, bufsize=bufsize)
+        _buzzer.init(pin, rate=rate, bits=_DEVICE_BITS, bufsize=bufsize,
+                     carrier=carrier, emphasis=emphasis, mod=mod)
         _buzzer.set_gain(gain)
         _active_sink = self
 
@@ -185,9 +187,13 @@ class _BuzzerOutput:
 
     force_pcm = True
 
-    def _init_buzzer(self, buzzer_pin, buzzer_gain=100):
+    def _init_buzzer(self, buzzer_pin, buzzer_gain=100, buzzer_carrier=0,
+                     buzzer_emphasis=0, buzzer_mod=0):
         self.buzzer_pin = buzzer_pin
         self.buzzer_gain = buzzer_gain
+        self.buzzer_carrier = buzzer_carrier
+        self.buzzer_emphasis = buzzer_emphasis
+        self.buzzer_mod = buzzer_mod
         self._sink = None
 
     def _open_or_reuse_i2s(self, playback_rate, channels, ibuf, keep_warm):
@@ -292,6 +298,9 @@ class BuzzerSink:
             self.channels,
             getattr(self.output, "buzzer_gain", 800),
             self.bufsize,
+            carrier=getattr(self.output, "buzzer_carrier", 0),
+            emphasis=getattr(self.output, "buzzer_emphasis", 0),
+            mod=getattr(self.output, "buzzer_mod", 0),
         )
 
     def wait_ready(self):
@@ -326,9 +335,13 @@ class BuzzerStream(_BuzzerOutput, WAVStream):
         requested_sample_rate=None,
         repeat_count=1,
         buzzer_gain=100,
+        buzzer_carrier=0,
+        buzzer_emphasis=0,
+        buzzer_mod=0,
         **kwargs
     ):
-        self._init_buzzer(buzzer_pin, buzzer_gain)
+        self._init_buzzer(buzzer_pin, buzzer_gain, buzzer_carrier,
+                          buzzer_emphasis, buzzer_mod)
         WAVStream.__init__(
             self,
             file_path=file_path,
@@ -354,9 +367,13 @@ class BuzzerMP3Stream(_BuzzerOutput, MP3Stream):
         on_complete,
         repeat_count=1,
         buzzer_gain=100,
+        buzzer_carrier=0,
+        buzzer_emphasis=0,
+        buzzer_mod=0,
         **kwargs
     ):
-        self._init_buzzer(buzzer_pin, buzzer_gain)
+        self._init_buzzer(buzzer_pin, buzzer_gain, buzzer_carrier,
+                          buzzer_emphasis, buzzer_mod)
         MP3Stream.__init__(
             self,
             file_path=file_path,

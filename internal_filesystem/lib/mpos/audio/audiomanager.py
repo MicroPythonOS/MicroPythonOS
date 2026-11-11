@@ -46,6 +46,9 @@ class AudioManager:
             i2s_pins=None,
             buzzer_pin=None,
             buzzer_gain=800,
+            buzzer_carrier=0,
+            buzzer_emphasis=0,
+            buzzer_mod=0,
             preferred_sample_rate=None,
             on_open=None,
             on_close=None,
@@ -65,6 +68,9 @@ class AudioManager:
             self.kind = kind
             self.channels = channels
             self.buzzer_gain = int(buzzer_gain)
+            self.buzzer_carrier = int(buzzer_carrier)
+            self.buzzer_emphasis = int(buzzer_emphasis)
+            self.buzzer_mod = int(buzzer_mod)
             self.preferred_sample_rate = preferred_sample_rate
             self.on_open = on_open
             self.on_close = on_close
@@ -197,6 +203,7 @@ class AudioManager:
             self._outputs.append(device)
             if device.kind == "buzzer":
                 self._reserve_buzzer_driver()
+                self._load_buzzer_tuning(device)
             if self._default_output is None:
                 self._default_output = device
             return device
@@ -285,6 +292,70 @@ class AudioManager:
             editor.commit()
         except Exception as exc:
             logger.error("Could not persist %s: %s", key, exc)
+
+    # Buzzer-as-speaker tuning knobs, exposed by the audio settings app and
+    # persisted in the audio preferences (name -> (min, max)):
+    #   buzzer_gain     source overdrive before the PWM; 100 keeps the samples
+    #                   untouched, higher values hard-clip them into the square
+    #                   waves a piezo disc can reproduce
+    #   buzzer_carrier  PWM carrier frequency in Hz; 0 = follow the sample rate
+    #   buzzer_emphasis pre-emphasis (high-pass) strength in percent, 0..90
+    #   buzzer_mod      ring-modulation frequency in Hz; 0 = off, moves the
+    #                   baseband into the disc's resonance window
+    BUZZER_TUNING = {
+        "buzzer_gain": (0, 3200),
+        "buzzer_carrier": (0, 2000000),
+        "buzzer_emphasis": (0, 90),
+        "buzzer_mod": (0, 8000),
+    }
+
+    @classmethod
+    def set_buzzer_tuning(cls, key, value):
+        """Set one tuning knob on every buzzer output and persist it.
+
+        Returns the clamped value, or None when the value is not a number.
+        """
+        limits = cls.BUZZER_TUNING.get(key)
+        if limits is None:
+            raise ValueError("unknown buzzer tuning: %s" % key)
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return None
+        value = max(limits[0], min(limits[1], value))
+        manager = cls.get()
+        for output in manager._outputs:
+            if output.kind == "buzzer":
+                setattr(output, key, value)
+        manager._save_audio_pref(key, str(value))
+        return value
+
+    def _load_buzzer_tuning(self, device):
+        for key, limits in self.BUZZER_TUNING.items():
+            stored = self._audio_prefs.get_string(key, "")
+            if not stored:
+                continue
+            try:
+                value = int(stored)
+            except (TypeError, ValueError):
+                logger.warning("Ignoring invalid %s preference: %s", key, stored)
+                continue
+            setattr(device, key, max(limits[0], min(limits[1], value)))
+
+    @classmethod
+    def get_buzzer_tuning(cls, key):
+        if key not in cls.BUZZER_TUNING:
+            raise ValueError("unknown buzzer tuning: %s" % key)
+        output = cls.find_output_by_kind("buzzer")
+        return getattr(output, key, None) if output else None
+
+    @classmethod
+    def set_buzzer_gain(cls, gain):
+        return cls.set_buzzer_tuning("buzzer_gain", gain)
+
+    @classmethod
+    def get_buzzer_gain(cls):
+        return cls.get_buzzer_tuning("buzzer_gain")
 
     @classmethod
     def find_output_by_name(cls, name):
@@ -888,6 +959,9 @@ class Player:
             volume=self.volume if self.volume is not None else self._manager._volume,
             buzzer_pin=self.output.buzzer_pin,
             buzzer_gain=getattr(self.output, "buzzer_gain", 800),
+            buzzer_carrier=getattr(self.output, "buzzer_carrier", 0),
+            buzzer_emphasis=getattr(self.output, "buzzer_emphasis", 0),
+            buzzer_mod=getattr(self.output, "buzzer_mod", 0),
             on_complete=on_complete,
             repeat_count=self._repeat_count,
         )
