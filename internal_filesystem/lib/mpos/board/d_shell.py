@@ -23,7 +23,7 @@ except Exception as error:
     logger.error("Error initializing D-Shell SPI bus: %s", error)
     time.sleep(3)
     machine.reset()
-display_bus = lcd_bus.SPIBus(spi_bus=spi_bus, freq=40000000, dc=45, cs=48)
+display_bus = lcd_bus.SPIBus(spi_bus=spi_bus, freq=80000000, dc=45, cs=48)
 fb1 = display_bus.allocate_framebuffer(BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 display = st7789.ST7789(
