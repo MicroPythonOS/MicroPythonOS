@@ -104,6 +104,11 @@ typedef struct {
     int gain;                   // 100 = unity, higher hard-clips (piezo exciter)
     uint32_t src_hz;            // LEDC clock source frequency
     uint32_t carrier_hz;        // PWM carrier frequency
+    int emphasis;               // pre-emphasis (high-pass) strength, 0..90 %
+    uint32_t mod_hz;            // ring-modulation frequency, 0 = off
+    int32_t mod_phase;          // ring-modulator phase accumulator
+    bool mod_sign;              // ring-modulator square wave state
+    int32_t prev_in;            // previous sample, for pre-emphasis
 
     timer_group_t tg;           // timer group, 0 or 1
     timer_idx_t ti;             // timer inside the group, 0 or 1
@@ -328,7 +333,8 @@ static void buzzer_configure_rate(uint32_t rate) {
     buzzer.rate = rate;
 }
 
-static void buzzer_init_raise(int gpio, uint32_t rate, int bits, uint32_t bufsize, int timer_id) {
+static void buzzer_init_raise(int gpio, uint32_t rate, int bits, uint32_t bufsize, int timer_id,
+                              uint32_t carrier_req, int emphasis, uint32_t mod_hz) {
     if (gpio < 0) {
         mp_raise_ValueError(MP_ERROR_TEXT("pin must be a GPIO number"));
     }
@@ -343,6 +349,12 @@ static void buzzer_init_raise(int gpio, uint32_t rate, int bits, uint32_t bufsiz
     }
     if (timer_id < 0 || timer_id >= SOC_TIMER_GROUP_TOTAL_TIMERS) {
         mp_raise_ValueError(MP_ERROR_TEXT("timer must be a machine.Timer number"));
+    }
+    if (emphasis < 0 || emphasis > 90) {
+        mp_raise_ValueError(MP_ERROR_TEXT("emphasis must be 0..90"));
+    }
+    if (mod_hz > 8000) {
+        mp_raise_ValueError(MP_ERROR_TEXT("ring modulation must be 0..8000 Hz"));
     }
 
     buzzer_teardown();
@@ -369,11 +381,17 @@ static void buzzer_init_raise(int gpio, uint32_t rate, int bits, uint32_t bufsiz
     uint32_t src_hz = 0;
     esp_clk_tree_src_get_freq_hz((soc_module_clk_t)clk_cfg,
                                  ESP_CLK_TREE_SRC_FREQ_PRECISION_APPROX, &src_hz);
-    // Carrier frequency: at least 16 kHz so it is inaudible, and otherwise
-    // equal to the sample rate. Going higher (78 kHz with a 10-bit duty) looks
-    // better on paper but the buzzer's drive circuit cannot follow it, and the
-    // audio came out silent on the fri3d 2026. retro-go uses the same rule.
-    uint32_t carrier = rate < 16000 ? 16000 : rate;
+    // Carrier frequency: the caller can override it, otherwise use the sample
+    // rate (at least 16 kHz so it is inaudible on its own). The carrier must
+    // not be slower than the sample clock or the samples cannot be
+    // represented at all. retro-go uses the same rule.
+    uint32_t carrier = carrier_req ? carrier_req : (rate < 16000 ? 16000 : rate);
+    if (carrier < rate) {
+        carrier = rate;
+    }
+    if (carrier > 2000000) {
+        carrier = 2000000;
+    }
     int duty_bits = bits;
     while (duty_bits > 8 && (uint64_t)carrier * (1u << duty_bits) > src_hz) {
         duty_bits--;
@@ -391,6 +409,11 @@ static void buzzer_init_raise(int gpio, uint32_t rate, int bits, uint32_t bufsiz
     buzzer.underruns = 0;
     buzzer.idle_samples = 0;
     buzzer.gain = BUZZER_DEFAULT_GAIN;
+    buzzer.emphasis = emphasis;
+    buzzer.mod_hz = mod_hz;
+    buzzer.mod_phase = 0;
+    buzzer.mod_sign = true;
+    buzzer.prev_in = 0;
     buzzer.isr_paused = false;
     buzzer.stop_flag = false;
     buzzer.writer_waiting = false;
@@ -454,13 +477,17 @@ static void buzzer_init_raise(int gpio, uint32_t rate, int bits, uint32_t bufsiz
 }
 
 static mp_obj_t buzzer_init(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
-    enum { ARG_pin, ARG_rate, ARG_bits, ARG_bufsize, ARG_timer };
+    enum { ARG_pin, ARG_rate, ARG_bits, ARG_bufsize, ARG_timer,
+           ARG_carrier, ARG_emphasis, ARG_mod };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_pin, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = -1} },
         { MP_QSTR_rate, MP_ARG_INT, {.u_int = BUZZER_DEFAULT_RATE} },
         { MP_QSTR_bits, MP_ARG_INT, {.u_int = BUZZER_DEFAULT_BITS} },
         { MP_QSTR_bufsize, MP_ARG_INT, {.u_int = BUZZER_DEFAULT_BUFSIZE} },
         { MP_QSTR_timer, MP_ARG_INT, {.u_int = BUZZER_DEFAULT_TIMER} },
+        { MP_QSTR_carrier, MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_emphasis, MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_mod, MP_ARG_INT, {.u_int = 0} },
     };
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
@@ -469,7 +496,10 @@ static mp_obj_t buzzer_init(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
                       (uint32_t)args[ARG_rate].u_int,
                       args[ARG_bits].u_int,
                       (uint32_t)args[ARG_bufsize].u_int,
-                      args[ARG_timer].u_int);
+                      args[ARG_timer].u_int,
+                      (uint32_t)args[ARG_carrier].u_int,
+                      args[ARG_emphasis].u_int,
+                      (uint32_t)args[ARG_mod].u_int);
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_KW(buzzer_init_obj, 0, buzzer_init);
@@ -571,12 +601,42 @@ static size_t buzzer_ring_push(const uint8_t *src, size_t samples, int channels,
     uint16_t *out = buzzer.buf;
 
     int gain = buzzer.gain;
+    int emphasis = buzzer.emphasis;
+    uint32_t mod_hz = buzzer.mod_hz;
+    int32_t mod_phase = buzzer.mod_phase;
+    bool mod_sign = buzzer.mod_sign;
+    int32_t prev_in = buzzer.prev_in;
+    int32_t mod_rate = (int32_t)buzzer.rate;
     for (size_t i = 0; i < samples; i++) {
         int32_t value;
         if (channels == 2) {
             value = ((int32_t)in[i * 2] + (int32_t)in[i * 2 + 1]) >> 1;
         } else {
             value = in[i];
+        }
+        if (emphasis) {
+            // First-order high-pass: pushes the 1-3 kHz speech band up towards
+            // the disc's resonance before the clipping adds harmonics.
+            int32_t highlighted = value - (prev_in * emphasis) / 100;
+            prev_in = value;
+            value = highlighted;
+            if (value > 32767) {
+                value = 32767;
+            } else if (value < -32768) {
+                value = -32768;
+            }
+        }
+        if (mod_hz) {
+            // Ring modulation with a square carrier: moves the baseband into
+            // the disc's 2-5 kHz window (at the cost of a Donald Duck timbre).
+            mod_phase += (int32_t)mod_hz;
+            if (mod_phase >= mod_rate) {
+                mod_phase -= mod_rate;
+                mod_sign = !mod_sign;
+            }
+            if (!mod_sign) {
+                value = -value;
+            }
         }
         if (shift > 0) {
             value >>= shift;
@@ -592,6 +652,9 @@ static size_t buzzer_ring_push(const uint8_t *src, size_t samples, int channels,
         out[head] = (uint16_t)(int16_t)value;
         head = (head + 1) & mask;
     }
+    buzzer.mod_phase = mod_phase;
+    buzzer.mod_sign = mod_sign;
+    buzzer.prev_in = prev_in;
 
     portMEMORY_BARRIER();
     buzzer.head = head;
@@ -767,9 +830,10 @@ static mp_obj_t buzzer_stats(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(buzzer_stats_obj, buzzer_stats);
 
-// (timer number, rate, duty bits, interrupt held, LEDC clock, carrier, gain)
+// (timer, rate, duty bits, interrupt held, LEDC clock, carrier, gain,
+//  emphasis, ring modulation)
 static mp_obj_t buzzer_info(void) {
-    mp_obj_t items[7] = {
+    mp_obj_t items[9] = {
         mp_obj_new_int(buzzer.timer_id),
         mp_obj_new_int_from_uint(buzzer.rate),
         mp_obj_new_int(buzzer.bits),
@@ -777,8 +841,10 @@ static mp_obj_t buzzer_info(void) {
         mp_obj_new_int_from_uint(buzzer.src_hz),
         mp_obj_new_int_from_uint(buzzer.carrier_hz),
         mp_obj_new_int(buzzer.gain),
+        mp_obj_new_int(buzzer.emphasis),
+        mp_obj_new_int_from_uint(buzzer.mod_hz),
     };
-    return mp_obj_new_tuple(7, items);
+    return mp_obj_new_tuple(9, items);
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(buzzer_info_obj, buzzer_info);
 

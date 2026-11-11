@@ -272,6 +272,89 @@ class TestAudioManagerPreferences(unittest.TestCase):
         self.assertEqual(default_input.name, "mic")
 
 
+class TestBuzzerTuning(unittest.TestCase):
+    """The piezo-as-speaker tuning knobs exposed by the audio settings app."""
+
+    def setUp(self):
+        AudioManager._instance = None
+        MockSharedPreferences.reset_all()
+        AudioManager()
+        self._prefs = MockSharedPreferences("com.micropythonos.settings.audio")
+        AudioManager.get()._audio_prefs = self._prefs
+        self.buzzer = AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=46))
+
+    def tearDown(self):
+        AudioManager.stop()
+
+    def test_default_gain_is_audible(self):
+        self.assertEqual(self.buzzer.buzzer_gain, 800)
+
+    def test_set_gain_applies_to_buzzer_outputs_and_persists(self):
+        self.assertEqual(AudioManager.set_buzzer_gain(1600), 1600)
+        self.assertEqual(self.buzzer.buzzer_gain, 1600)
+        self.assertEqual(self._prefs.get_string("buzzer_gain"), "1600")
+        self.assertEqual(AudioManager.get_buzzer_gain(), 1600)
+
+    def test_gain_is_clamped(self):
+        self.assertEqual(AudioManager.set_buzzer_gain(99999), 3200)
+        self.assertEqual(self.buzzer.buzzer_gain, 3200)
+        self.assertEqual(AudioManager.set_buzzer_gain(-5), 0)
+        self.assertEqual(self.buzzer.buzzer_gain, 0)
+
+    def test_invalid_gain_is_ignored(self):
+        self.assertIsNone(AudioManager.set_buzzer_gain("loud"))
+        self.assertEqual(self.buzzer.buzzer_gain, 800)
+
+    def test_carrier_emphasis_and_mod_are_applied_and_persisted(self):
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_carrier", 78125), 78125)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_emphasis", 55), 55)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_mod", 3000), 3000)
+        self.assertEqual(self.buzzer.buzzer_carrier, 78125)
+        self.assertEqual(self.buzzer.buzzer_emphasis, 55)
+        self.assertEqual(self.buzzer.buzzer_mod, 3000)
+        self.assertEqual(self._prefs.get_string("buzzer_carrier"), "78125")
+        self.assertEqual(self._prefs.get_string("buzzer_emphasis"), "55")
+        self.assertEqual(self._prefs.get_string("buzzer_mod"), "3000")
+        self.assertEqual(AudioManager.get_buzzer_tuning("buzzer_mod"), 3000)
+
+    def test_tuning_is_clamped_to_its_range(self):
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_emphasis", 1000), 90)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_mod", -10), 0)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_carrier", 99999999), 2000000)
+
+    def test_unknown_tuning_key_is_rejected(self):
+        with self.assertRaises(ValueError):
+            AudioManager.set_buzzer_tuning("buzzer_something", 1)
+        with self.assertRaises(ValueError):
+            AudioManager.get_buzzer_tuning("buzzer_something")
+
+    def test_output_accepts_the_tuning_parameters(self):
+        output = AudioManager.Output(
+            "buzzer2", "buzzer", buzzer_pin=46,
+            buzzer_gain=1600, buzzer_carrier=32000, buzzer_emphasis=30, buzzer_mod=2500)
+        self.assertEqual(output.buzzer_gain, 1600)
+        self.assertEqual(output.buzzer_carrier, 32000)
+        self.assertEqual(output.buzzer_emphasis, 30)
+        self.assertEqual(output.buzzer_mod, 2500)
+
+    def test_stored_gain_is_applied_when_the_output_is_registered(self):
+        AudioManager._instance = None
+        AudioManager()
+        prefs = MockSharedPreferences("com.micropythonos.settings.audio")
+        AudioManager.get()._audio_prefs = prefs
+        editor = prefs.edit()
+        editor.put_string("buzzer_gain", "3200")
+        editor.put_string("buzzer_emphasis", "75")
+        editor.put_string("buzzer_mod", "2500")
+        editor.put_string("buzzer_carrier", "44100")
+        editor.commit()
+        output = AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=46))
+        self.assertEqual(output.buzzer_gain, 3200)
+        self.assertEqual(output.buzzer_emphasis, 75)
+        self.assertEqual(output.buzzer_mod, 2500)
+        self.assertEqual(output.buzzer_carrier, 44100)
+
+
 class TestAudioManagerFindMethods(unittest.TestCase):
     def setUp(self):
         AudioManager._instance = None
