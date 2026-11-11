@@ -84,6 +84,32 @@ def single_address_i2c_scan(i2c_bus, address):
         if __debug__: logger.debug("scan error: %s", e)
         return False
 
+def detect_d_shell():
+    from machine import Pin, SoftI2C
+
+    def matches(scl, sda, addresses, register, expected, addrsize=8):
+        try:
+            bus = SoftI2C(scl=Pin(scl), sda=Pin(sda), freq=100000, timeout=10000)
+            for address in addresses:
+                try:
+                    value = bus.readfrom_mem(address, register, len(expected), addrsize=addrsize)
+                    if value == expected:
+                        return True
+                except OSError:
+                    continue
+            return False
+        finally:
+            Pin(scl, Pin.IN, pull=None)
+            Pin(sda, Pin.IN, pull=None)
+
+    try:
+        if not matches(41, 42, (0x5D, 0x14), 0x8140, b"911\x00", 16):
+            return False
+        return matches(7, 6, (0x6A, 0x6B), 0, b"\x05")
+    except (OSError, ValueError):
+        return False
+
+
 def detect_lilygo_t_hmi():
     from machine import Pin, SoftSPI
     import time
@@ -216,7 +242,6 @@ def detect_board():
             return None
 
         if is_esp32s3:
-            from mpos.board.d_shell_detect import detect as detect_d_shell
             if detect_d_shell():
                 return "d_shell"
 

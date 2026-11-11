@@ -2,7 +2,7 @@ Future release (next version)
 =====
 
 Boards:
-- Add D-Shell ESP32-S3 N16R8 support: ST7789V display, GT911 touch, keys, WS2812 LEDs, QMI8658 IMU, MAX98357A audio and buzzer; provide an opt-in startup profile.
+- Add D-Shell ESP32-S3 N16R8 support: ST7789V display, GT911 touch, keys, WS2812 LEDs, QMI8658 IMU, MAX98357A audio and buzzer, with automatic board detection.
 
 Frameworks:
 - aiorepl: the console no longer freezes every asyncio task when a host program opens the USB-CDC port and writes bytes that are not a REPL session (device-detection probes send CBOR such as `0xA6` + `get_version_info` and then hold the port, previously stalling the loop for ~28 s per probe). Such bytes are discarded instead of echoing and blocking a text-mode read (#297).

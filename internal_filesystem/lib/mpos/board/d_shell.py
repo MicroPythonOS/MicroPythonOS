@@ -6,7 +6,7 @@ import machine
 import lcd_bus
 import lvgl as lv
 import i2c
-import drivers.display.st7789v as st7789
+import drivers.display.st7789 as st7789
 import drivers.indev.gt911 as gt911
 import mpos.ui
 from mpos import AudioManager, InputManager, LightsManager, SensorManager
@@ -17,11 +17,16 @@ WIDTH = 240
 HEIGHT = 320
 BUFFER_SIZE = WIDTH * HEIGHT * 2 // 4
 
-spi_bus = machine.SPI.Bus(host=1, sck=39, mosi=38)
+try:
+    spi_bus = machine.SPI.Bus(host=1, sck=39, mosi=38)
+except Exception as error:
+    logger.error("Error initializing D-Shell SPI bus: %s", error)
+    time.sleep(3)
+    machine.reset()
 display_bus = lcd_bus.SPIBus(spi_bus=spi_bus, freq=40000000, dc=45, cs=48)
 fb1 = display_bus.allocate_framebuffer(BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-display = st7789.ST7789V(
+display = st7789.ST7789(
     data_bus=display_bus,
     display_width=WIDTH,
     display_height=HEIGHT,
@@ -36,7 +41,7 @@ display = st7789.ST7789V(
     rgb565_byte_swap=True,
 )
 mpos.ui.main_display = display
-display.init()
+display.init(st7789.PROFILE_ST7789V)
 display.set_power(True)
 display.set_backlight(100)
 
@@ -105,7 +110,7 @@ except Exception as error:
     logger.warning("D-Shell LEDs unavailable: %s", error)
 
 amp_enable = Pin(15, Pin.OUT, value=0)
-amp_gain = Pin(8, Pin.IN)
+amp_gain = Pin(8, Pin.IN)  # Leave GAIN floating to select the MAX98357A hardware gain.
 
 
 def _speaker_open():
