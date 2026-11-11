@@ -14,25 +14,30 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DetectionTests(unittest.TestCase):
-    def detect(self, devices):
+    def detect(self, devices, needs_pullups=False):
         probes = []
         released = []
 
         class Pin:
             IN = 0
+            PULL_UP = 1
 
             def __init__(self, number, *args, **kwargs):
                 self.number = number
-                if args:
+                self.pull = args[1] if len(args) > 1 else kwargs.get("pull")
+                if args and "pull" in kwargs and kwargs["pull"] is None:
                     released.append(number)
 
         class Bus:
             def __init__(self, scl, sda, **kwargs):
                 self.pins = (scl.number, sda.number)
+                self.pullups = (scl.pull, sda.pull)
 
             def readfrom_mem(self, address, register, count, **kwargs):
                 key = (self.pins, address, register)
                 probes.append(key)
+                if needs_pullups and self.pullups != (Pin.PULL_UP, Pin.PULL_UP):
+                    raise OSError(116)
                 if key not in devices:
                     raise OSError("not present")
                 return devices[key][:count]
@@ -63,6 +68,17 @@ class DetectionTests(unittest.TestCase):
                 ((41, 42), 0x5D, 0x8140): b"911\x00",
                 ((7, 6), 0x6A, 0): b"\x05",
             }
+        )
+        self.assertTrue(found)
+        self.assertEqual(set(released), {41, 42, 7, 6})
+
+    def test_cold_start_without_external_pullups(self):
+        found, _, released = self.detect(
+            {
+                ((41, 42), 0x5D, 0x8140): b"911\x00",
+                ((7, 6), 0x6A, 0): b"\x05",
+            },
+            needs_pullups=True,
         )
         self.assertTrue(found)
         self.assertEqual(set(released), {41, 42, 7, 6})

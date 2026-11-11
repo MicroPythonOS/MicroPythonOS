@@ -89,7 +89,12 @@ def detect_d_shell():
 
     def matches(scl, sda, addresses, register, expected, addrsize=8):
         try:
-            bus = SoftI2C(scl=Pin(scl), sda=Pin(sda), freq=100000, timeout=10000)
+            bus = SoftI2C(
+                scl=Pin(scl, Pin.IN, Pin.PULL_UP),
+                sda=Pin(sda, Pin.IN, Pin.PULL_UP),
+                freq=100000,
+                timeout=10000,
+            )
             for address in addresses:
                 try:
                     value = bus.readfrom_mem(address, register, len(expected), addrsize=addrsize)
