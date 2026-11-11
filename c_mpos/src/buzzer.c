@@ -88,6 +88,7 @@
 // machine.Timer(1) is the one nobody else uses: Timer(0) is the LVGL task
 // handler and WAVStream's warm-output timer takes 3 on ESP32.
 #define BUZZER_DEFAULT_TIMER    1
+#define BUZZER_DEFAULT_GAIN     100
 
 typedef struct {
     bool initialized;
@@ -100,6 +101,7 @@ typedef struct {
     ledc_timer_bit_t bits;
     int shift;                  // 16 - bits, how far to drop the sample
     uint32_t rate;
+    int gain;                   // 100 = unity, higher hard-clips (piezo exciter)
     uint32_t src_hz;            // LEDC clock source frequency
     uint32_t carrier_hz;        // PWM carrier frequency
 
@@ -136,10 +138,12 @@ static inline void IRAM_ATTR buzzer_ledc_set_duty(uint32_t duty) {
 #else
     LEDC.channel_group[BUZZER_LEDC_SPEED].channel[BUZZER_LEDC_CHANNEL].duty.val = duty << 4;
 #endif
-    // sig_out_en (bit 2) + the "update" bit (bit 4, called low_speed_update on
-    // Xtensa, para_up on P4) enable the output and latch a new duty cycle.
+    // sig_out_en (bit 2) + the low-speed update bit (bit 4; called para_up on
+    // P4) enable the output and latch the new duty cycle for the next PWM
+    // period. Do NOT touch conf1.duty_start here: that re-arms the LEDC fade
+    // engine on every sample, and the fade then walks the duty away from the
+    // value just written (audible as noise instead of the waveform).
     LEDC.channel_group[BUZZER_LEDC_SPEED].channel[BUZZER_LEDC_CHANNEL].conf0.val |= 0x00000014;
-    LEDC.channel_group[BUZZER_LEDC_SPEED].channel[BUZZER_LEDC_CHANNEL].conf1.val |= 0x80000000;
 }
 
 // The interrupt is allocated with plain esp_intr_alloc() instead of
@@ -301,6 +305,16 @@ static esp_err_t buzzer_hw_acquire(int timer_id) {
     }
     timer_disable_intr(buzzer.tg, buzzer.ti);
     timer_set_counter_value(buzzer.tg, buzzer.ti, 0);
+    // esp_intr_alloc() leaves the CPU vector disabled (machine.Timer calls
+    // this too). Without it the timer counts and the samples queue up, but the
+    // ISR never runs: the ring stays full and the buzzer is silent — and only
+    // when the vector happens to be already enabled by another driver does it
+    // work, which made the output look intermittent.
+    esp_err_t enable_err = esp_intr_enable(buzzer.intr);
+    if (enable_err != ESP_OK) {
+        buzzer_hw_release();
+        return enable_err;
+    }
     timer_enable_intr(buzzer.tg, buzzer.ti);
     return ESP_OK;
 }
@@ -376,6 +390,7 @@ static void buzzer_init_raise(int gpio, uint32_t rate, int bits, uint32_t bufsiz
     buzzer.tail = 0;
     buzzer.underruns = 0;
     buzzer.idle_samples = 0;
+    buzzer.gain = BUZZER_DEFAULT_GAIN;
     buzzer.isr_paused = false;
     buzzer.stop_flag = false;
     buzzer.writer_waiting = false;
@@ -412,7 +427,9 @@ static void buzzer_init_raise(int gpio, uint32_t rate, int bits, uint32_t bufsiz
     // connects the LEDC signal through the GPIO matrix. Boards that played an
     // RTTTL jingle before (or a previous clip's deinit) leave the pin as an
     // input, and then the PWM never reaches the buzzer.
-    gpio_set_direction(gpio, GPIO_MODE_OUTPUT);
+    // INPUT_OUTPUT keeps the pad's input path alive so the pin can be read
+    // back for diagnostics (buzzer.pin_level()).
+    gpio_set_direction(gpio, GPIO_MODE_INPUT_OUTPUT);
 
     ledc_channel_config_t chan_conf = {
         .gpio_num = gpio,
@@ -517,6 +534,20 @@ static mp_obj_t buzzer_set_rate(mp_obj_t rate_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(buzzer_set_rate_obj, buzzer_set_rate);
 
+// Overdrive the samples before they reach the PWM. A piezo disc only responds
+// near its resonance (~4 kHz on the fri3d badges), so low notes are inaudible
+// at unity gain; clipping a sine into a square fills it with harmonics that do
+// reach the disc. 100 = unchanged, 600 = 6x with hard clipping.
+static mp_obj_t buzzer_set_gain(mp_obj_t gain_in) {
+    int gain = mp_obj_get_int(gain_in);
+    if (gain < 0 || gain > 3200) {
+        mp_raise_ValueError(MP_ERROR_TEXT("gain must be 0..3200 percent"));
+    }
+    buzzer.gain = gain;
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(buzzer_set_gain_obj, buzzer_set_gain);
+
 static size_t buzzer_ring_free(void) {
     // One slot is always kept empty: with a power-of-two mask a completely
     // full ring is indistinguishable from an empty one.
@@ -539,24 +570,27 @@ static size_t buzzer_ring_push(const uint8_t *src, size_t samples, int channels,
     const int16_t *in = (const int16_t *)src;
     uint16_t *out = buzzer.buf;
 
-    if (channels == 2) {
-        for (size_t i = 0; i < samples; i++) {
-            int32_t mixed = ((int32_t)in[i * 2] + (int32_t)in[i * 2 + 1]) >> 1;
-            if (shift > 0) {
-                mixed >>= shift;
-            }
-            out[head] = (uint16_t)(int16_t)mixed;
-            head = (head + 1) & mask;
+    int gain = buzzer.gain;
+    for (size_t i = 0; i < samples; i++) {
+        int32_t value;
+        if (channels == 2) {
+            value = ((int32_t)in[i * 2] + (int32_t)in[i * 2 + 1]) >> 1;
+        } else {
+            value = in[i];
         }
-    } else {
-        for (size_t i = 0; i < samples; i++) {
-            int32_t value = in[i];
-            if (shift > 0) {
-                value >>= shift;
-            }
-            out[head] = (uint16_t)(int16_t)value;
-            head = (head + 1) & mask;
+        if (shift > 0) {
+            value >>= shift;
         }
+        if (gain != 100) {
+            value = (value * gain) / 100;
+            if (value > 32767) {
+                value = 32767;
+            } else if (value < -32768) {
+                value = -32768;
+            }
+        }
+        out[head] = (uint16_t)(int16_t)value;
+        head = (head + 1) & mask;
     }
 
     portMEMORY_BARRIER();
@@ -604,10 +638,13 @@ static mp_obj_t buzzer_write(size_t n_args, const mp_obj_t *pos_args, mp_map_t *
     // notification sound, AudioManager's Pin(pin, IN) after an RTTTL clip)
     // reroutes the GPIO matrix and disables the pad driver, which leaves the
     // LEDC running but silent. Put the signal back before feeding samples.
+    // Order matters: gpio_set_direction() ends in gpio_output_enable(), which
+    // routes the pin back to the plain GPIO output (SIG_GPIO_OUT_IDX), so the
+    // peripheral signal has to be connected *after* it.
+    gpio_set_direction(buzzer.gpio, GPIO_MODE_INPUT_OUTPUT);
     esp_rom_gpio_connect_out_signal(buzzer.gpio,
                                     ledc_periph_signal[BUZZER_LEDC_SPEED].sig_out0_idx + BUZZER_LEDC_CHANNEL,
                                     false, false);
-    gpio_set_direction(buzzer.gpio, GPIO_MODE_OUTPUT);
 
     mp_buffer_info_t bufinfo;
     mp_get_buffer_raise(args[ARG_buf].u_obj, &bufinfo, MP_BUFFER_READ);
@@ -709,6 +746,13 @@ static mp_obj_t buzzer_attenuate(size_t n_args, const mp_obj_t *pos_args, mp_map
 }
 static MP_DEFINE_CONST_FUN_OBJ_KW(buzzer_attenuate_obj, 1, buzzer_attenuate);
 
+// Live pad level, for diagnostics (requires the INPUT_OUTPUT direction set
+// above). Returns 0 or 1.
+static mp_obj_t buzzer_pin_level(void) {
+    return mp_obj_new_int(gpio_get_level(buzzer.gpio));
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(buzzer_pin_level_obj, buzzer_pin_level);
+
 static mp_obj_t buzzer_stats(void) {
     if (!buzzer.initialized) {
         return mp_obj_new_tuple(3, (mp_obj_t[]){mp_obj_new_int(0), mp_obj_new_int(0), mp_obj_new_int(0)});
@@ -723,17 +767,18 @@ static mp_obj_t buzzer_stats(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(buzzer_stats_obj, buzzer_stats);
 
-// (machine.Timer number, rate, duty bits, interrupt held, LEDC clock, carrier)
+// (timer number, rate, duty bits, interrupt held, LEDC clock, carrier, gain)
 static mp_obj_t buzzer_info(void) {
-    mp_obj_t items[6] = {
+    mp_obj_t items[7] = {
         mp_obj_new_int(buzzer.timer_id),
         mp_obj_new_int_from_uint(buzzer.rate),
         mp_obj_new_int(buzzer.bits),
         mp_obj_new_bool(buzzer.intr != NULL),
         mp_obj_new_int_from_uint(buzzer.src_hz),
         mp_obj_new_int_from_uint(buzzer.carrier_hz),
+        mp_obj_new_int(buzzer.gain),
     };
-    return mp_obj_new_tuple(6, items);
+    return mp_obj_new_tuple(7, items);
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(buzzer_info_obj, buzzer_info);
 
@@ -746,8 +791,10 @@ static const mp_rom_map_elem_t buzzer_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_stop), MP_ROM_PTR(&buzzer_stop_obj) },
     { MP_ROM_QSTR(MP_QSTR_active), MP_ROM_PTR(&buzzer_active_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_rate), MP_ROM_PTR(&buzzer_set_rate_obj) },
+    { MP_ROM_QSTR(MP_QSTR_set_gain), MP_ROM_PTR(&buzzer_set_gain_obj) },
     { MP_ROM_QSTR(MP_QSTR_write), MP_ROM_PTR(&buzzer_write_obj) },
     { MP_ROM_QSTR(MP_QSTR_attenuate), MP_ROM_PTR(&buzzer_attenuate_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pin_level), MP_ROM_PTR(&buzzer_pin_level_obj) },
     { MP_ROM_QSTR(MP_QSTR_stats), MP_ROM_PTR(&buzzer_stats_obj) },
     { MP_ROM_QSTR(MP_QSTR_info), MP_ROM_PTR(&buzzer_info_obj) },
 };

@@ -52,7 +52,7 @@ class _BuzzerSink:
 class _DeviceBuzzerSink(_BuzzerSink):
     """Drives the ESP32 `buzzer` C module (LEDC PWM + timer ISR)."""
 
-    def __init__(self, pin, rate, channels):
+    def __init__(self, pin, rate, channels, gain=100):
         import buzzer as _buzzer
 
         global _active_sink
@@ -62,6 +62,7 @@ class _DeviceBuzzerSink(_BuzzerSink):
         # A 4096-sample ring holds ~186 ms at 22 kHz: enough to ride out a GC
         # pause or a slow flash read without an underrun.
         _buzzer.init(pin, rate=rate, bits=_DEVICE_BITS, bufsize=_DEVICE_BUFSIZE)
+        _buzzer.set_gain(gain)
         _active_sink = self
 
     def write(self, buf):
@@ -182,13 +183,15 @@ class _BuzzerOutput:
 
     force_pcm = True
 
-    def _init_buzzer(self, buzzer_pin):
+    def _init_buzzer(self, buzzer_pin, buzzer_gain=100):
         self.buzzer_pin = buzzer_pin
+        self.buzzer_gain = buzzer_gain
         self._sink = None
 
     def _open_or_reuse_i2s(self, playback_rate, channels, ibuf, keep_warm):
         if sys.platform == "esp32":
-            self._sink = _DeviceBuzzerSink(self.buzzer_pin, playback_rate, channels)
+            self._sink = _DeviceBuzzerSink(self.buzzer_pin, playback_rate, channels,
+                                           getattr(self, "buzzer_gain", 100))
         else:
             self._sink = _EmulatedBuzzerSink(playback_rate, channels)
         self._i2s = self._sink
@@ -203,7 +206,10 @@ class _BuzzerOutput:
                 sink.abort()
             except Exception:
                 pass
-        super().stop()
+        # Not super(): MicroPython resolves zero-argument super() from the
+        # defining class and did not find WAVStream.stop() through the mixin
+        # here ("'super' object has no attribute 'stop'").
+        WAVStream.stop(self)
 
     def _teardown_i2s(self):
         sink = self._sink
@@ -259,9 +265,10 @@ class BuzzerStream(_BuzzerOutput, WAVStream):
         on_complete,
         requested_sample_rate=None,
         repeat_count=1,
+        buzzer_gain=100,
         **kwargs
     ):
-        self._init_buzzer(buzzer_pin)
+        self._init_buzzer(buzzer_pin, buzzer_gain)
         WAVStream.__init__(
             self,
             file_path=file_path,
@@ -286,9 +293,10 @@ class BuzzerMP3Stream(_BuzzerOutput, MP3Stream):
         buzzer_pin,
         on_complete,
         repeat_count=1,
+        buzzer_gain=100,
         **kwargs
     ):
-        self._init_buzzer(buzzer_pin)
+        self._init_buzzer(buzzer_pin, buzzer_gain)
         MP3Stream.__init__(
             self,
             file_path=file_path,

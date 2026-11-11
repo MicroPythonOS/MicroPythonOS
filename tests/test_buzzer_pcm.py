@@ -229,6 +229,23 @@ class TestBuzzerStream(unittest.TestCase):
         stream.play()
         self.assertEqual(len(stream.captured), 4410 * 2 * 2)
 
+    def test_stop_before_playback(self):
+        # Stopping a stream that never opened a sink must not raise. This used
+        # to fail with "'super' object has no attribute 'stop'" on the device.
+        stream = self._stream()
+        stream.stop()
+        self.assertFalse(stream._keep_running)
+
+    def test_mp3_stop_does_not_raise(self):
+        stream = _CapturingMP3Stream(
+            file_path=self.wav,
+            stream_type=0,
+            volume=100,
+            buzzer_pin=-1,
+            on_complete=None,
+        )
+        stream.stop()
+
     def test_mp3_decodes_to_mono(self):
         path = os.path.join(MP3_FIXTURES, "tone_a4a5a6_44100_stereo_128cbr.mp3")
         if not os.path.exists(path):
@@ -264,6 +281,7 @@ class TestAudioManagerRouting(unittest.TestCase):
 
     def test_wav_file_is_routed_to_buzzer_stream(self):
         played = []
+        self.buzzer.buzzer_gain = 600
 
         class FakeStream:
             def __init__(self, **kwargs):
@@ -284,6 +302,7 @@ class TestAudioManagerRouting(unittest.TestCase):
 
         self.assertEqual(len(played), 1)
         self.assertEqual(played[0]["buzzer_pin"], 46)
+        self.assertEqual(played[0]["buzzer_gain"], 600)
         self.assertEqual(played[0]["file_path"], self.wav)
 
     def test_buzzer_without_source_is_rejected(self):
