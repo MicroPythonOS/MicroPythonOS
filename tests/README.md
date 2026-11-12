@@ -235,14 +235,17 @@ It is the counterpart of the buzzer check: same recording helpers, but the
 audio goes through the codec instead of a PWM pin, so the fundamentals are
 clean and the measured SNR is much higher (about 60 dB on zbox1).
 
-The cabling is manual: the badge jack must feed a capture input. On zbox1 that
-is the on-board ALC892 microphone jack (`plughw:0,0`); run with
-`--capture-gain 20` (+4 dB) so the line-level signal fits the mic input. The
-tool restores the previous mixer value afterwards and generates the tone WAV on
-the badge, so nothing has to be uploaded:
+No cable is needed if the badge drives a speaker: both acoustic tools default
+to a USB microphone (on zbox1 the webcam's C925e, which also records the
+buzzer) and pick the channel count from the device, since USB microphones
+refuse mono. Wiring the badge jack into the on-board line input is quieter and
+more precise — `--device plughw:0,0 --capture-gain 20` (+4 dB): the tool
+restores the previous mixer value afterwards. Either way the tone WAV is
+generated on the badge, so nothing has to be uploaded:
 
 ```bash
-python3 tests/manual_test_dac.py --capture-gain 20
+python3 tests/manual_test_dac.py
+python3 tests/manual_test_dac.py --device plughw:0,0 --capture-gain 20
 python3 tests/manual_test_dac.py --notes a4,a5,a6 --relayport /dev/ttyUSB0
 python3 tests/manual_test_dac.py --file /music/test.mp3 --notes a4,a5,a6
 ```

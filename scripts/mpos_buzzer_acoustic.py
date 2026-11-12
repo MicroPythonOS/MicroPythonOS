@@ -41,6 +41,35 @@ DEFAULT_RELAY = os.environ.get("MPOS_BUZZER_RELAY")
 DEFAULT_DEVICE = os.environ.get("MPOS_BUZZER_DEVICE")
 DEFAULT_OUT_DIR = os.environ.get("MPOS_BUZZER_OUT", "tmp/buzzertests")
 DEFAULT_RATE = 44100
+# Mono is what most capture inputs take; USB microphones such as the C925e
+# refuse it and need two channels (the recording is downmixed afterwards).
+# --channels overrides; the default follows the device.
+DEFAULT_CHANNELS = int(os.environ.get("MPOS_ACOUSTIC_CHANNELS", "0")) or None
+
+
+def default_channels_for(device):
+    """Mono unless the capture device is a USB microphone that insists on 2."""
+    label = ((device.card_name or "") + " " + (device.device_name or "")).lower()
+    if "usb" in label or "webcam" in label:
+        return 2
+    return 1
+
+
+def prefer_microphone(devices):
+    """Pick a USB microphone, or None when there is none.
+
+    One microphone at arm's length hears the buzzer and the speaker alike, so
+    a USB microphone is the default for every acoustic check; the on-board
+    line input stays available with --device.
+    """
+    usb = [d for d in devices
+           if "usb" in (d.card_name + " " + d.device_name).lower()]
+    if not usb:
+        return None
+    named = [d for d in usb
+             if "webcam" in (d.card_name + " " + d.device_name).lower()
+             or "mic" in (d.card_name + " " + d.device_name).lower()]
+    return (named or usb)[0]
 DEFAULT_NOTES = "a4,a5,a6,a7"
 DEFAULT_VOLUME = 100
 
@@ -250,7 +279,7 @@ def _device_from_spec(spec):
 
 
 def find_capture_device(spec=None):
-    """Pick the USB sound-card microphone (or honour *spec*)."""
+    """Pick a USB microphone (or honour *spec*)."""
     if spec:
         device = _device_from_spec(spec)
         if device.card < 0:
@@ -262,42 +291,43 @@ def find_capture_device(spec=None):
         return device
     devices = list_capture_devices()
     if not devices:
-        raise BuzzerError("no ALSA capture devices found; connect the USB sound card or pass --device")
-    usb = [device for device in devices if "usb" in (device.card_name + device.device_name).lower()]
-    preferred = [device for device in usb if not device.is_webcam]
-    candidates = preferred or usb or devices
-    if len(candidates) > 1:
-        named = [device for device in candidates if "usb audio" in (device.card_name + device.device_name).lower()]
-        if named:
-            candidates = named
-    return candidates[0]
+        raise BuzzerError("no ALSA capture devices found; connect a microphone or pass --device")
+    microphone = prefer_microphone(devices)
+    if microphone is not None:
+        return microphone
+    onboard = [device for device in devices
+               if "hdmi" not in (device.card_name + " " + device.device_name).lower()]
+    return (onboard or devices)[0]
 
 
 # ── Recording ───────────────────────────────────────────────────────
 
 
-def _capture_command(device, out_path, rate):
+def _capture_command(device, out_path, rate, channels=1):
     if device.pulse_source:
         _require_tool("parecord", "to record a PulseAudio source")
         return [
             "parecord", "--device=" + device.pulse_source, "--format=s16le",
-            "--rate=%d" % rate, "--channels=1", "--file-format=wav", out_path,
+            "--rate=%d" % rate, "--channels=%d" % channels,
+            "--file-format=wav", out_path,
         ]
     _require_tool("arecord", "to record the buzzer")
     return [
         "arecord", "-q", "-D", device.alsa, "-f", "S16_LE", "-r", str(rate),
-        "-c", "1", "-t", "wav", out_path,
+        "-c", str(channels), "-t", "wav", out_path,
     ]
 
 
-def start_recording(device, out_path, rate=DEFAULT_RATE):
+def start_recording(device, out_path, rate=DEFAULT_RATE, channels=None):
     """Start a background capture; pair with :func:`stop_recording`."""
+    if channels is None:
+        channels = default_channels_for(device)
     if os.path.exists(out_path):
         os.remove(out_path)
     parent = os.path.dirname(os.path.abspath(out_path))
     if parent:
         os.makedirs(parent, exist_ok=True)
-    command = _capture_command(device, out_path, rate)
+    command = _capture_command(device, out_path, rate, channels)
     return subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
@@ -626,7 +656,7 @@ def save_artifacts(out_dir, label, wav_path, measured, duration=4, bpm=60):
 def verify(port=DEFAULT_PORT, device=None, notes=DEFAULT_NOTES, volume=DEFAULT_VOLUME,
            out_dir=DEFAULT_OUT_DIR, label="buzzer", thresholds=None, relayport=None,
            controller=None, sample_rate=DEFAULT_RATE, pre_roll=0.8, tail=1.5, settle=1.5,
-           bpm=60, duration=4, name="BUZZER"):
+           bpm=60, duration=4, name="BUZZER", channels=DEFAULT_CHANNELS):
     """Play *notes* on the badge buzzer, record them and gate pass/fail."""
     note_list = parse_notes(notes)
     if not 0 <= int(volume) <= 100:
@@ -642,7 +672,7 @@ def verify(port=DEFAULT_PORT, device=None, notes=DEFAULT_NOTES, volume=DEFAULT_V
         controller = open_controller(port, relayport)
     try:
         time.sleep(max(0.0, float(settle)))
-        process = start_recording(capture, wav_path, sample_rate)
+        process = start_recording(capture, wav_path, sample_rate, channels)
         try:
             wait_for_recording(process, wav_path)
             time.sleep(max(0.0, float(pre_roll)))
@@ -683,6 +713,8 @@ def _thresholds_from_args(args):
 
 
 def _add_capture_args(parser):
+    parser.add_argument("--channels", type=int, default=DEFAULT_CHANNELS,
+                        help="capture channels (default: mono, or stereo for a USB microphone)")
     parser.add_argument("--device", default=DEFAULT_DEVICE,
                         help="plughw:CARD,DEV, a card number, or an alsa_input.* PulseAudio source")
     parser.add_argument("--rate", type=int, default=DEFAULT_RATE)
@@ -744,6 +776,7 @@ def main(argv=None):
         port=args.port, device=args.device, notes=args.notes, volume=args.volume,
         out_dir=args.out_dir, label=args.label, thresholds=_thresholds_from_args(args),
         relayport=args.relayport, sample_rate=args.rate, settle=args.settle,
+        channels=args.channels,
     )
     print(json.dumps(measured, indent=1))
     return 0 if measured.get("ok") else 1

@@ -109,13 +109,24 @@ class TestTones(unittest.TestCase):
 
 class TestDevices(unittest.TestCase):
 
-    def test_picks_onboard_over_usb(self):
+    def test_picks_the_microphone_over_the_line_input(self):
+        # One microphone hears the buzzer and the speaker, so it is the
+        # default; the line input stays available with --device.
         onboard = base.CaptureDevice(0, 0, "HDA Intel", "ALC892 Analog")
         webcam = base.CaptureDevice(2, 0, "Logitech Webcam C925e", "USB Audio")
         original = base.list_capture_devices
-        base.list_capture_devices = lambda: [webcam, onboard]
+        base.list_capture_devices = lambda: [onboard, webcam]
         try:
-            self.assertIs(dac.find_onboard_capture_device(), onboard)
+            self.assertIs(dac.find_default_capture_device(), webcam)
+        finally:
+            base.list_capture_devices = original
+
+    def test_falls_back_to_the_onboard_input_without_a_microphone(self):
+        onboard = base.CaptureDevice(0, 0, "HDA Intel", "ALC892 Analog")
+        original = base.list_capture_devices
+        base.list_capture_devices = lambda: [onboard]
+        try:
+            self.assertIs(dac.find_default_capture_device(), onboard)
         finally:
             base.list_capture_devices = original
 
@@ -125,7 +136,7 @@ class TestDevices(unittest.TestCase):
         original = base.list_capture_devices
         base.list_capture_devices = lambda: [digital, analog]
         try:
-            self.assertIs(dac.find_onboard_capture_device(), analog)
+            self.assertIs(dac.find_default_capture_device(), analog)
         finally:
             base.list_capture_devices = original
 
@@ -140,7 +151,7 @@ class TestDevices(unittest.TestCase):
 
         base.find_capture_device = fake
         try:
-            self.assertIs(dac.find_onboard_capture_device("3"), expected)
+            self.assertIs(dac.find_default_capture_device("3"), expected)
         finally:
             base.find_capture_device = original
         self.assertEqual(seen, ["3"])
@@ -229,12 +240,12 @@ class TestVerifyOrchestration(unittest.TestCase):
         controller = self.Controller()
         signal, rate = self.signal()
         original = (base.start_recording, base.stop_recording, base.wait_for_recording,
-                    dac.find_onboard_capture_device, dac.set_capture_gain)
+                    dac.find_default_capture_device, dac.set_capture_gain)
         try:
-            base.start_recording = lambda device, path, rate: path
+            base.start_recording = lambda device, path, rate, channels=None: path
             base.stop_recording = lambda process, path=None: base.write_wav(path, signal, rate)
             base.wait_for_recording = lambda process, path, timeout=8.0: True
-            dac.find_onboard_capture_device = lambda spec=None: base.CaptureDevice(
+            dac.find_default_capture_device = lambda spec=None: base.CaptureDevice(
                 0, 0, "HDA Intel", "ALC892 Analog")
             dac.set_capture_gain = lambda device, value: (lambda: None)
             with tempfile.TemporaryDirectory() as tmp:
@@ -277,12 +288,12 @@ class TestVerifyOrchestration(unittest.TestCase):
         controller.exec = exec_missing
         signal, rate = self.signal()
         original = (base.start_recording, base.stop_recording, base.wait_for_recording,
-                    dac.find_onboard_capture_device, dac.set_capture_gain)
+                    dac.find_default_capture_device, dac.set_capture_gain)
         try:
-            base.start_recording = lambda device, path, rate: path
+            base.start_recording = lambda device, path, rate, channels=None: path
             base.stop_recording = lambda process, path=None: base.write_wav(path, signal, rate)
             base.wait_for_recording = lambda process, path, timeout=8.0: True
-            dac.find_onboard_capture_device = lambda spec=None: base.CaptureDevice(
+            dac.find_default_capture_device = lambda spec=None: base.CaptureDevice(
                 0, 0, "HDA Intel", "ALC892 Analog")
             dac.set_capture_gain = lambda device, value: (lambda: None)
             with tempfile.TemporaryDirectory() as tmp, self.assertRaises(dac.AcousticError):

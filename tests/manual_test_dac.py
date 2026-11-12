@@ -3,11 +3,13 @@
 
 Plays a known tone sequence through the badge headphone/DAC jack and confirms
 from a capture-device recording that every note is present at the right
-frequency. The rig is manual: the badge jack must be wired into a capture input
-(on zbox1, the on-board ALC892 microphone jack).
+frequency. No cable is needed when the badge drives a speaker: the tool
+defaults to a USB microphone (the webcam's, on zbox1). Wiring the jack into the
+on-board line input (``--device plughw:0,0 --capture-gain 20``) is quieter and
+more precise.
 
     python3 tests/manual_test_dac.py
-    python3 tests/manual_test_dac.py --capture-gain 20
+    python3 tests/manual_test_dac.py --device plughw:0,0 --capture-gain 20
     python3 tests/manual_test_dac.py --notes a4,a5,a6 --relayport /dev/ttyUSB0
     python3 tests/manual_test_dac.py --file /music/test.mp3 --notes a4,a5,a6
     python3 tests/manual_test_dac.py --file /music/test.mp3 --json
