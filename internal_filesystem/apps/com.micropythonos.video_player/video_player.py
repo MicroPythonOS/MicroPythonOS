@@ -305,7 +305,7 @@ class VideoPlayer(Activity):
             return
         try:
             group.add_obj(self.image)
-            group.focus(self.image)
+            lv.group_focus_obj(self.image)
         except Exception as e:
             logger.error("video_player: cannot focus the picture: %s", e)
 
@@ -415,6 +415,11 @@ class VideoPlayer(Activity):
         return True
 
     def _start_clip(self, path):
+        # A clip can be started while another one is playing (picking a new
+        # file, a folder result, a second launch). Two pumps on one screen
+        # fight over the reader and the display, so the old one goes first.
+        if self._playing:
+            self._stop_playback()
         if not self._fps_forced:
             self._fps = fps_from_name(path) or self._fps
         self._play(path)

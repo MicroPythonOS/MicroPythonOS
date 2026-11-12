@@ -440,6 +440,48 @@ class TestVideoPlayback(unittest.TestCase):
         os.remove(second)
         os.rmdir(folder)
 
+    def test_a_folder_pick_replaces_the_clip_that_is_playing(self):
+        folder = "data/video_switch_test"
+        try:
+            os.mkdir(folder)
+        except OSError:
+            pass
+        first = folder + "/01_first.mjpeg"
+        second = folder + "/02_second.mjpeg"
+        for path in (first, second):
+            with open(path, "wb") as f:
+                for _ in range(4):
+                    f.write(make_jpeg(160, 120))
+
+        intent = Intent(action="view", data=CLIP)
+        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        activity = self._current_activity()
+        self.assertTrue(activity._playing)
+
+        # Picking a folder while a clip is already playing must stop it first:
+        # two pumps would read from the same reader.
+        stops = []
+        original_stop = activity._stop_playback
+
+        def counting_stop():
+            stops.append(1)
+            original_stop()
+
+        activity._stop_playback = counting_stop
+        activity._on_file_picked(
+            {"result_code": True, "data": {"paths": [folder + "/"]}})
+        self.assertTrue(stops, "the running clip was not stopped first")
+        self.assertEqual(activity._playlist, [first, second])
+        self.assertTrue(activity._playing)
+
+        self._play_to_end(activity)
+
+        self.assertEqual(activity._play_path, second,
+                         "the folder did not replace the running clip")
+        os.remove(first)
+        os.remove(second)
+        os.rmdir(folder)
+
     def test_seek_bar_scrubs_to_a_position(self):
         self._make_avi()
         intent = Intent(action="view", data=AVI, extras={"loop": "1"})
