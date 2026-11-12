@@ -153,6 +153,8 @@ class VideoPlayer(Activity):
         extras = getattr(intent, "extras", None) or {}
         path = extras.get("filename") or getattr(intent, "data", None)
         self._pending_path = path or None
+        self._playlist = []
+        self._playlist_i = 0
         self._intro_shown = False
         self._loop = False
         self._start_at_ms = 0
@@ -238,6 +240,8 @@ class VideoPlayer(Activity):
         if self._pending_path:
             path = self._pending_path
             self._pending_path = None
+            self._playlist = []
+            self._playlist_i = 0
             if jpegdec is None:
                 self.status_label.set_text("JPEG decoder not available")
                 return
@@ -361,13 +365,22 @@ class VideoPlayer(Activity):
             self.status_label.set_text("Tap Open to choose a clip")
             return
         paths = result.get("data", {}).get("paths", [])
-        path = self._first_video(paths)
-        if not path:
+        clips = self._clips_from(paths)
+        if not clips:
             self.status_label.set_text("No .avi or .mjpeg clip in there")
             return
-        self._start_clip(path)
+        self._playlist = clips
+        self._playlist_i = 0
+        self._start_clip(clips[0])
 
-    def _first_video(self, paths):
+    def _clips_from(self, paths):
+        """Expand picked files and folders into the clips to play, in order.
+
+        Picking a folder means "play everything in it": the clips run in name
+        order, which is the order a naming scheme like 01_... already gives.
+        """
+        clips = []
+        seen = set()
         for path in paths:
             if path.endswith("/"):
                 try:
@@ -375,11 +388,31 @@ class VideoPlayer(Activity):
                 except OSError:
                     continue
                 for name in names:
-                    if name.lower().endswith(self.VIDEO_EXTENSIONS):
-                        return path + name
+                    if not name.lower().endswith(self.VIDEO_EXTENSIONS):
+                        continue
+                    clip = path + name
+                    if clip not in seen:
+                        seen.add(clip)
+                        clips.append(clip)
             elif path.lower().endswith(self.VIDEO_EXTENSIONS):
-                return path
-        return None
+                if path not in seen:
+                    seen.add(path)
+                    clips.append(path)
+        return clips
+
+    def _advance_playlist(self):
+        """Start the next clip of a folder pick; wrap around only when looping."""
+        if not self._playlist:
+            return False
+        nxt = self._playlist_i + 1
+        if nxt >= len(self._playlist):
+            if not self._loop:
+                return False
+            nxt = 0
+        self._playlist_i = nxt
+        self._stop_playback()
+        self._start_clip(self._playlist[nxt])
+        return True
 
     def _start_clip(self, path):
         if not self._fps_forced:
@@ -1095,6 +1128,8 @@ class VideoPlayer(Activity):
         frame = self._reader.next()
         stats["read_us"] += time.ticks_diff(time.ticks_us(), t)
         if frame is None:
+            if self._advance_playlist():
+                return 1
             if self._loop and self._restart():
                 return 1
             self._stop_playback()

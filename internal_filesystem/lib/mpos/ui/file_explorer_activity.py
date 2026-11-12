@@ -233,6 +233,17 @@ class FileExplorerActivity(Activity):
     def _on_item_clicked(self, e, path, is_dir):
         target = e.get_target_obj()
         if self._mode == self.MODE_PICK:
+            if target == self._suppress_btn:
+                # The long press that selected this entry also produces a
+                # CLICKED on release; it must not navigate into the folder.
+                self._suppress_btn = None
+                return
+            if is_dir:
+                # Short press enters a folder, exactly like browse mode; long
+                # press is what picks the folder itself.
+                if __debug__: logger.debug("FileExplorer: CLICK navigate into %s", path)
+                self._populate_dir(path)
+                return
             self._toggle_selection(path, target)
             return
         if target == self._suppress_btn:
@@ -287,9 +298,14 @@ class FileExplorerActivity(Activity):
             btn.remove_style(self._selected_style, lv.PART.MAIN)
 
     def _on_any_long_press(self, e, path):
-        if self._mode == self.MODE_PICK:
-            return
         btn = e.get_target_obj()
+        if self._mode == self.MODE_PICK:
+            # A folder is picked as a whole by long-pressing it; the CLICKED
+            # that follows on release is swallowed in _on_item_clicked.
+            self._suppress_btn = btn
+            self._toggle_selection(path, btn)
+            if __debug__: logger.debug("FileExplorer: LONG_PRESSED pick %s", path)
+            return
         self._suppress_btn = btn
         self._selected_path = path
         self._highlight_btn(btn)
