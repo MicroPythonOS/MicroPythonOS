@@ -326,7 +326,17 @@ class VideoPlayer(Activity):
         if self._exit_requested:
             return
         self._exit_requested = True
-        lv.async_call(lambda _: self.finish(), None)
+        lv.async_call(lambda _: self._finish_if_current(), None)
+
+    def _finish_if_current(self):
+        """finish() only while this activity is still the one on top.
+
+        The exit is deferred by a pass, so another activity can be pushed in
+        the meantime (an app was launched, the caller went back). finish()
+        would then pop that activity instead of this one.
+        """
+        if self.has_foreground():
+            self.finish()
 
     def _pick_file(self, event=None):
         self.status_label.set_text("pick a clip")
@@ -1216,7 +1226,13 @@ class VideoPlayer(Activity):
         print("video_player: " + report)
         print("video_player: audio " + self._audio_report())
         if self.status_label is not None and not self._playing:
-            self.status_label.set_text(report)
+            try:
+                self.status_label.set_text(report)
+            except lv.LvReferenceError:
+                # The widgets can already be gone when a stop is queued and the
+                # activity is torn down first; the on-screen report is only
+                # cosmetic, so drop the stale label and keep the printed one.
+                self.status_label = None
 
     def _set_pump_period(self, ms):
         # The own pump keeps a fixed tick and sleeps out the rest; only the

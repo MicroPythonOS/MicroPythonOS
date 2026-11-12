@@ -385,6 +385,31 @@ class TestVideoPlayback(unittest.TestCase):
         self.assertTrue(activity._playing, "finish ran inside the pump")
         activity._stop_playback()
 
+    def test_deferred_exit_does_not_finish_another_activity(self):
+        intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
+        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        activity = self._current_activity()
+        activity._request_exit()
+        # Something else came to the front before the deferred call ran.
+        activity._has_foreground = False
+        for _ in range(5):
+            lv.timer_handler()
+            time.sleep_ms(2)
+        self.assertIs(self._current_activity(), activity,
+                      "the deferred exit finished an activity that was gone")
+        activity._has_foreground = True
+
+    def test_report_survives_a_deleted_status_label(self):
+        intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
+        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        activity = self._current_activity()
+        doomed = lv.label(lv.screen_active())
+        doomed.delete()
+        activity.status_label = doomed
+        # A queued stop can outlive the screen; reporting must not raise.
+        activity._stop_playback()
+        self.assertIsNone(activity.status_label)
+
     def test_seek_bar_scrubs_to_a_position(self):
         self._make_avi()
         intent = Intent(action="view", data=AVI, extras={"loop": "1"})
