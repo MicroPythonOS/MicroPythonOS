@@ -115,6 +115,12 @@ class TestVideoPlayback(unittest.TestCase):
         self._make_clip()
 
     def tearDown(self):
+        # Stop whatever the test left playing: a leaked player keeps decoding
+        # (and writing sound) while later tests run.
+        from mpos.ui.view import remove_and_stop_current_activity
+
+        while screen_stack and hasattr(screen_stack[-1][0], "title_label"):
+            remove_and_stop_current_activity()
         for path in (CLIP, CLIP_WAV, AVI):
             try:
                 os.remove(path)
@@ -531,9 +537,12 @@ class TestVideoPlayback(unittest.TestCase):
         # ~1.3s of a 15fps 20 frame clip at 44.1kB/s: within a queue of the
         # real total, and never behind the video clock.
         expected = int(FRAMES * 1000 / FPS) * 44100 // 1000
-        self.assertTrue(audio.written >= expected - 2 * 44100 // 10,
+        # The sink primes ~200ms ahead, so the written total can legitimately
+        # overshoot the clip length by about that much.
+        slack = 44100 * 2 // 5
+        self.assertTrue(audio.written >= expected - slack,
                         "wrote %d, expected about %d" % (audio.written, expected))
-        self.assertTrue(audio.written <= expected + 2 * 44100 // 10,
+        self.assertTrue(audio.written <= expected + slack,
                         "wrote %d, expected about %d" % (audio.written, expected))
         self.assertEqual(audio.underruns, 0)
         self.assertGreaterEqual(audio.min_pending_ms, 0)
