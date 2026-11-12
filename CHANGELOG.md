@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Boards:
+- Add D-Shell ESP32-S3 N16R8 support: ST7789V display, GT911 touch, keys, WS2812 LEDs, QMI8658 IMU, MAX98357A audio and buzzer, with automatic board detection.
+
 Frameworks:
 - aiorepl: the console no longer freezes every asyncio task when a host program opens the USB-CDC port and writes bytes that are not a REPL session (device-detection probes send CBOR such as `0xA6` + `get_version_info` and then hold the port, previously stalling the loop for ~28 s per probe). Such bytes are discarded instead of echoing and blocking a text-mode read (#297).
 - AudioManager: MP3 playback through the native `mp3dec` module (minimp3) — MPEG-1/2/2.5 Layer III, CBR and VBR, mono/stereo, 8-48 kHz. Decoding releases the GIL so the UI keeps rendering, the file's own sample rate is used (no resampling), and volume is applied as a fixed-point right shift. ID3v2/ID3v1 tags are skipped. `get_info()` reads rate, channels and duration in pure Python, and the music player lists `.mp3` files when the firmware has `mp3dec`. On desktop, MP3 is played by `ffplay`/`mpg123`/`afplay`, or decoded to a temporary WAV when only `aplay`/`paplay` exists.

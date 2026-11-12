@@ -47,3 +47,7 @@ ota-validation: ## Run the hardware OTA release gate (ARGS='--port ... --camera 
 .PHONY: ota-validation-server
 ota-validation-server: ## Serve local osupdate metadata for the OTA gate (ARGS='--version ... --hardware-id ...')
 	./scripts/ota_validation_server.py $(ARGS)
+
+.PHONY: test-d-shell-host
+test-d-shell-host: ## Run D-Shell host regressions without hardware
+	python3 tests/cpython_d_shell.py
