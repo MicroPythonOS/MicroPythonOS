@@ -1,9 +1,8 @@
 import sys
 import unittest
 
-import lvgl as lv
-
-from mpos import AppManager, wait_for_text
+from mpos import AppManager
+from mpos.ui.view import screen_stack
 
 sys.path.insert(0, "apps/com.micropythonos.video_player")
 
@@ -27,9 +26,15 @@ class TestVideoPlayer(unittest.TestCase):
 
     def test_app_starts_and_registers_sysmon_cb(self):
         self.assertTrue(AppManager.start_app("com.micropythonos.video_player"))
-        self.assertTrue(wait_for_text("Video Player", timeout=10))
-        screen = lv.screen_active()
-        self.assertTrue(screen is not None)
+        # Launching without a clip puts the file picker on top of the player, so
+        # the title is on the player's own screen, not necessarily the active one.
+        activity = None
+        for entry in screen_stack:
+            # The entrypoint is re-imported per launch, so match by shape.
+            if hasattr(entry[0], "title_label"):
+                activity = entry[0]
+        self.assertIsNotNone(activity, "the player activity is not on the stack")
+        self.assertEqual(activity.title_label.get_text(), "Video Player")
 
 
 if __name__ == "__main__":
