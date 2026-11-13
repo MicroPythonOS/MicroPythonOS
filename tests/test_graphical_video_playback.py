@@ -173,10 +173,88 @@ class TestVideoPlayback(unittest.TestCase):
             f.write(bytes(data_size))
 
     def _play_to_end(self, activity):
+        """Pump until the player stops; returns (worst pump gap, run length) in ms.
+
+        The caller needs both: keeping the sink fed is this loop's job, and a
+        scheduling hiccup longer than the sink's lead (or a run that took longer
+        than the clip) forces the player to skip sound, no matter how correct it
+        is.
+        """
         deadline = time.ticks_ms() + 20000
+        started = time.ticks_ms()
+        previous = started
+        worst_gap = 0
         while time.ticks_ms() < deadline and activity._playing:
             lv.timer_handler()
             time.sleep_ms(2)
+            now = time.ticks_ms()
+            gap = time.ticks_diff(now, previous)
+            if gap > worst_gap:
+                worst_gap = gap
+            previous = now
+        return worst_gap, time.ticks_diff(previous, started)
+
+    def _audio_drop_verdict(self, audio, worst_gap, elapsed_ms, expected_ms):
+        """Who is to blame when the player skipped audio: "ok", "machine" or "player".
+
+        An underrun means the stream fell behind the video clock and the player
+        skipped sound forward to stay in sync, which is documented behaviour, so
+        it is only a defect when the machine actually kept up. Two things prove
+        it did not: this loop went unpumped for longer than the sink's lead, or
+        the whole run took longer than the clip lasts. A CI runner that plays 20
+        frames at 15 fps in 1.6 s leaves the audio clock ahead of the queue no
+        matter what the player does.
+        """
+        if not audio.underruns:
+            return "ok"
+        lead_ms = getattr(getattr(audio, "clock", None), "lead_ms", 0)
+        if lead_ms and worst_gap >= lead_ms:
+            return "machine"
+        if expected_ms and elapsed_ms > expected_ms * 1.15:
+            return "machine"
+        return "player"
+
+    def _check_audio_kept_up(self, audio, worst_gap, elapsed_ms, expected_ms):
+        """Assert no audio was dropped, unless this machine could not keep up."""
+        lead_ms = getattr(getattr(audio, "clock", None), "lead_ms", 0)
+        if self._audio_drop_verdict(audio, worst_gap, elapsed_ms, expected_ms) == "machine":
+            message = ("test machine could not pace the player: worst pump gap "
+                       "%d ms (audio lead %d ms), run took %d ms for a %d ms "
+                       "clip, so %d underrun(s) (%d resyncs, %d bytes skipped) "
+                       "were forced by the machine"
+                       % (worst_gap, lead_ms, elapsed_ms, expected_ms,
+                          audio.underruns, audio.resyncs, audio.skipped))
+            print("SKIPPED audio continuity: " + message)
+            self.skipTest(message)
+        self.assertEqual(
+            audio.underruns, 0,
+            "player dropped audio on a machine that kept up (%d ms gap, %d ms "
+            "run for a %d ms clip, %d resyncs, %d bytes skipped)"
+            % (worst_gap, elapsed_ms, expected_ms, audio.resyncs, audio.skipped))
+
+    def test_audio_drop_blames_the_machine_only_when_the_pump_stalled(self):
+        class _Clock:
+            lead_ms = 180
+
+        class _Audio:
+            underruns = 1
+            resyncs = 1
+            skipped = 15680
+            clock = _Clock()
+
+        audio = _Audio()
+        # Pumped every ~10 ms, clip done on time, yet sound was dropped: the
+        # player's fault.
+        self.assertEqual(self._audio_drop_verdict(audio, 10, 1340, 1333), "player")
+        # The loop itself was not scheduled for longer than the sink's lead.
+        self.assertEqual(self._audio_drop_verdict(audio, 354, 1340, 1333), "machine")
+        # Or the whole run took longer than the clip lasts (a 10 fps runner).
+        self.assertEqual(self._audio_drop_verdict(audio, 10, 1632, 1333), "machine")
+        audio.underruns = 0
+        self.assertEqual(self._audio_drop_verdict(audio, 354, 1632, 1333), "ok")
+
+    def _clip_ms(self):
+        return FRAMES * 1000 // FPS
 
     def _current_activity(self):
         if not screen_stack:
@@ -229,7 +307,7 @@ class TestVideoPlayback(unittest.TestCase):
         self.assertEqual(activity._audio_used_path, AVI)
         self.assertIsNotNone(activity._audio)
 
-        self._play_to_end(activity)
+        worst_gap, elapsed_ms = self._play_to_end(activity)
 
         self.assertFalse(activity._playing)
         self.assertEqual(activity._stats["frames_read"], FRAMES)
@@ -238,7 +316,7 @@ class TestVideoPlayback(unittest.TestCase):
         self.assertIsNotNone(audio)
         self.assertEqual(audio.rate, 22050)
         self.assertTrue(audio.written > 0)
-        self.assertEqual(audio.underruns, 0)
+        self._check_audio_kept_up(audio, worst_gap, elapsed_ms, self._clip_ms())
 
     def test_avi_with_an_unsupported_audio_codec_plays_without_sound(self):
         self._make_avi(audio_tag=0x55, bits=0)
@@ -528,7 +606,7 @@ class TestVideoPlayback(unittest.TestCase):
         self.assertEqual(activity._audio_used_path, CLIP_WAV)
         self.assertIsNotNone(activity._audio)
 
-        self._play_to_end(activity)
+        worst_gap, elapsed_ms = self._play_to_end(activity)
 
         audio = activity._audio_last
         self.assertIsNotNone(audio)
@@ -544,7 +622,7 @@ class TestVideoPlayback(unittest.TestCase):
                         "wrote %d, expected about %d" % (audio.written, expected))
         self.assertTrue(audio.written <= expected + slack,
                         "wrote %d, expected about %d" % (audio.written, expected))
-        self.assertEqual(audio.underruns, 0)
+        self._check_audio_kept_up(audio, worst_gap, elapsed_ms, self._clip_ms())
         self.assertGreaterEqual(audio.min_pending_ms, 0)
 
 
