@@ -381,17 +381,28 @@ static void buzzer_init_raise(int gpio, uint32_t rate, int bits, uint32_t bufsiz
     uint32_t src_hz = 0;
     esp_clk_tree_src_get_freq_hz((soc_module_clk_t)clk_cfg,
                                  ESP_CLK_TREE_SRC_FREQ_PRECISION_APPROX, &src_hz);
-    // Carrier frequency: the caller can override it, otherwise use the sample
-    // rate (at least 16 kHz so it is inaudible on its own). The carrier must
-    // not be slower than the sample clock or the samples cannot be
-    // represented at all. retro-go uses the same rule.
-    uint32_t carrier = carrier_req ? carrier_req : (rate < 16000 ? 16000 : rate);
-    if (carrier < rate) {
-        carrier = rate;
+    // Carrier frequency, in whole multiples of the sample rate. Anything else
+    // makes the duty updates drift against the carrier: measured on the fri3d
+    // 2026, a 78125 Hz carrier for a 22050 Hz file (3.54x, so the duty jumps
+    // between 3 and 4 carrier periods) turned speech into a constant squeal
+    // (STOI 0.27 and envelope tracking 0.10, against 0.55 and 0.65 for an
+    // exact multiple). 0 means "follow the sample rate, at least 16 kHz".
+    uint32_t steps;
+    if (carrier_req) {
+        steps = (carrier_req + rate / 2) / rate;
+    } else {
+        steps = (16000 + rate - 1) / rate;
     }
-    if (carrier > 2000000) {
-        carrier = 2000000;
+    if (steps < 1) {
+        steps = 1;
     }
+    // 8 bits is the lowest duty resolution worth having, so a carrier that
+    // needs more than that at 8 bits cannot be clocked at all.
+    uint32_t carrier_limit = src_hz >> 8;
+    while (steps > 1 && (uint64_t)steps * rate > carrier_limit) {
+        steps--;
+    }
+    uint32_t carrier = steps * rate;
     int duty_bits = bits;
     while (duty_bits > 8 && (uint64_t)carrier * (1u << duty_bits) > src_hz) {
         duty_bits--;
