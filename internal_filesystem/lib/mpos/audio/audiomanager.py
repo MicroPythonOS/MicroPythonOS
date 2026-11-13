@@ -298,13 +298,17 @@ class AudioManager:
     #   buzzer_gain     source overdrive before the PWM; 100 keeps the samples
     #                   untouched, higher values hard-clip them into the square
     #                   waves a piezo disc can reproduce
-    #   buzzer_carrier  PWM carrier frequency in Hz; 0 = follow the sample rate
+    #   buzzer_carrier  PWM carrier as a multiple of the sample rate (0 = auto,
+    #                   which is one multiple, or more when that is below
+    #                   16 kHz). It has to be a whole multiple: a carrier that
+    #                   is not (78 kHz for a 22.05 kHz file) makes the duty
+    #                   updates drift against the carrier and the disc squeals
     #   buzzer_emphasis pre-emphasis (high-pass) strength in percent, 0..90
     #   buzzer_mod      ring-modulation frequency in Hz; 0 = off, moves the
     #                   baseband into the disc's resonance window
     BUZZER_TUNING = {
         "buzzer_gain": (0, 3200),
-        "buzzer_carrier": (0, 2000000),
+        "buzzer_carrier": (0, 8),
         "buzzer_emphasis": (0, 90),
         "buzzer_mod": (0, 8000),
     }

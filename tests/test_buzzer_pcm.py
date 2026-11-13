@@ -263,6 +263,41 @@ class TestBuzzerStream(unittest.TestCase):
         self.assertEqual(stream.captured_samples, 176256)
 
 
+class TestTuningForwarding(unittest.TestCase):
+    """The four knobs must reach the native sink, not stop at the stream."""
+
+    def test_stream_forwards_all_tuning_to_the_sink(self):
+        stream = BuzzerStream(
+            file_path="x.wav", stream_type=0, volume=100, buzzer_pin=46,
+            on_complete=None, buzzer_gain=1600, buzzer_carrier=2,
+            buzzer_emphasis=55, buzzer_mod=3000,
+        )
+        # the knob is a multiple of the sample rate, the sink wants Hz
+        self.assertEqual(stream._sink_settings(22050), (1600, 44100, 55, 3000))
+
+    def test_stream_defaults_are_audible_and_neutral(self):
+        stream = BuzzerStream(
+            file_path="x.wav", stream_type=0, volume=100, buzzer_pin=46,
+            on_complete=None,
+        )
+        self.assertEqual(stream._sink_settings(22050), (100, 0, 0, 0))
+
+    def test_carrier_is_clamped_to_a_whole_multiple(self):
+        stream = BuzzerStream(
+            file_path="x.wav", stream_type=0, volume=100, buzzer_pin=46,
+            on_complete=None, buzzer_carrier=99,
+        )
+        self.assertEqual(stream._sink_settings(22050)[1], 8 * 22050)
+
+    def test_mp3_stream_forwards_tuning(self):
+        stream = BuzzerMP3Stream(
+            file_path="x.mp3", stream_type=0, volume=100, buzzer_pin=46,
+            on_complete=None, buzzer_gain=400, buzzer_carrier=4,
+            buzzer_emphasis=30, buzzer_mod=2500,
+        )
+        self.assertEqual(stream._sink_settings(48000), (400, 192000, 30, 2500))
+
+
 class TestBuzzerSink(unittest.TestCase):
     """Streaming sink used by apps that pump their own audio (video player)."""
 

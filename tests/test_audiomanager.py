@@ -306,13 +306,13 @@ class TestBuzzerTuning(unittest.TestCase):
         self.assertEqual(self.buzzer.buzzer_gain, 800)
 
     def test_carrier_emphasis_and_mod_are_applied_and_persisted(self):
-        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_carrier", 78125), 78125)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_carrier", 2), 2)
         self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_emphasis", 55), 55)
         self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_mod", 3000), 3000)
-        self.assertEqual(self.buzzer.buzzer_carrier, 78125)
+        self.assertEqual(self.buzzer.buzzer_carrier, 2)
         self.assertEqual(self.buzzer.buzzer_emphasis, 55)
         self.assertEqual(self.buzzer.buzzer_mod, 3000)
-        self.assertEqual(self._prefs.get_string("buzzer_carrier"), "78125")
+        self.assertEqual(self._prefs.get_string("buzzer_carrier"), "2")
         self.assertEqual(self._prefs.get_string("buzzer_emphasis"), "55")
         self.assertEqual(self._prefs.get_string("buzzer_mod"), "3000")
         self.assertEqual(AudioManager.get_buzzer_tuning("buzzer_mod"), 3000)
@@ -320,7 +320,7 @@ class TestBuzzerTuning(unittest.TestCase):
     def test_tuning_is_clamped_to_its_range(self):
         self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_emphasis", 1000), 90)
         self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_mod", -10), 0)
-        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_carrier", 99999999), 2000000)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_carrier", 99999999), 8)
 
     def test_unknown_tuning_key_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -331,9 +331,9 @@ class TestBuzzerTuning(unittest.TestCase):
     def test_output_accepts_the_tuning_parameters(self):
         output = AudioManager.Output(
             "buzzer2", "buzzer", buzzer_pin=46,
-            buzzer_gain=1600, buzzer_carrier=32000, buzzer_emphasis=30, buzzer_mod=2500)
+            buzzer_gain=1600, buzzer_carrier=3, buzzer_emphasis=30, buzzer_mod=2500)
         self.assertEqual(output.buzzer_gain, 1600)
-        self.assertEqual(output.buzzer_carrier, 32000)
+        self.assertEqual(output.buzzer_carrier, 3)
         self.assertEqual(output.buzzer_emphasis, 30)
         self.assertEqual(output.buzzer_mod, 2500)
 
@@ -346,13 +346,13 @@ class TestBuzzerTuning(unittest.TestCase):
         editor.put_string("buzzer_gain", "3200")
         editor.put_string("buzzer_emphasis", "75")
         editor.put_string("buzzer_mod", "2500")
-        editor.put_string("buzzer_carrier", "44100")
+        editor.put_string("buzzer_carrier", "4")
         editor.commit()
         output = AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=46))
         self.assertEqual(output.buzzer_gain, 3200)
         self.assertEqual(output.buzzer_emphasis, 75)
         self.assertEqual(output.buzzer_mod, 2500)
-        self.assertEqual(output.buzzer_carrier, 44100)
+        self.assertEqual(output.buzzer_carrier, 4)
 
 
 class TestAudioManagerFindMethods(unittest.TestCase):
