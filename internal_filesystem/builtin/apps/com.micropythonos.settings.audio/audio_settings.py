@@ -13,18 +13,18 @@ BUZZER_GAIN_OPTIONS = [
     ("Extreme", "3200"),
 ]
 
-# Carrier frequency of the PWM that drives the disc. "Auto" follows the sample
-# rate (at least 16 kHz). Higher carriers give finer duty control and move the
-# switching noise out of the audible band, at the cost of duty resolution; a
-# carrier slower than the sample clock cannot represent the samples at all.
+# A multiple of the sample rate. Only a whole multiple keeps the duty updates
+# in step with the carrier: a carrier that is not one (78 kHz for a 22.05 kHz
+# file is 3.54x) makes the sample's duty land on a different number of carrier
+# periods each time, and the disc turns speech into a constant squeal. Higher
+# multiples move the switching noise further up at the cost of duty resolution.
 BUZZER_CARRIER_OPTIONS = [
     ("Auto (sample rate)", "0"),
-    ("16 kHz", "16000"),
-    ("22 kHz", "22050"),
-    ("32 kHz", "32000"),
-    ("44 kHz", "44100"),
-    ("62 kHz", "62500"),
-    ("78 kHz", "78125"),
+    ("2x sample rate", "2"),
+    ("3x sample rate", "3"),
+    ("4x sample rate", "4"),
+    ("6x sample rate", "6"),
+    ("8x sample rate", "8"),
 ]
 
 # First-order high-pass before the overdrive, which pushes the 1-3 kHz part of

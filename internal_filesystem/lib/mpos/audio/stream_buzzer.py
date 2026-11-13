@@ -38,6 +38,22 @@ _DEVICE_MAX_BUFSIZE = 32768
 _active_sink = None
 
 
+def _carrier_hz(multiple, rate):
+    """PWM carrier in Hz from the stored multiple of the sample rate.
+
+    The knob is a multiple rather than a frequency because only a whole
+    multiple keeps the duty updates in step with the carrier; measured on the
+    fri3d 2026, a 78125 Hz carrier for a 22050 Hz file turned speech into a
+    constant squeal (STOI 0.27 against 0.55 for an exact multiple). 0 means
+    "follow the sample rate", which the driver resolves further.
+    """
+    try:
+        multiple = int(multiple)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(8, multiple)) * int(rate)
+
+
 class _BuzzerSink:
     """Minimal I2S-like sink for the WAVStream playback loop."""
 
@@ -196,10 +212,33 @@ class _BuzzerOutput:
         self.buzzer_mod = buzzer_mod
         self._sink = None
 
+    def _sink_settings(self, playback_rate):
+        """(gain, carrier Hz, emphasis, ring mod) the native sink must use.
+
+        Split out so a desktop test can check the forwarding without an ESP32:
+        the tuning knobs silently stopped at the stream once (the player path
+        kept passing only the gain, so the settings app did nothing for
+        carrier/emphasis/ring mod).
+
+        The carrier is stored as a multiple of the sample rate, because only a
+        whole multiple keeps the duty updates in step with the carrier; the
+        driver snaps anything else, but a non-multiple carrier was measured to
+        turn speech into a constant squeal.
+        """
+        return (
+            getattr(self, "buzzer_gain", 800),
+            _carrier_hz(getattr(self, "buzzer_carrier", 0), playback_rate),
+            getattr(self, "buzzer_emphasis", 0),
+            getattr(self, "buzzer_mod", 0),
+        )
+
     def _open_or_reuse_i2s(self, playback_rate, channels, ibuf, keep_warm):
         if sys.platform == "esp32":
-            self._sink = _DeviceBuzzerSink(self.buzzer_pin, playback_rate, channels,
-                                           getattr(self, "buzzer_gain", 100))
+            gain, carrier, emphasis, mod = self._sink_settings(playback_rate)
+            self._sink = _DeviceBuzzerSink(
+                self.buzzer_pin, playback_rate, channels, gain,
+                carrier=carrier, emphasis=emphasis, mod=mod,
+            )
         else:
             self._sink = _EmulatedBuzzerSink(playback_rate, channels)
         self._i2s = self._sink
@@ -298,7 +337,7 @@ class BuzzerSink:
             self.channels,
             getattr(self.output, "buzzer_gain", 800),
             self.bufsize,
-            carrier=getattr(self.output, "buzzer_carrier", 0),
+            carrier=_carrier_hz(getattr(self.output, "buzzer_carrier", 0), self.rate),
             emphasis=getattr(self.output, "buzzer_emphasis", 0),
             mod=getattr(self.output, "buzzer_mod", 0),
         )

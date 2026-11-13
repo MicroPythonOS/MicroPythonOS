@@ -115,6 +115,12 @@ class TestVideoPlayback(unittest.TestCase):
         self._make_clip()
 
     def tearDown(self):
+        # Stop whatever the test left playing: a leaked player keeps decoding
+        # (and writing sound) while later tests run.
+        from mpos.ui.view import remove_and_stop_current_activity
+
+        while screen_stack and hasattr(screen_stack[-1][0], "title_label"):
+            remove_and_stop_current_activity()
         for path in (CLIP, CLIP_WAV, AVI):
             try:
                 os.remove(path)
@@ -440,6 +446,48 @@ class TestVideoPlayback(unittest.TestCase):
         os.remove(second)
         os.rmdir(folder)
 
+    def test_a_folder_pick_replaces_the_clip_that_is_playing(self):
+        folder = "data/video_switch_test"
+        try:
+            os.mkdir(folder)
+        except OSError:
+            pass
+        first = folder + "/01_first.mjpeg"
+        second = folder + "/02_second.mjpeg"
+        for path in (first, second):
+            with open(path, "wb") as f:
+                for _ in range(4):
+                    f.write(make_jpeg(160, 120))
+
+        intent = Intent(action="view", data=CLIP)
+        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        activity = self._current_activity()
+        self.assertTrue(activity._playing)
+
+        # Picking a folder while a clip is already playing must stop it first:
+        # two pumps would read from the same reader.
+        stops = []
+        original_stop = activity._stop_playback
+
+        def counting_stop():
+            stops.append(1)
+            original_stop()
+
+        activity._stop_playback = counting_stop
+        activity._on_file_picked(
+            {"result_code": True, "data": {"paths": [folder + "/"]}})
+        self.assertTrue(stops, "the running clip was not stopped first")
+        self.assertEqual(activity._playlist, [first, second])
+        self.assertTrue(activity._playing)
+
+        self._play_to_end(activity)
+
+        self.assertEqual(activity._play_path, second,
+                         "the folder did not replace the running clip")
+        os.remove(first)
+        os.remove(second)
+        os.rmdir(folder)
+
     def test_seek_bar_scrubs_to_a_position(self):
         self._make_avi()
         intent = Intent(action="view", data=AVI, extras={"loop": "1"})
@@ -489,9 +537,12 @@ class TestVideoPlayback(unittest.TestCase):
         # ~1.3s of a 15fps 20 frame clip at 44.1kB/s: within a queue of the
         # real total, and never behind the video clock.
         expected = int(FRAMES * 1000 / FPS) * 44100 // 1000
-        self.assertTrue(audio.written >= expected - 2 * 44100 // 10,
+        # The sink primes ~200ms ahead, so the written total can legitimately
+        # overshoot the clip length by about that much.
+        slack = 44100 * 2 // 5
+        self.assertTrue(audio.written >= expected - slack,
                         "wrote %d, expected about %d" % (audio.written, expected))
-        self.assertTrue(audio.written <= expected + 2 * 44100 // 10,
+        self.assertTrue(audio.written <= expected + slack,
                         "wrote %d, expected about %d" % (audio.written, expected))
         self.assertEqual(audio.underruns, 0)
         self.assertGreaterEqual(audio.min_pending_ms, 0)
