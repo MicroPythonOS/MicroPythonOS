@@ -1,4 +1,5 @@
 import sys
+import time
 import unittest
 
 import lvgl as lv
@@ -37,6 +38,19 @@ class TestVideoPlayer(unittest.TestCase):
                 activity = entry[0]
         self.assertIsNotNone(activity, "the player activity is not on the stack")
         self.assertEqual(activity.title_label.get_text(), "Video Player")
+
+    def test_sysmon_echo_is_time_bounded_but_the_label_keeps_updating(self):
+        activity = self.player_activity()
+        self.assertIsNotNone(activity)
+        activity._sysmon_log_deadline = time.ticks_add(time.ticks_ms(), 4000)
+        self.assertTrue(activity._echo_sysmon())
+        # Past the window: no console echo (it floods mpremote), but the overlay
+        # must still show the latest value.
+        activity._sysmon_log_deadline = time.ticks_add(time.ticks_ms(), -1000)
+        self.assertFalse(activity._echo_sysmon())
+        activity._sysmon_cb(20, "I sysmon: 27 FPS")
+        self.assertEqual(activity.fps_label.get_text(), "sysmon: 27 FPS")
+        self.assertEqual(activity._sysmon_samples[-1], 27)
 
     def player_activity(self):
         for entry in screen_stack:

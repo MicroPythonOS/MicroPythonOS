@@ -118,12 +118,18 @@ class VideoPlayer(Activity):
     # The second entry keeps cards that still carry the ClipTV-era clip set
     # usable without moving anything.
     PICK_START_DIRS = ("/sdcard/video", "/sdcard/clips", "/sdcard")
+    # LVGL's sysmon prints once a second. Copying that to the console while the
+    # app sits idle floods the REPL and makes an mpremote session fail, so it is
+    # only echoed for a short window after the app resumes; the FPS label keeps
+    # updating. 0 disables the echo entirely.
+    SYSMON_LOG_MS = 8000
 
     def onCreate(self):
         self._timer = None
         self._bufs = {}
         self._dscs = None
         self._sysmon_samples = []
+        self._sysmon_log_deadline = 0
         self._reset_run_state()
         # Playback state.
         self._playing = False
@@ -243,6 +249,7 @@ class VideoPlayer(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
+        self._sysmon_log_deadline = time.ticks_add(time.ticks_ms(), self.SYSMON_LOG_MS)
         lv.log_register_print_cb(self._sysmon_cb)
         if self._pending_path:
             path = self._pending_path
@@ -1373,6 +1380,14 @@ class VideoPlayer(Activity):
         self.status_label.set_text(report)
         print("video_player: " + report)
 
+    def _echo_sysmon(self):
+        """Whether the sysmon line should also be echoed to the console.
+
+        The label keeps the latest value either way; only the serial echo is
+        time-bounded, because it is what floods a REPL or mpremote session.
+        """
+        return time.ticks_diff(self._sysmon_log_deadline, time.ticks_ms()) > 0
+
     def _sysmon_cb(self, level, log_str):
         if self._playing:
             # Updating a label during playback would invalidate and re-flush
@@ -1386,7 +1401,8 @@ class VideoPlayer(Activity):
             except (IndexError, ValueError):
                 return
             self._sysmon_samples.append(fps)
-            print("video_player sysmon FPS: %s" % fps)
+            if self._echo_sysmon():
+                print("video_player sysmon FPS: %s" % fps)
             self.fps_label.set_text("sysmon: %s FPS" % fps)
 
     def _reset_run_state(self):
