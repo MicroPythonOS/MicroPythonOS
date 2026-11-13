@@ -27,6 +27,13 @@ except ImportError:
     Timer = None
 
 
+def _run_deferred(func):
+    try:
+        func()
+    except Exception as e:
+        logger.error("video_player: deferred %s failed: %s", func, e)
+
+
 def compute_stats(durations_ms):
     n = len(durations_ms)
     total = 0
@@ -111,12 +118,18 @@ class VideoPlayer(Activity):
     # The second entry keeps cards that still carry the ClipTV-era clip set
     # usable without moving anything.
     PICK_START_DIRS = ("/sdcard/video", "/sdcard/clips", "/sdcard")
+    # LVGL's sysmon prints once a second. Copying that to the console while the
+    # app sits idle floods the REPL and makes an mpremote session fail, so it is
+    # only echoed for a short window after the app resumes; the FPS label keeps
+    # updating. 0 disables the echo entirely.
+    SYSMON_LOG_MS = 8000
 
     def onCreate(self):
         self._timer = None
         self._bufs = {}
         self._dscs = None
         self._sysmon_samples = []
+        self._sysmon_log_deadline = 0
         self._reset_run_state()
         # Playback state.
         self._playing = False
@@ -236,6 +249,7 @@ class VideoPlayer(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
+        self._sysmon_log_deadline = time.ticks_add(time.ticks_ms(), self.SYSMON_LOG_MS)
         lv.log_register_print_cb(self._sysmon_cb)
         if self._pending_path:
             path = self._pending_path
@@ -322,25 +336,44 @@ class VideoPlayer(Activity):
         self._play_icon.set_text(lv.SYMBOL.PLAY if self._paused else lv.SYMBOL.PAUSE)
 
     def _request_exit(self):
-        """Leave after the current LVGL pass, never from inside the pump.
+        """Leave without tearing down from inside the pump's callback.
 
-        Tearing the activity down while its own timer callback is drawing left
-        the panel showing torn, scaled garbage until the app was re-entered.
+        On device the pump runs from a machine.Timer callback. Finishing the
+        activity (and deinit()-ing that timer) from inside it left the device
+        unresponsive; the same applies when the request arrives from a gesture
+        event, which the pump dispatches inside its own LVGL pass.
         """
         if self._exit_requested:
             return
         self._exit_requested = True
-        lv.async_call(lambda _: self._finish_if_current(), None)
+        self._defer(self._finish_now)
 
-    def _finish_if_current(self):
-        """finish() only while this activity is still the one on top.
+    def _defer(self, func):
+        """Run func outside the pump callback and outside the LVGL pass."""
+        if self._own_pump:
+            try:
+                import micropython
+                micropython.schedule(_run_deferred, func)
+                return
+            except Exception as e:
+                logger.error("video_player: cannot schedule the exit: %s", e)
+        lv.async_call(lambda _: _run_deferred(func), None)
 
-        The exit is deferred by a pass, so another activity can be pushed in
-        the meantime (an app was launched, the caller went back). finish()
-        would then pop that activity instead of this one.
+    def _finish_now(self):
+        """Stop playback, then finish only while this is the top activity.
+
+        Another activity can be pushed while the exit is deferred (an app was
+        launched, the caller went back); finish() would then pop that activity
+        instead of this one.
         """
+        self._stop_playback()
         if self.has_foreground():
             self.finish()
+
+    def onBackPressed(self, screen):
+        """Consume the back gesture and leave through the deferred path."""
+        self._request_exit()
+        return True
 
     def _pick_file(self, event=None):
         self.status_label.set_text("pick a clip")
@@ -621,7 +654,7 @@ class VideoPlayer(Activity):
             self._fps = self.DEFAULT_FPS
         return self._restart_at(ms * self._fps // 1000, resume=not self._paused)
 
-    def _toggle_pause(self):
+    def _toggle_pause(self, event=None):
         if not self._playing:
             return
         if self._paused:
@@ -1048,10 +1081,13 @@ class VideoPlayer(Activity):
                 stats["pass_us"] += time.ticks_diff(time.ticks_us(), pass_start)
         except Exception as e:
             # Never leave the framework without its passes: that freezes the
-            # whole UI, so stop playback and hand LVGL back instead.
+            # whole UI, so stop playback and hand LVGL back instead. The stop
+            # itself is deferred: deinit()-ing the pump timer from inside its
+            # callback is what wedges the chip.
             logger.error("video_player: pump pass failed: %s", e)
             sys.print_exception(e)  # NOQA
-            self._stop_playback()
+            self._exit_requested = True
+            self._defer(self._stop_playback)
         finally:
             self._pass_pending = False
 
@@ -1137,8 +1173,7 @@ class VideoPlayer(Activity):
                 return 1
             if self._loop and self._restart():
                 return 1
-            self._stop_playback()
-            self.finish()
+            self._request_exit()
             return 0
         stats["frames_read"] += 1
         buf = self._play_bufs[self._play_dsc_i]
@@ -1345,6 +1380,14 @@ class VideoPlayer(Activity):
         self.status_label.set_text(report)
         print("video_player: " + report)
 
+    def _echo_sysmon(self):
+        """Whether the sysmon line should also be echoed to the console.
+
+        The label keeps the latest value either way; only the serial echo is
+        time-bounded, because it is what floods a REPL or mpremote session.
+        """
+        return time.ticks_diff(self._sysmon_log_deadline, time.ticks_ms()) > 0
+
     def _sysmon_cb(self, level, log_str):
         if self._playing:
             # Updating a label during playback would invalidate and re-flush
@@ -1358,7 +1401,8 @@ class VideoPlayer(Activity):
             except (IndexError, ValueError):
                 return
             self._sysmon_samples.append(fps)
-            print("video_player sysmon FPS: %s" % fps)
+            if self._echo_sysmon():
+                print("video_player sysmon FPS: %s" % fps)
             self.fps_label.set_text("sysmon: %s FPS" % fps)
 
     def _reset_run_state(self):
