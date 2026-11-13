@@ -31,6 +31,8 @@ class FakeI2C:
 
 class ES7210Tests(unittest.TestCase):
     def setUp(self):
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: imports the driver from the source tree")
         self.i2c = FakeI2C()
         self.codec = es7210.ES7210(self.i2c)
 

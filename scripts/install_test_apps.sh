@@ -30,6 +30,7 @@ apps=(
     com.micropythonos.helloworld
     com.micropythonos.doom_launcher
     com_micropythonos_nostr
+    com.micropythonos.video_player
 )
 
 for app in "${apps[@]}"; do

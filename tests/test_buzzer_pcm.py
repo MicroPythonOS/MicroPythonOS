@@ -171,6 +171,8 @@ class TestEmulatedSink(unittest.TestCase):
 class TestBuzzerStream(unittest.TestCase):
 
     def setUp(self):
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: the device has a native buzzer sink")
         _ensure_tmp()
         self.completed = []
         self.wav = _write_wav(os.path.join(TMP_DIR, "mono16.wav"), 4410)
