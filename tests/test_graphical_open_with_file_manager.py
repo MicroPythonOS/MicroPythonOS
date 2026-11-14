@@ -93,11 +93,16 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
             "Could not navigate into test directory",
         )
 
-    def test_wav_file_opens_music_player(self):
-        """Clicking a .wav file should launch the Music Player app."""
+    def test_wav_file_offers_both_players(self):
+        """A .wav file is handled by Music Player and Media Player."""
         self._start_file_manager()
 
         self.assertTrue(click_label("sample.wav"), "Could not click sample.wav")
+        self.assertTrue(
+            wait_for_text("Open with", timeout=20),
+            "Open-with chooser did not appear",
+        )
+        self.assertTrue(click_label("Music Player"), "Could not pick Music Player")
         self.assertTrue(
             wait_for_text("Stop", timeout=20),
             "Music Player did not open",
@@ -106,6 +111,26 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
             get_foreground_app(),
             "com.micropythonos.musicplayer",
             "Foreground app is not Music Player",
+        )
+
+    def test_wav_file_opens_in_media_player_too(self):
+        """The same picker entry can be routed to the merged Media Player."""
+        self._start_file_manager()
+
+        self.assertTrue(click_label("sample.wav"), "Could not click sample.wav")
+        self.assertTrue(
+            wait_for_text("Open with", timeout=20),
+            "Open-with chooser did not appear",
+        )
+        self.assertTrue(click_label("Media Player"), "Could not pick Media Player")
+        self.assertTrue(
+            wait_for_text("sample.wav", timeout=20),
+            "Media Player did not open with the selected WAV",
+        )
+        self.assertEqual(
+            get_foreground_app(),
+            "com.micropythonos.media_player",
+            "Foreground app is not Media Player",
         )
 
     def test_rtttl_file_opens_music_player(self):

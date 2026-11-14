@@ -7,7 +7,7 @@ import time
 import lvgl as lv
 
 import mpos
-from mpos import Activity, DisplayMetrics, Intent, SDCardManager
+from mpos import Activity, AudioManager, DisplayMetrics, Intent, SDCardManager
 
 from video_audio import AudioTrack, I2SSink, NullSink, WavSource, sidecar_path
 from video_avi import AviReader, UnsupportedFormat
@@ -15,6 +15,12 @@ from video_engine import (MemoryFile, MjpegReader, Pacer, fps_from_name,
                           jpeg_dimensions, sniff_format)
 
 logger = logging.getLogger(__name__)
+
+try:
+    import mp3dec  # noqa: F401
+    _MP3_SUPPORTED = True
+except ImportError:
+    _MP3_SUPPORTED = False
 
 try:
     import jpegdec
@@ -31,7 +37,7 @@ def _run_deferred(func):
     try:
         func()
     except Exception as e:
-        logger.error("video_player: deferred %s failed: %s", func, e)
+        logger.error("media_player: deferred %s failed: %s", func, e)
 
 
 def compute_stats(durations_ms):
@@ -90,7 +96,7 @@ def fps_from_name(path):
     return value if 1 <= value <= 120 else None
 
 
-class VideoPlayer(Activity):
+class MediaPlayer(Activity):
 
     FULL_W = 320
     FULL_H = 240
@@ -104,6 +110,9 @@ class VideoPlayer(Activity):
     PUMP_FRAMES_PER_PASS = 4
     PUMP_MAX_WAIT_MS = 20
     VIDEO_EXTENSIONS = (".avi", ".mjpeg", ".mjpg")
+    AUDIO_EXTENSIONS = (".wav", ".mp3")
+    AUDIO_TICK_MS = 100
+    ENDLESS_REPEAT_COUNT = 1_000_000
     # Optional: read the clip into RAM before playing (`preload` extra). It is
     # off by default because on this board it loses: a 1.1MB clip goes from
     # 15.7 to 1.3 ms of read per frame, but the start grows by 1.7s and the
@@ -115,9 +124,10 @@ class VideoPlayer(Activity):
     # be primed without waiting for the pump to present anything.
     AUDIO_PRIME_MS = 300
     # Media lives in a directory per kind at the card root, like /sdcard/audio.
-    # The second entry keeps cards that still carry the ClipTV-era clip set
+    # The early entries keep cards that still carry the ClipTV-era clip set
     # usable without moving anything.
-    PICK_START_DIRS = ("/data/video", "/sdcard/video", "/sdcard/clips", "/sdcard")
+    PICK_START_DIRS = ("/data/video", "/sdcard/video", "/data/audio",
+                       "/sdcard/audio", "/sdcard/clips", "/sdcard", "/data")
     # LVGL's sysmon prints once a second. Copying that to the console while the
     # app sits idle floods the REPL and makes an mpremote session fail, so it is
     # only echoed for a short window after the app resumes; the FPS label keeps
@@ -152,6 +162,7 @@ class VideoPlayer(Activity):
         self._controls_until = 0
         self._exit_requested = False
         self._seek_dragging = False
+        self._seek_duration = 0
         self._reported = True
         self._own_pump = False
         self._pump_timer = None
@@ -162,6 +173,14 @@ class VideoPlayer(Activity):
         self._audio_last = None
         self._audio_used_path = ""
         self._embedded_audio = None
+        # Audio-only playback through AudioManager (WAV/MP3), which brings its
+        # own output selection, volume and desktop backends.
+        self._audio_player = None
+        self._audio_path = ""
+        self._audio_timer = None
+        self._audio_icon_data = None
+        self._audio_icon_dsc = None
+        self._audio_generation = 0
         intent = self.getIntent()
         extras = getattr(intent, "extras", None) or {}
         path = extras.get("filename") or getattr(intent, "data", None)
@@ -189,13 +208,30 @@ class VideoPlayer(Activity):
         self.image.add_event_cb(self._image_clicked, lv.EVENT.CLICKED, None)
         screen.add_event_cb(self._key_pressed, lv.EVENT.KEY, None)
         self.title_label = lv.label(screen)
-        self.title_label.set_text("Video Player")
+        self.title_label.set_text("Media Player")
         self.title_label.align(lv.ALIGN.TOP_LEFT, 4, 4)
         self.status_label = lv.label(screen)
         self.status_label.set_text("idle")
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.set_width(lv.pct(90))
         self.status_label.align(lv.ALIGN.TOP_LEFT, 4, 28)
+        # Audio mode shows the app's own icon (a video frame with a music note)
+        # and the file name instead of a picture.
+        self.audio_icon = lv.image(screen)
+        self.audio_icon.align(lv.ALIGN.CENTER, 0, -35)
+        self.audio_icon.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.audio_icon.add_event_cb(self._image_clicked, lv.EVENT.CLICKED, None)
+        self.audio_icon.add_flag(lv.obj.FLAG.HIDDEN)
+        self.audio_label = lv.label(screen)
+        self.audio_label.set_text("")
+        self.audio_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self.audio_label.set_width(lv.pct(90))
+        self.audio_label.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
+        self.audio_label.align(lv.ALIGN.CENTER, 0, 35)
+        self.audio_label.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.audio_label.add_event_cb(self._image_clicked, lv.EVENT.CLICKED, None)
+        self.audio_label.add_flag(lv.obj.FLAG.HIDDEN)
+        self._load_audio_icon()
         self.fps_label = lv.label(screen)
         self.fps_label.set_text("sysmon: - FPS")
         self.fps_label.align(lv.ALIGN.BOTTOM_LEFT, 4, -4)
@@ -211,12 +247,15 @@ class VideoPlayer(Activity):
         half_lbl = lv.label(half_btn)
         half_lbl.set_text("160x120 x2")
         half_lbl.center()
+        self._full_btn = full_btn
+        self._half_btn = half_btn
         open_btn = lv.button(screen)
         open_btn.align(lv.ALIGN.TOP_RIGHT, -4, -4)
         open_btn.add_event_cb(self._pick_file, lv.EVENT.CLICKED, None)
         open_lbl = lv.label(open_btn)
         open_lbl.set_text("Open")
         open_lbl.center()
+        self._open_btn = open_btn
         self._bar = lv.obj(screen)
         self._bar.set_size(lv.pct(100), 66)
         self._bar.align(lv.ALIGN.BOTTOM_MID, 0, 0)
@@ -256,11 +295,20 @@ class VideoPlayer(Activity):
             self._pending_path = None
             self._playlist = []
             self._playlist_i = 0
-            if jpegdec is None:
+            if not self._is_audio_path(path) and jpegdec is None:
                 self.status_label.set_text("JPEG decoder not available")
                 return
-            self._start_clip(path)
+            self._start_media(path)
             return
+        if self._audio_player is not None:
+            if self._audio_player.is_playing():
+                self._show_audio_view()
+                self._start_audio_timer()
+                return
+            self._stop_audio()
+            self._show_audio_view()
+            self._play_icon.set_text(lv.SYMBOL.PLAY)
+            self.status_label.set_text("Finished: %s" % self.audio_label.get_text())
         if not self._intro_shown:
             # Launched from the app list: show the clips instead of a blank
             # screen. Only once, so cancelling the picker does not reopen it.
@@ -268,12 +316,54 @@ class VideoPlayer(Activity):
             self._pick_file()
 
     def onPause(self, screen):
+        # Video owns the display pump, so it must stop. Audio keeps playing in
+        # the background like the Music Player does; only its UI timer goes.
         self._stop_playback()
         self._stop_timer()
+        self._stop_audio_timer()
         lv.log_register_print_cb(None)
         self._bufs = {}
         self._dscs = None
         gc.collect()
+
+    def _load_audio_icon(self):
+        """Show the app icon next to the file name in audio mode."""
+        for base in ("apps/com.micropythonos.media_player",
+                     "builtin/apps/com.micropythonos.media_player",
+                     "/builtin/apps/com.micropythonos.media_player"):
+            try:
+                with open(base + "/icon_64x64.png", "rb") as handle:
+                    data = handle.read()
+            except OSError:
+                continue
+            self._audio_icon_data = data
+            self._audio_icon_dsc = lv.image_dsc_t({
+                "data_size": len(data),
+                "data": data,
+            })
+            self.audio_icon.set_src(self._audio_icon_dsc)
+            return
+        self.audio_icon.set_src(lv.SYMBOL.AUDIO)
+
+    def _show_audio_view(self):
+        self.image.add_flag(lv.obj.FLAG.HIDDEN)
+        self.fps_label.add_flag(lv.obj.FLAG.HIDDEN)
+        self._full_btn.add_flag(lv.obj.FLAG.HIDDEN)
+        self._half_btn.add_flag(lv.obj.FLAG.HIDDEN)
+        self.audio_icon.remove_flag(lv.obj.FLAG.HIDDEN)
+        self.audio_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        self.title_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        self.status_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._open_btn.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._bar.remove_flag(lv.obj.FLAG.HIDDEN)
+
+    def _show_video_view(self):
+        self.audio_icon.add_flag(lv.obj.FLAG.HIDDEN)
+        self.audio_label.add_flag(lv.obj.FLAG.HIDDEN)
+        self.image.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._full_btn.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._half_btn.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._open_btn.remove_flag(lv.obj.FLAG.HIDDEN)
 
     def _read_play_extras(self):
         """Loop and seek flags belong to the clip being started.
@@ -321,7 +411,7 @@ class VideoPlayer(Activity):
             group.add_obj(self.image)
             lv.group_focus_obj(self.image)
         except Exception as e:
-            logger.error("video_player: cannot focus the picture: %s", e)
+            logger.error("media_player: cannot focus the picture: %s", e)
 
     def _show_controls(self, ms=None):
         self._bar.remove_flag(lv.obj.FLAG.HIDDEN)
@@ -356,7 +446,7 @@ class VideoPlayer(Activity):
                 micropython.schedule(_run_deferred, func)
                 return
             except Exception as e:
-                logger.error("video_player: cannot schedule the exit: %s", e)
+                logger.error("media_player: cannot schedule the exit: %s", e)
         lv.async_call(lambda _: _run_deferred(func), None)
 
     def _finish_now(self):
@@ -367,6 +457,7 @@ class VideoPlayer(Activity):
         instead of this one.
         """
         self._stop_playback()
+        self._stop_audio()
         if self.has_foreground():
             self.finish()
 
@@ -376,11 +467,14 @@ class VideoPlayer(Activity):
         return True
 
     def _pick_file(self, event=None):
-        self.status_label.set_text("pick a clip")
+        self.status_label.set_text("pick a file")
+        patterns = list(self.VIDEO_EXTENSIONS) + list(self.AUDIO_EXTENSIONS)
+        if not _MP3_SUPPORTED:
+            patterns.remove(".mp3")
         intent = Intent(
             action="pick_file",
             extras={"start_dir": self._pick_start_dir(),
-                    "path_pattern": list(self.VIDEO_EXTENSIONS)},
+                    "path_pattern": patterns},
         )
         self.startActivityForResult(intent, self._on_file_picked)
 
@@ -395,24 +489,25 @@ class VideoPlayer(Activity):
 
     def _on_file_picked(self, result):
         if not result or not result.get("result_code"):
-            self.status_label.set_text("Tap Open to choose a clip")
+            self.status_label.set_text("Tap Open to choose a file")
             return
         paths = result.get("data", {}).get("paths", [])
-        clips = self._clips_from(paths)
-        if not clips:
-            self.status_label.set_text("No .avi or .mjpeg clip in there")
+        media = self._media_from(paths)
+        if not media:
+            self.status_label.set_text("No playable media in there")
             return
-        self._playlist = clips
+        self._playlist = media
         self._playlist_i = 0
-        self._start_clip(clips[0])
+        self._start_media(media[0])
 
-    def _clips_from(self, paths):
-        """Expand picked files and folders into the clips to play, in order.
+    def _media_from(self, paths):
+        """Expand picked files and folders into the media to play, in order.
 
-        Picking a folder means "play everything in it": the clips run in name
+        Picking a folder means "play everything in it": the items run in name
         order, which is the order a naming scheme like 01_... already gives.
+        Folders may mix video and audio; each item is routed when it starts.
         """
-        clips = []
+        media = []
         seen = set()
         for path in paths:
             if path.endswith("/"):
@@ -421,20 +516,32 @@ class VideoPlayer(Activity):
                 except OSError:
                     continue
                 for name in names:
-                    if not name.lower().endswith(self.VIDEO_EXTENSIONS):
+                    if not self._is_media_path(name):
                         continue
-                    clip = path + name
-                    if clip not in seen:
-                        seen.add(clip)
-                        clips.append(clip)
-            elif path.lower().endswith(self.VIDEO_EXTENSIONS):
+                    item = path + name
+                    if item not in seen:
+                        seen.add(item)
+                        media.append(item)
+            elif self._is_media_path(path):
                 if path not in seen:
                     seen.add(path)
-                    clips.append(path)
-        return clips
+                    media.append(path)
+        return media
+
+    def _is_audio_path(self, path):
+        lower = path.lower()
+        if lower.endswith(".mp3"):
+            return _MP3_SUPPORTED
+        return lower.endswith((".wav",))
+
+    def _is_media_path(self, path):
+        lower = path.lower()
+        if lower.endswith(self.VIDEO_EXTENSIONS):
+            return True
+        return self._is_audio_path(path)
 
     def _advance_playlist(self):
-        """Start the next clip of a folder pick; wrap around only when looping."""
+        """Start the next item of a folder pick; wrap around only when looping."""
         if not self._playlist:
             return False
         nxt = self._playlist_i + 1
@@ -443,9 +550,26 @@ class VideoPlayer(Activity):
                 return False
             nxt = 0
         self._playlist_i = nxt
-        self._stop_playback()
-        self._start_clip(self._playlist[nxt])
+        self._start_media(self._playlist[nxt])
         return True
+
+    def _start_media(self, path):
+        """Route one file to the video pump or the AudioManager player."""
+        self._stop_playback()
+        self._stop_audio(wait=True)
+        if path.lower().endswith(".mp3") and not _MP3_SUPPORTED:
+            self._show_audio_view()
+            self.audio_label.set_text(path.rsplit("/", 1)[-1])
+            self._audio_failed("Error: MP3 playback needs a newer firmware")
+            return
+        if self._is_audio_path(path):
+            self._start_audio(path)
+        elif jpegdec is None:
+            self._show_video_view()
+            self._show_overlays()
+            self.status_label.set_text("JPEG decoder not available")
+        else:
+            self._start_clip(path)
 
     def _start_clip(self, path):
         # A clip can be started while another one is playing (picking a new
@@ -455,26 +579,189 @@ class VideoPlayer(Activity):
             self._stop_playback()
         if not self._fps_forced:
             self._fps = fps_from_name(path) or self._fps
+        self._show_video_view()
         self._play(path)
 
+    def _is_active(self):
+        return self._playing or self._audio_player is not None
+
     def _image_clicked(self, event):
-        if not self._playing:
+        if not self._is_active():
             return
         self._toggle_pause()
-        self._show_controls(self.CONTROLS_MS)
+        self._show_controls(None if self._audio_player is not None else self.CONTROLS_MS)
 
     def _key_pressed(self, event):
-        if not self._playing:
+        if not self._is_active():
             return
         key = event.get_key()
         if key == lv.KEY.NEXT:
             self._seek_by(self.SEEK_STEP_MS)
-            self._show_controls(self.CONTROLS_MS)
+            self._show_controls(None if self._audio_player is not None else self.CONTROLS_MS)
         elif key == lv.KEY.PREV:
             self._seek_by(-self.SEEK_STEP_MS)
-            self._show_controls(self.CONTROLS_MS)
+            self._show_controls(None if self._audio_player is not None else self.CONTROLS_MS)
         elif key == lv.KEY.ESC:
             self._request_exit()
+
+    # ------------------------------------------------------------------
+    #  Audio playback (WAV/MP3) through AudioManager.
+    #  The video pump owns the display; audio gets its own small timer that
+    #  only refreshes the control bar.
+    # ------------------------------------------------------------------
+
+    def _start_audio(self, path):
+        self._read_play_extras()
+        self._playing = False
+        self._paused = False
+        self._exit_requested = False
+        self._stats = None
+        self._reader = None
+        self._pacer = None
+        self._play_path = path
+        self._audio_path = path
+        self._audio_generation += 1
+        generation = self._audio_generation
+        self._show_audio_view()
+        self.audio_label.set_text(path.rsplit("/", 1)[-1])
+        self.status_label.set_text("")
+        self._show_controls(None)
+        self._update_play_icon()
+        self._focus_audio()
+        SDCardManager.mount()
+
+        if path.lower().endswith(".mp3") and not _MP3_SUPPORTED:
+            self._audio_failed("Error: MP3 playback needs a newer firmware")
+            return
+
+        output = AudioManager.get_default_output()
+        if output is None:
+            self._audio_failed("Error: No audio output available")
+            return
+
+        # Let any other AudioManager playback (the Music Player, a
+        # notification) release the I2S before taking it.
+        self._quiet_other_audio()
+        try:
+            player = AudioManager.player(
+                file_path=path,
+                stream_type=AudioManager.STREAM_MUSIC,
+                on_complete=lambda result, token=generation:
+                    self._audio_complete(token, result),
+                output=output,
+            )
+            player.set_repeat(
+                self.ENDLESS_REPEAT_COUNT
+                if self._loop and len(self._playlist) <= 1 else 1)
+            self._audio_player = player
+            player.start()
+        except Exception as exc:
+            logger.error("media_player: cannot start %s: %s", path, exc)
+            self._audio_player = None
+            self._audio_failed("Error: Audio device unavailable or busy")
+            return
+        self._start_audio_timer()
+
+    def _audio_failed(self, message):
+        self._stop_audio_timer()
+        self._audio_player = None
+        self._audio_path = ""
+        self._playing = False
+        self._paused = False
+        self._show_controls(None)
+        self._play_icon.set_text(lv.SYMBOL.PLAY)
+        self.status_label.set_text(message)
+        print("media_player: %s" % message)
+
+    def _audio_complete(self, generation, result=None):
+        # Runs on the AudioManager player thread; LVGL is only touched through
+        # the activity's deferred UI update.
+        self.update_ui_threadsafe_if_foreground(
+            self._on_audio_finished, generation, result)
+
+    def _on_audio_finished(self, generation, result=None):
+        if generation != self._audio_generation or self._audio_player is None:
+            # A stop() from switching files also reports completion; ignore
+            # the callbacks of players that are no longer current.
+            return
+        if result and str(result).lower().startswith("error"):
+            self._audio_failed(result)
+            return
+        # The player thread is already finishing. Drop our handle first so a
+        # playlist transition does not wait for a stop() that has nothing to
+        # stop (the stream's finally block is about to release the output).
+        self._audio_player = None
+        self._stop_audio_timer()
+        if self._advance_playlist():
+            return
+        if self._loop and self._restart_audio():
+            return
+        self._audio_path = ""
+        self._paused = False
+        self._update_play_icon()
+        self.status_label.set_text("Finished: %s" % self.audio_label.get_text())
+        self._show_controls(None)
+        self._play_icon.set_text(lv.SYMBOL.PLAY)
+
+    def _restart_audio(self):
+        path = self._audio_path
+        if not path:
+            return False
+        self._stop_audio(wait=True)
+        self._start_audio(path)
+        return True
+
+    def _start_audio_timer(self):
+        self._stop_audio_timer()
+        if self._audio_player is None:
+            return
+        self._audio_timer = lv.timer_create(self._audio_tick, self.AUDIO_TICK_MS, None)
+        self._audio_timer.set_repeat_count(-1)
+
+    def _stop_audio_timer(self):
+        timer = self._audio_timer
+        self._audio_timer = None
+        if timer is not None:
+            try:
+                timer.delete()
+            except Exception as e:
+                logger.error("media_player: audio timer stop failed: %s", e)
+
+    def _audio_tick(self, timer=None):
+        if self._audio_player is None:
+            self._stop_audio_timer()
+            return
+        self._sync_scrubber()
+
+    def _stop_audio(self, wait=False):
+        self._stop_audio_timer()
+        player = self._audio_player
+        self._audio_player = None
+        self._audio_path = ""
+        self._paused = False
+        if player is not None:
+            try:
+                player.stop()
+            except Exception as e:
+                logger.error("media_player: audio stop failed: %s", e)
+            if wait:
+                # The playback thread tears its I2S down in its finally block.
+                # Opening the next stream before that happens would let the
+                # old deinit() pull the peripheral out from under it.
+                deadline = time.ticks_add(time.ticks_ms(), 500)
+                while (player.is_playing()
+                       and time.ticks_diff(deadline, time.ticks_ms()) > 0):
+                    time.sleep_ms(10)
+
+    def _focus_audio(self):
+        group = lv.group_get_default()
+        if group is None:
+            return
+        try:
+            group.add_obj(self.audio_label)
+            lv.group_focus_obj(self.audio_label)
+        except Exception as e:
+            logger.error("media_player: cannot focus the audio view: %s", e)
 
     # ------------------------------------------------------------------
     #  MJPEG playback: read -> decode -> set_src -> refr_now -> pace.
@@ -514,7 +801,7 @@ class VideoPlayer(Activity):
         clip_data = self._load_clip(path)
         self._preloaded = clip_data is not None
         if self._preloaded:
-            print("video_player: preloaded %s (%d bytes)"
+            print("media_player: preloaded %s (%d bytes)"
                   % (path.rsplit("/", 1)[-1], len(clip_data)))
         try:
             self._reader = self._open_reader(path, clip_data)
@@ -525,8 +812,8 @@ class VideoPlayer(Activity):
                     self._embedded_audio = self._reader.audio_source()
                 except UnsupportedFormat as e:
                     # Play the pictures, say why there is no sound.
-                    logger.warning("video_player: %s: %s", path, e.message)
-                    print("video_player: %s" % e.message)
+                    logger.warning("media_player: %s: %s", path, e.message)
+                    print("media_player: %s" % e.message)
                     self.status_label.set_text(e.message)
             # Open the sound sink before reading the first frame: its startup
             # silence drains in real time (up to 372ms), so the read, the
@@ -536,11 +823,11 @@ class VideoPlayer(Activity):
             self._prefill_audio()
             frame = self._reader.next()
         except UnsupportedFormat as e:
-            logger.error("video_player: %s: %s", path, e.message)
+            logger.error("media_player: %s: %s", path, e.message)
             self._play_failed(e.message)
             return
         except OSError as e:
-            logger.error("video_player: cannot open %s: %s", path, e)
+            logger.error("media_player: cannot open %s: %s", path, e)
             self._play_failed("cannot open %s" % path)
             return
         if frame is None:
@@ -548,7 +835,7 @@ class VideoPlayer(Activity):
             return
         w, h = jpeg_dimensions(frame)
         if not w or not h:
-            logger.error("video_player: %s is not a JPEG stream", path)
+            logger.error("media_player: %s is not a JPEG stream", path)
             self._play_failed("not a JPEG stream")
             return
         self._play_w, self._play_h = w, h
@@ -559,7 +846,7 @@ class VideoPlayer(Activity):
             # still flushing. One is a degraded but working fallback.
             self._play_bufs.append(bytearray(frame_bytes))
         except MemoryError:
-            logger.warning("video_player: single decode buffer (MemoryError)")
+            logger.warning("media_player: single decode buffer (MemoryError)")
         self._play_dscs = [self._make_dsc(w, h, b) for b in self._play_bufs]
         self._play_dsc_i = 0
         self._prepare_image(w, h)
@@ -567,7 +854,7 @@ class VideoPlayer(Activity):
         try:
             jpegdec.decode(frame, self._play_bufs[0])
         except Exception as e:
-            logger.error("video_player: decode failed: %s", e)
+            logger.error("media_player: decode failed: %s", e)
             self._play_failed("decode failed")
             return
         self._stats["decode_us"] += time.ticks_diff(time.ticks_us(), t)
@@ -588,7 +875,7 @@ class VideoPlayer(Activity):
         self._first_frame_ms = first_ms
         self._pacer = Pacer(self._fps, audio_ms)
         self._pacer.mark_shown(audio_ms)
-        print("video_player: play %s %dx%d %dfps, first frame %dms" % (
+        print("media_player: play %s %dx%d %dfps, first frame %dms" % (
             path, w, h, self._fps, first_ms))
         if self._start_at_ms > 0:
             self._seek_request_ms = self._start_at_ms
@@ -616,7 +903,7 @@ class VideoPlayer(Activity):
         self._stop_playback()
         self._show_overlays()
         self.status_label.set_text(message)
-        print("video_player: %s" % message)
+        print("media_player: %s" % message)
 
     def _prepare_image(self, w, h):
         # 1:1 always. Scaling in the draw path costs ~10x the flush.
@@ -629,6 +916,9 @@ class VideoPlayer(Activity):
     SEEK_STEP_MS = 15000
 
     def _position_ms(self):
+        if self._audio_player is not None:
+            position = self._audio_player.get_progress_ms()
+            return position or 0
         pacer = self._pacer
         if pacer is None:
             return 0
@@ -642,8 +932,14 @@ class VideoPlayer(Activity):
 
         The pump runs in a timer callback, so it is the only context that may
         touch the demuxer: seeking from here used to pull the frame queue out
-        from under it.
+        from under it. AudioManager's streams take a seek request from here
+        and perform it on their own playback thread.
         """
+        if self._audio_player is not None:
+            if ms < 0:
+                ms = 0
+            self._audio_player.seek(ms)
+            return
         self._seek_request_ms = ms
 
     def _apply_seek(self, ms):
@@ -655,6 +951,16 @@ class VideoPlayer(Activity):
         return self._restart_at(ms * self._fps // 1000, resume=not self._paused)
 
     def _toggle_pause(self, event=None):
+        if self._audio_player is not None:
+            if self._paused:
+                self._paused = False
+                self._audio_player.resume()
+            else:
+                self._paused = True
+                self._audio_player.pause()
+            self._show_controls(None)
+            self._update_play_icon()
+            return
         if not self._playing:
             return
         if self._paused:
@@ -699,7 +1005,7 @@ class VideoPlayer(Activity):
                 else:
                     reader.skip(frame)
         except Exception as e:
-            logger.error("video_player: seek failed: %s", e)
+            logger.error("media_player: seek failed: %s", e)
             return False
         if not resume:
             # Scrub preview: present the frame at the new position, no sound.
@@ -715,7 +1021,7 @@ class VideoPlayer(Activity):
             try:
                 self._embedded_audio = reader.audio_source()
             except UnsupportedFormat as e:
-                logger.warning("video_player: %s", e.message)
+                logger.warning("media_player: %s", e.message)
                 self._embedded_audio = None
         self._open_audio(self._play_path)
         self._prefill_audio()
@@ -728,7 +1034,7 @@ class VideoPlayer(Activity):
         self._audio_start(now)
         self._playing = True
         if frame == 0:
-            print("video_player: loop restart at %d frames" % self._stats["presented"])
+            print("media_player: loop restart at %d frames" % self._stats["presented"])
         return True
 
     # ----- audio sidecar -------------------------------------------------
@@ -764,8 +1070,8 @@ class VideoPlayer(Activity):
             try:
                 source = WavSource(path, preferred_rate=getattr(output, "preferred_sample_rate", None))
             except (OSError, ValueError) as e:
-                logger.error("video_player: audio %s unusable: %s", path, e)
-                print("video_player: audio %s unusable: %s" % (path, e))
+                logger.error("media_player: audio %s unusable: %s", path, e)
+                print("media_player: audio %s unusable: %s" % (path, e))
                 return
         try:
             if output is not None:
@@ -775,8 +1081,8 @@ class VideoPlayer(Activity):
                 sink = NullSink()
             sink.open()
         except Exception as e:
-            logger.error("video_player: audio sink failed: %s", e)
-            print("video_player: audio sink failed: %s" % e)
+            logger.error("media_player: audio sink failed: %s", e)
+            print("media_player: audio sink failed: %s" % e)
             source.close()
             return
         # Preload after the sink is open: reading a few hundred kilobytes
@@ -785,7 +1091,7 @@ class VideoPlayer(Activity):
         source.preload()
         self._audio = AudioTrack(source, sink)
         self._audio_used_path = path or video_path
-        print("video_player: audio %s %s %dHz %s %s" % (
+        print("media_player: audio %s %s %dHz %s %s" % (
             path or ("in " + video_path.rsplit("/", 1)[-1]), source.format_name,
             source.playback_rate, "mono" if source.channels == 1 else "stereo",
             "in RAM" if source.in_memory else "streaming"))
@@ -811,7 +1117,7 @@ class VideoPlayer(Activity):
                     break
                 time.sleep_ms(20)
         except Exception as e:
-            logger.error("video_player: cannot stop background audio: %s", e)
+            logger.error("media_player: cannot stop background audio: %s", e)
 
     def _load_clip(self, path):
         """Read the whole clip into RAM when that is worth it; else None."""
@@ -826,7 +1132,7 @@ class VideoPlayer(Activity):
         if self._preload_forced is None:
             return None
         if gc.mem_free() < size + self.PRELOAD_HEADROOM:
-            logger.warning("video_player: not enough RAM to preload %s", path)
+            logger.warning("media_player: not enough RAM to preload %s", path)
             return None
         data = bytearray(size)
         view = memoryview(data)
@@ -834,7 +1140,7 @@ class VideoPlayer(Activity):
         try:
             handle = open(path, "rb")
         except OSError as e:
-            logger.error("video_player: cannot preload %s: %s", path, e)
+            logger.error("media_player: cannot preload %s: %s", path, e)
             return None
         try:
             while read < size:
@@ -848,7 +1154,7 @@ class VideoPlayer(Activity):
         finally:
             handle.close()
         if read != size:
-            logger.warning("video_player: short preload of %s", path)
+            logger.warning("media_player: short preload of %s", path)
             return None
         return data
 
@@ -859,7 +1165,7 @@ class VideoPlayer(Activity):
         try:
             reader.prefill_audio(self.AUDIO_PRIME_MS)
         except Exception as e:
-            logger.error("video_player: audio prefill failed: %s", e)
+            logger.error("media_player: audio prefill failed: %s", e)
 
     def _audio_ready(self):
         if self._audio is None:
@@ -867,7 +1173,7 @@ class VideoPlayer(Activity):
         try:
             self._audio.ready()
         except Exception as e:
-            logger.error("video_player: audio sink not ready: %s", e)
+            logger.error("media_player: audio sink not ready: %s", e)
             self._close_audio()
 
     def _audio_start(self, now_ms):
@@ -876,7 +1182,7 @@ class VideoPlayer(Activity):
         try:
             return self._audio.start(now_ms)
         except Exception as e:
-            logger.error("video_player: audio start failed: %s", e)
+            logger.error("media_player: audio start failed: %s", e)
             self._close_audio()
             return now_ms
 
@@ -887,8 +1193,8 @@ class VideoPlayer(Activity):
         try:
             audio.tick(now_ms)
         except Exception as e:
-            logger.error("video_player: audio failed: %s", e)
-            print("video_player: audio failed: %s" % e)
+            logger.error("media_player: audio failed: %s", e)
+            print("media_player: audio failed: %s" % e)
             try:
                 sys.print_exception(e)  # NOQA
             except Exception:
@@ -904,7 +1210,7 @@ class VideoPlayer(Activity):
         try:
             audio.stop()
         except Exception as e:
-            logger.error("video_player: audio stop failed: %s", e)
+            logger.error("media_player: audio stop failed: %s", e)
 
     def _audio_report(self):
         audio = self._audio_last
@@ -963,7 +1269,7 @@ class VideoPlayer(Activity):
         try:
             task_handler.disable()
         except Exception as e:
-            logger.error("video_player: cannot take over LVGL passes: %s", e)
+            logger.error("media_player: cannot take over LVGL passes: %s", e)
             return False
         self._task_handler = task_handler
         return True
@@ -976,7 +1282,7 @@ class VideoPlayer(Activity):
         try:
             task_handler.enable()
         except Exception as e:
-            logger.error("video_player: cannot return LVGL passes: %s", e)
+            logger.error("media_player: cannot return LVGL passes: %s", e)
 
     def _new_pump_timer(self):
         # ESP32 has hardware timers 0-3; the task handler owns 0 and the
@@ -994,7 +1300,7 @@ class VideoPlayer(Activity):
             timer.init(mode=Timer.PERIODIC, period=self.PUMP_TICK_MS,
                        callback=self._pump_isr)
         except Exception as e:
-            logger.error("video_player: no pump timer: %s", e)
+            logger.error("media_player: no pump timer: %s", e)
             return None
         return timer
 
@@ -1024,7 +1330,7 @@ class VideoPlayer(Activity):
                 try:
                     lv.task_handler()
                 except Exception as e:
-                    logger.error("video_player: LVGL pass failed: %s", e)
+                    logger.error("media_player: LVGL pass failed: %s", e)
                 time.sleep_ms(self.PUMP_TICK_MS)
                 return
             # Present every frame that is due in one callback. Waiting for the
@@ -1075,7 +1381,7 @@ class VideoPlayer(Activity):
                 try:
                     lv.task_handler()
                 except Exception as e:
-                    logger.error("video_player: LVGL pass failed: %s", e)
+                    logger.error("media_player: LVGL pass failed: %s", e)
                 stats["lvgl_us"] += time.ticks_diff(time.ticks_us(), t)
                 self._frame_tick()
                 stats["pass_us"] += time.ticks_diff(time.ticks_us(), pass_start)
@@ -1084,7 +1390,7 @@ class VideoPlayer(Activity):
             # whole UI, so stop playback and hand LVGL back instead. The stop
             # itself is deferred: deinit()-ing the pump timer from inside its
             # callback is what wedges the chip.
-            logger.error("video_player: pump pass failed: %s", e)
+            logger.error("media_player: pump pass failed: %s", e)
             sys.print_exception(e)  # NOQA
             self._exit_requested = True
             self._defer(self._stop_playback)
@@ -1099,7 +1405,10 @@ class VideoPlayer(Activity):
             self._request_seek(self._seek.get_value())
 
     def _duration_ms(self):
-        """Length of the clip, or 0 when it cannot be known yet."""
+        """Length of the clip or track, or 0 when it cannot be known yet."""
+        if self._audio_player is not None:
+            duration = self._audio_player.get_duration_ms()
+            return duration or 0
         reader = self._reader
         if reader is None or self._fps <= 0:
             return 0
@@ -1117,7 +1426,9 @@ class VideoPlayer(Activity):
             return
         duration = self._duration_ms()
         if duration > 0:
-            self._seek.set_range(0, duration)
+            if duration != self._seek_duration:
+                self._seek.set_range(0, duration)
+                self._seek_duration = duration
             position = self._position_ms()
             if position > duration:
                 position = duration
@@ -1181,7 +1492,7 @@ class VideoPlayer(Activity):
         try:
             jpegdec.decode(frame, buf)
         except Exception as e:
-            logger.error("video_player: decode failed: %s", e)
+            logger.error("media_player: decode failed: %s", e)
             return 1
         stats["decode_us"] += time.ticks_diff(time.ticks_us(), t)
         dsc = self._play_dscs[self._play_dsc_i]
@@ -1238,14 +1549,15 @@ class VideoPlayer(Activity):
                 else:
                     timer.delete()
             except Exception as e:
-                logger.error("video_player: pump stop failed: %s", e)
+                logger.error("media_player: pump stop failed: %s", e)
         self._own_pump = False
         self._give_back_passes()
 
     def _stop_playback(self):
         was_playing = self._playing
         self._playing = False
-        self._paused = False
+        if self._audio_player is None:
+            self._paused = False
         self._exit_requested = False
         self._hide_controls()
         self._stop_pump()
@@ -1298,8 +1610,8 @@ class VideoPlayer(Activity):
             other_us / 1000.0 / frames,
             stats["ticks"],
         )
-        print("video_player: " + report)
-        print("video_player: audio " + self._audio_report())
+        print("media_player: " + report)
+        print("media_player: audio " + self._audio_report())
         if self.status_label is not None and not self._playing:
             try:
                 self.status_label.set_text(report)
@@ -1340,7 +1652,7 @@ class VideoPlayer(Activity):
         bufs = self._bufs.get(key)
         if bufs is None:
             self.status_label.set_text("preparing %sx%s..." % (w, h))
-            print("video_player: preparing %sx%s buffers..." % (w, h))
+            print("media_player: preparing %sx%s buffers..." % (w, h))
             bufs = [make_frame_rgb565(w, h, 0), make_frame_rgb565(w, h, 1)]
             self._bufs[key] = bufs
         self._dscs = [self._make_dsc(w, h, bufs[0]), self._make_dsc(w, h, bufs[1])]
@@ -1348,7 +1660,7 @@ class VideoPlayer(Activity):
         self.image.set_src(self._dscs[0])
         self._sysmon_samples = []
         self.status_label.set_text("running %sx%s %s frames..." % (w, h, self.N_FRAMES))
-        print("video_player: benchmark start %sx%s frames=%s" % (w, h, self.N_FRAMES))
+        print("media_player: benchmark start %sx%s frames=%s" % (w, h, self.N_FRAMES))
         self._timer = lv.timer_create(self._tick, 1, None)
 
     def _tick(self, timer):
@@ -1378,7 +1690,7 @@ class VideoPlayer(Activity):
         report = "%s frames: %.1f FPS avg %.1fms p95 %sms set_src %.2fms sysmon %.1f FPS" % (
             stats["frames"], stats["fps"], stats["avg_ms"], stats["p95_ms"], set_src_avg, sysmon_avg)
         self.status_label.set_text(report)
-        print("video_player: " + report)
+        print("media_player: " + report)
 
     def _echo_sysmon(self):
         """Whether the sysmon line should also be echoed to the console.
@@ -1402,7 +1714,7 @@ class VideoPlayer(Activity):
                 return
             self._sysmon_samples.append(fps)
             if self._echo_sysmon():
-                print("video_player sysmon FPS: %s" % fps)
+                print("media_player sysmon FPS: %s" % fps)
             self.fps_label.set_text("sysmon: %s FPS" % fps)
 
     def _reset_run_state(self):

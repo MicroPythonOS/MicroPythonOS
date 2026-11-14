@@ -15,7 +15,7 @@
 # Utilities and demos
 repo com.micropythonos.imageview
 repo com.micropythonos.musicplayer
-repo com.micropythonos.video_player
+repo com.micropythonos.media_player
 repo com.micropythonos.texteditor
 repo com.micropythonos.sorter
 repo com.micropythonos.confetti

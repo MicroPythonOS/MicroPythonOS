@@ -7,12 +7,12 @@ import lvgl as lv
 from mpos import AppManager
 from mpos.ui.view import screen_stack
 
-sys.path.insert(0, "apps/com.micropythonos.video_player")
+sys.path.insert(0, "apps/com.micropythonos.media_player")
 
-import video_player
+import media_player
 
 
-class TestVideoPlayer(unittest.TestCase):
+class TestMediaPlayer(unittest.TestCase):
     def tearDown(self):
         # The player, and the file picker it opens when launched without a
         # clip, must not leak into the next test or the runner's next staging
@@ -22,21 +22,21 @@ class TestVideoPlayer(unittest.TestCase):
             remove_and_stop_current_activity()
 
     def test_compute_stats(self):
-        stats = video_player.compute_stats([10] * 100)
+        stats = media_player.compute_stats([10] * 100)
         self.assertEqual(stats["frames"], 100)
         self.assertEqual(stats["avg_ms"], 10.0)
         self.assertEqual(stats["fps"], 100.0)
         self.assertEqual(stats["p95_ms"], 10)
 
     def test_make_frame_rgb565_sizes(self):
-        full = video_player.make_frame_rgb565(320, 240, 0)
+        full = media_player.make_frame_rgb565(320, 240, 0)
         self.assertEqual(len(full), 320 * 240 * 2)
-        half = video_player.make_frame_rgb565(160, 120, 1)
+        half = media_player.make_frame_rgb565(160, 120, 1)
         self.assertEqual(len(half), 160 * 120 * 2)
         self.assertTrue(full[:64] != half[:64] or len(full) != len(half))
 
     def test_app_starts_and_registers_sysmon_cb(self):
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player"))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player"))
         # Launching without a clip puts the file picker on top of the player, so
         # the title is on the player's own screen, not necessarily the active one.
         activity = None
@@ -45,7 +45,7 @@ class TestVideoPlayer(unittest.TestCase):
             if hasattr(entry[0], "title_label"):
                 activity = entry[0]
         self.assertIsNotNone(activity, "the player activity is not on the stack")
-        self.assertEqual(activity.title_label.get_text(), "Video Player")
+        self.assertEqual(activity.title_label.get_text(), "Media Player")
 
     def test_sysmon_echo_is_time_bounded_but_the_label_keeps_updating(self):
         activity = self.player_activity()
@@ -64,7 +64,7 @@ class TestVideoPlayer(unittest.TestCase):
         for entry in screen_stack:
             if hasattr(entry[0], "title_label"):
                 return entry[0]
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player"))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player"))
         for entry in screen_stack:
             if hasattr(entry[0], "title_label"):
                 return entry[0]

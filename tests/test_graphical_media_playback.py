@@ -8,14 +8,12 @@ import lvgl as lv
 from mpos import AppManager, Intent
 from mpos.ui.view import screen_stack
 
-sys.path.insert(0, "apps/com.micropythonos.video_player")
-
-import video_player
+sys.path.insert(0, "apps/com.micropythonos.media_player")
 
 
-CLIP = "data/video_player_test.mjpeg"
-CLIP_WAV = "data/video_player_test.wav"
-AVI = "data/video_player_test.avi"
+CLIP = "data/media_player_test.mjpeg"
+CLIP_WAV = "data/media_player_test.wav"
+AVI = "data/media_player_test.avi"
 FRAMES = 20
 FPS = 15
 SIDECAR_MS = 2000
@@ -107,7 +105,7 @@ class FakeJpegDecoder:
         dst[0:4] = b"\x11\x22\x33\x44"
 
 
-class TestVideoPlayback(unittest.TestCase):
+class TestMediaPlayback(unittest.TestCase):
     def setUp(self):
         if sys.platform == "esp32":
             self.skipTest("the player owns the console while playing; covered on desktop")
@@ -265,10 +263,10 @@ class TestVideoPlayback(unittest.TestCase):
 
     def test_intent_plays_clip_and_finishes(self):
         intent = Intent(action="view", data=CLIP)
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertIsNotNone(activity)
-        self.assertEqual(activity.appFullName, "com.micropythonos.video_player")
+        self.assertEqual(activity.appFullName, "com.micropythonos.media_player")
         self.assertTrue(activity._playing)
 
         self._play_to_end(activity)
@@ -284,16 +282,16 @@ class TestVideoPlayback(unittest.TestCase):
     def test_launch_without_a_clip_opens_the_picker(self):
         from mpos.ui.file_explorer_activity import FileExplorerActivity
 
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player"))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player"))
         player = None
         for entry in screen_stack:
             activity = entry[0]
             # The app runs as its own module, so match by package name rather
             # than by class object; the picker inherits the caller's name.
-            if (getattr(activity, "appFullName", "") == "com.micropythonos.video_player"
+            if (getattr(activity, "appFullName", "") == "com.micropythonos.media_player"
                     and not isinstance(activity, FileExplorerActivity)):
                 player = activity
-        self.assertIsNotNone(player, "video player not on the stack")
+        self.assertIsNotNone(player, "media player not on the stack")
         self.assertTrue(player._intro_shown)
         self.assertIsNone(player._pending_path)
         # The picker was pushed on top of the player, not left on a blank screen.
@@ -302,7 +300,7 @@ class TestVideoPlayback(unittest.TestCase):
     def test_avi_plays_with_the_sound_inside_the_file(self):
         self._make_avi()
         intent = Intent(action="view", data=AVI)
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertIsNotNone(activity)
         self.assertTrue(activity._playing)
@@ -323,7 +321,7 @@ class TestVideoPlayback(unittest.TestCase):
     def test_avi_with_an_unsupported_audio_codec_plays_without_sound(self):
         self._make_avi(audio_tag=0x55, bits=0)
         intent = Intent(action="view", data=AVI)
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertIsNotNone(activity)
         self.assertIsNone(activity._audio)
@@ -335,7 +333,7 @@ class TestVideoPlayback(unittest.TestCase):
     def test_avi_with_an_unsupported_video_codec_explains_why(self):
         self._make_avi(fourcc=b"H264")
         intent = Intent(action="view", data=AVI)
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertIsNotNone(activity)
         self.assertFalse(activity._playing)
@@ -346,7 +344,7 @@ class TestVideoPlayback(unittest.TestCase):
     def test_loop_restarts_the_clip(self):
         self._make_avi()
         intent = Intent(action="view", data=AVI, extras={"loop": "1"})
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertIsNotNone(activity)
         self.assertTrue(activity._loop)
@@ -363,7 +361,7 @@ class TestVideoPlayback(unittest.TestCase):
     def test_seek_extra_starts_later_in_the_clip(self):
         self._make_avi()
         intent = Intent(action="view", data=AVI, extras={"seek": 700})
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertIsNotNone(activity)
         self.assertTrue(activity._playing)
@@ -381,7 +379,7 @@ class TestVideoPlayback(unittest.TestCase):
         from video_engine import MemoryFile
 
         intent = Intent(action="view", data=CLIP, extras={"preload": "1"})
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertTrue(activity._preloaded)
         self.assertIsInstance(activity._reader._file, MemoryFile)
@@ -394,7 +392,7 @@ class TestVideoPlayback(unittest.TestCase):
         from video_engine import MemoryFile
 
         intent = Intent(action="view", data=CLIP)
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertFalse(activity._preloaded)
         self.assertFalse(isinstance(activity._reader._file, MemoryFile))
@@ -404,11 +402,11 @@ class TestVideoPlayback(unittest.TestCase):
     def test_a_second_launch_plays_the_new_clip(self):
         self._make_avi()
         self.assertTrue(AppManager.start_app(
-            "com.micropythonos.video_player", Intent(action="view", data=CLIP)))
+            "com.micropythonos.media_player", Intent(action="view", data=CLIP)))
         first = self._current_activity()
         self.assertTrue(first._playing)
         self.assertTrue(AppManager.start_app(
-            "com.micropythonos.video_player", Intent(action="view", data=AVI)))
+            "com.micropythonos.media_player", Intent(action="view", data=AVI)))
         second = self._current_activity()
         self.assertIsNot(second, first, "same activity reused for a new clip")
         self.assertTrue(second._playing)
@@ -418,7 +416,7 @@ class TestVideoPlayback(unittest.TestCase):
     def test_tap_pauses_and_resumes(self):
         self._make_avi()
         intent = Intent(action="view", data=AVI)
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertTrue(activity._playing)
         self.assertTrue(activity._bar.has_flag(lv.obj.FLAG.HIDDEN))
@@ -441,7 +439,7 @@ class TestVideoPlayback(unittest.TestCase):
 
     def test_controls_hide_after_a_few_seconds(self):
         intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         activity._show_controls(0)
         self.assertFalse(activity._bar.has_flag(lv.obj.FLAG.HIDDEN))
@@ -455,7 +453,7 @@ class TestVideoPlayback(unittest.TestCase):
 
     def test_play_button_toggles_and_close_is_deferred(self):
         intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         # The bar's play/pause button drives the same toggle as a tap.
         activity._toggle_pause()
@@ -473,7 +471,7 @@ class TestVideoPlayback(unittest.TestCase):
 
     def test_deferred_exit_does_not_finish_another_activity(self):
         intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         activity._request_exit()
         # Something else came to the front before the deferred call ran.
@@ -487,7 +485,7 @@ class TestVideoPlayback(unittest.TestCase):
 
     def test_report_survives_a_deleted_status_label(self):
         intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         doomed = lv.label(lv.screen_active())
         doomed.delete()
@@ -510,7 +508,7 @@ class TestVideoPlayback(unittest.TestCase):
                     f.write(make_jpeg(160, 120))
 
         intent = Intent(action="view", data=CLIP)
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         activity._stop_playback()
         activity._on_file_picked(
@@ -540,7 +538,7 @@ class TestVideoPlayback(unittest.TestCase):
                     f.write(make_jpeg(160, 120))
 
         intent = Intent(action="view", data=CLIP)
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertTrue(activity._playing)
 
@@ -571,7 +569,7 @@ class TestVideoPlayback(unittest.TestCase):
     def test_seek_bar_scrubs_to_a_position(self):
         self._make_avi()
         intent = Intent(action="view", data=AVI, extras={"loop": "1"})
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         for _ in range(20):
             lv.timer_handler()
@@ -602,7 +600,7 @@ class TestVideoPlayback(unittest.TestCase):
     def test_sidecar_audio_is_streamed_with_the_frames(self):
         self._make_sidecar()
         intent = Intent(action="view", data=CLIP)
-        self.assertTrue(AppManager.start_app("com.micropythonos.video_player", intent))
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
         activity = self._current_activity()
         self.assertIsNotNone(activity)
         self.assertEqual(activity._audio_used_path, CLIP_WAV)
