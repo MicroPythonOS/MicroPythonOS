@@ -1297,67 +1297,50 @@ class SerialBackend:
             except Exception:
                 pass
 
-        print("waiting 1 minute for device...")
-        time.sleep(60)
-        return True
-
-        '''
-        # 2. machine.reset() detaches USB from the bus entirely.
-        # On USB/IP passthrough (KVM) we must re-attach after reset.
-        # On direct USB this script doesn't exist — no-op.
-        attach_script = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..", "..", "..", "kvm_usb", "vm", "esp32-usbip-attach.sh",
-        )
-        if os.path.exists(attach_script):
-            subprocess.run(["bash", attach_script], capture_output=True, timeout=10)
-            time.sleep(1)
-
-        # 3. Wait for the serial port to reappear after USB re-enumeration
+        # machine.reset() detaches and re-enumerates the USB device. Keep
+        # reading as soon as the port appears: the boot log is only ~0.5 KB,
+        # but the CDC TX FIFO is small, so a host that sleeps without reading
+        # leaves the device blocked in print(). A blocked main task also stops
+        # draining RX, so the next write times out (the "USB CDC wedge" that
+        # the relay path avoids by polling the port as it boots).
+        print("waiting for device to boot...")
         deadline = time.monotonic() + timeout
-        while not os.path.exists(self.port):
-            if time.monotonic() > deadline:
-                raise TimeoutError(
-                    "Device at {} did not reappear after reset".format(self.port)
-                )
-            time.sleep(0.1)
-
-        # 4. Reconnect and wait for main.py to finish booting.
-        # USB/IP ports can flap — retry up to 20 times (3s apart = ~60s window).
-        # ESP32 boot takes 2-40s depending on apps and BLE init.
-        # Don't use wait_for_boot() here — it sends Ctrl-C after 2s which
-        # interrupts main.py mid-boot. Instead, read serial output directly
-        # until the "Starting asyncio REPL..." sentinel confirms full boot.
         last_err = None
-        for _ in range(20):
+        while time.monotonic() < deadline:
             if not os.path.exists(self.port):
-                time.sleep(3)
+                time.sleep(0.2)
                 continue
             try:
                 ser = _serial.Serial(
                     self.port, self.baudrate, timeout=0.5, write_timeout=2,
                 )
-                try:
-                    t0 = time.monotonic()
-                    data = b""
-                    while time.monotonic() - t0 < min(timeout, 60):
-                        chunk = ser.read(4096)
-                        if chunk:
-                            data += chunk
-                            if b"Starting asyncio REPL..." in data:
-                                return True
-                        time.sleep(0.1)
-                    time.sleep(10) # seems needed to make tests/test_adc_recording.py work?
-                    return True
-                finally:
-                    ser.close()
             except (OSError, _serial.SerialException) as e:
                 last_err = e
-                time.sleep(3)
-        raise RuntimeError(
-            "Device at {} not reachable after reset: {}".format(self.port, last_err)
+                time.sleep(0.5)
+                continue
+            try:
+                data = b""
+                while time.monotonic() < deadline:
+                    chunk = ser.read(4096)
+                    if not chunk:
+                        continue
+                    data += chunk
+                    if b"Starting asyncio REPL..." in data or b">>> " in data:
+                        return True
+            except (OSError, _serial.SerialException) as e:
+                last_err = e
+            finally:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+            time.sleep(0.5)
+
+        raise TimeoutError(
+            "Device at {} did not finish booting after reset (last error: {})".format(
+                self.port, last_err
+            )
         )
-        '''
 
     def soft_reset(self):
         """Ctrl-D soft reset via existing serial connection, wait for REPL."""
