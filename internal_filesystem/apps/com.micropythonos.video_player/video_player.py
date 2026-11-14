@@ -117,7 +117,7 @@ class VideoPlayer(Activity):
     # Media lives in a directory per kind at the card root, like /sdcard/audio.
     # The second entry keeps cards that still carry the ClipTV-era clip set
     # usable without moving anything.
-    PICK_START_DIRS = ("/sdcard/video", "/sdcard/clips", "/sdcard")
+    PICK_START_DIRS = ("/data/video", "/sdcard/video", "/sdcard/clips", "/sdcard")
     # LVGL's sysmon prints once a second. Copying that to the console while the
     # app sits idle floods the REPL and makes an mpremote session fail, so it is
     # only echoed for a short window after the app resumes; the FPS label keeps
