@@ -50,6 +50,14 @@ jobs:
           echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $OS_VERSION"
 
+      - name: Cache preloaded apps from BadgeHub
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tmp/preload_cache
+          key: preload-apps-v1-${{ hashFiles('scripts/preload_apps.txt') }}
+          restore-keys: |
+            preload-apps-v1-
+
       - name: Build web (WebAssembly/Emscripten) target
         run: ./scripts/build_mpos.sh web
 

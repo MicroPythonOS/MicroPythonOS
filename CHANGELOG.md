@@ -1,8 +1,25 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- Media Player: the Video Player grew into a merged `com.micropythonos.media_player` (same MJPEG/AVI engine, new name and an icon with a music note) that also plays WAV and MP3 through `AudioManager`. Audio gets the same control bar as video — play/pause, fifteen-second seeks, restart and a sample-accurate scrub bar (frame-accurate for MP3) — keeps playing when another app comes to the front, and can be mixed with video in one folder playlist. The file picker offers both kinds, and "Open with" now lists Media Player alongside Music Player for `.wav`/`.mp3`; Music Player remains available.
+- Media Player 0.5.0: renamed from the 0.4.9 Video Player, with `.wav`/`.mp3` intents, MP3 gating on the `mp3dec` module, an audio view with the app icon and file name, and a control timer for audio.
+- Chooser: picking a handler now closes the chooser before launching the target, so the target is not popped by the chooser's own `finish()` (this made every "Open with" choice for a file with several handlers return to the chooser).
+
+Frameworks:
+- AudioManager: WAV and MP3 streams support pause/resume and seeking. WAV seeks are sample-accurate (ADPCM rounds to a block), MP3 seeks walk the frame headers so VBR files jump to the right frame, and the native mixer keeps its progress for the new position. Desktop playback pauses the external player and supports seeks in the simulated fallback.
+
+Builtin Apps:
+- Media Player: the file picker now starts in `/data/video`, where the preloaded sample clip lives, before falling back to the SD-card folders.
+
 Testing:
 - ESP32 on-device suite: the video player is installed with the test apps, host-only unit tests (desktop MP3 player selection, the ES7210 source-tree import, buzzer capture streams, the WiFi-service mocks, the websocket source scan, and graphical playback that owns the console) skip on `esp32`, and the ST7789 profile test checks the package attributes instead of modules the framework deletes from `sys.modules` after `init()`. The no-relay reset drains the boot log and waits for the aiorepl banner, so a booting device no longer blocks in `print()` and wedges the CDC.
+- preload: `tests/cpython_preload_fs.py` covers the shared app list parser, BadgeHub `.mpk` extraction (including path traversal), staging of repo apps and sample data, and a littlefs round-trip that checks both the content and the full-partition padding.
+
+Build:
+- Full flash images now ship a filesystem: `scripts/preload_fs.py` stages the sample images/audio plus a shared set of apps (media players, editor, sorter, small games, Nostr Chat, Lightning Piggy and QuasiBird from BadgeHub), precompiles them to `.mpy` and packs them into a littlefs2 image that is merged into the vfs partition. The same staging feeds the web bundle, so the two no longer keep separate app/data lists. `--no-preload-fs` (or `MPOS_PRELOAD_FS=0`) still builds a firmware-only image; the 4 MB targets skip the preload because the whole flash is needed for the OS.
+- Partition tables: full images use the compact badge preamble (`ota_0` at `0x10000`) and the same 7 MB filesystem at `0x900000` on the 16 MB badge layout (`partitions/`), while `.ota` images remain partition-offset independent, so in-place updates on older layouts keep working.
+- littlefs-python 0.19.0 is only needed to pack the device filesystem (installed in a venv by CI, pointed at with `MPOS_PRELOAD_PYTHON`); the web staging needs nothing beyond the standard library.
 
 0.22.0
 ======

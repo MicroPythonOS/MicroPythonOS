@@ -1,0 +1,6 @@
+# 8 MB ESP32-S3 layout for the unPhone (no OTA, single factory partition).
+#
+# Name,    Type, SubType, Offset,   Size,     Flags
+nvs,       data, nvs,     0x9000,   0x7000,
+factory,   app,  factory, 0x10000,  0x380000,
+vfs,       data, fat,     0x390000, 0x470000,

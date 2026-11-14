@@ -791,6 +791,12 @@ class Player:
         if self._stream and hasattr(self._stream, "resume"):
             self._stream.resume()
 
+    def seek(self, position_ms):
+        """Jump to position_ms when the stream supports seeking."""
+        if self._stream and hasattr(self._stream, "seek"):
+            return self._stream.seek(position_ms)
+        return False
+
     def set_repeat(self, count):
         try:
             count = int(count)

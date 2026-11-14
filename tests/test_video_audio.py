@@ -3,7 +3,7 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, "apps/com.micropythonos.video_player")
+sys.path.insert(0, "apps/com.micropythonos.media_player")
 
 import video_audio
 
