@@ -109,6 +109,8 @@ class FakeJpegDecoder:
 
 class TestVideoPlayback(unittest.TestCase):
     def setUp(self):
+        if sys.platform == "esp32":
+            self.skipTest("the player owns the console while playing; covered on desktop")
         self._saved_jpegdec = sys.modules.get("jpegdec")
         self._fake = FakeJpegDecoder()
         sys.modules["jpegdec"] = self._fake
