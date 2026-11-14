@@ -1,0 +1,13 @@
+# 16 MB ESP32 (non-S3) layout.
+#
+# Same compact 64 KiB preamble as the badge table so ota_0 starts at 0x10000,
+# but the app slots are 0x390000 instead of 0x380000: the esp32 build is about
+# 65 KiB larger than the esp32s3 build and does not leave usable headroom in a
+# 3.5 MiB slot. The filesystem takes everything else.
+#
+# Name,     Type, SubType, Offset,   Size,     Flags
+otadata,    data, ota,     0x9000,   0x2000,
+nvs,        data, nvs,     0xb000,   0x5000,
+ota_0,      app,  ota_0,   0x10000,  0x390000,
+ota_1,      app,  ota_1,   0x3a0000, 0x390000,
+vfs,        data, fat,     0x730000, 0x8d0000,
