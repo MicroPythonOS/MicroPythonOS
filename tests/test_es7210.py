@@ -10,9 +10,10 @@ import sys
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "internal_filesystem", "lib", "drivers", "codec"))
+if sys.platform != "esp32":
+    sys.path.insert(0, os.path.join(HERE, "..", "internal_filesystem", "lib", "drivers", "codec"))
 
-import es7210  # noqa: E402
+    import es7210  # noqa: E402
 
 
 class FakeI2C:
