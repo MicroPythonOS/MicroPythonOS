@@ -2,7 +2,7 @@ Future release (next version)
 =====
 
 Testing:
-- ESP32 on-device suite: the video player is installed with the test apps, host-only unit tests (desktop MP3 player selection, the ES7210 source-tree import, buzzer capture streams, the WiFi-service mocks, the websocket source scan, and graphical playback that owns the console) skip on `esp32`, and the ST7789 profile test checks the package attributes instead of modules the framework deletes from `sys.modules` after `init()`.
+- ESP32 on-device suite: the video player is installed with the test apps, host-only unit tests (desktop MP3 player selection, the ES7210 source-tree import, buzzer capture streams, the WiFi-service mocks, the websocket source scan, and graphical playback that owns the console) skip on `esp32`, and the ST7789 profile test checks the package attributes instead of modules the framework deletes from `sys.modules` after `init()`. The no-relay reset drains the boot log and waits for the aiorepl banner, so a booting device no longer blocks in `print()` and wedges the CDC.
 
 0.22.0
 ======

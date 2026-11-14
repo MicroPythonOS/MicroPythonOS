@@ -13,6 +13,14 @@ import video_player
 
 
 class TestVideoPlayer(unittest.TestCase):
+    def tearDown(self):
+        # The player, and the file picker it opens when launched without a
+        # clip, must not leak into the next test or the runner's next staging
+        # handshake (which is what wedged the on-device run).
+        from mpos.ui.view import remove_and_stop_current_activity
+        while len(screen_stack) > 1:
+            remove_and_stop_current_activity()
+
     def test_compute_stats(self):
         stats = video_player.compute_stats([10] * 100)
         self.assertEqual(stats["frames"], 100)
