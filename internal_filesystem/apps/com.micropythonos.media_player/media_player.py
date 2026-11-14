@@ -293,6 +293,7 @@ class MediaPlayer(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
+        super().onResume(screen)
         self._sysmon_log_deadline = time.ticks_add(time.ticks_ms(), self.SYSMON_LOG_MS)
         lv.log_register_print_cb(self._sysmon_cb)
         if self._pending_path:
@@ -323,6 +324,7 @@ class MediaPlayer(Activity):
     def onPause(self, screen):
         # Video owns the display pump, so it must stop. Audio keeps playing in
         # the background like the Music Player does; only its UI timer goes.
+        super().onPause(screen)
         self._stop_playback()
         self._stop_timer()
         self._stop_audio_timer()
