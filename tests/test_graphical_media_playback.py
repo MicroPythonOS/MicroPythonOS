@@ -253,6 +253,48 @@ class TestMediaPlayback(unittest.TestCase):
         audio.underruns = 0
         self.assertEqual(self._audio_drop_verdict(audio, 354, 1632, 1333), "ok")
 
+
+    def test_a_playing_clip_marks_the_activity_as_foreground(self):
+        # The end-of-clip exit and the back gesture both check
+        # has_foreground(); an overridden onResume() must still call super().
+        intent = Intent(action="view", data=CLIP)
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
+        activity = self._current_activity()
+        self.assertIsNotNone(activity)
+        self.assertTrue(activity.has_foreground())
+
+        self._play_to_end(activity)
+        self._wait_for_activity_to_leave(activity)
+
+    def test_the_player_closes_when_the_clip_ends(self):
+        intent = Intent(action="view", data=CLIP)
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
+        activity = self._current_activity()
+        self.assertIsNotNone(activity)
+        self._play_to_end(activity)
+        self._wait_for_activity_to_leave(activity)
+        self.assertIsNot(self._current_activity(), activity,
+                          "the player stayed on screen after the clip ended")
+
+    def test_back_gesture_closes_a_playing_clip(self):
+        intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
+        activity = self._current_activity()
+        self.assertTrue(activity._playing)
+        self.assertTrue(activity.has_foreground())
+        self.assertTrue(activity.onBackPressed(None))
+        self._wait_for_activity_to_leave(activity)
+        self.assertIsNot(self._current_activity(), activity,
+                          "the back gesture did not leave the player")
+
+    def _wait_for_activity_to_leave(self, activity):
+        deadline = time.ticks_ms() + 5000
+        while time.ticks_ms() < deadline:
+            lv.timer_handler()
+            time.sleep_ms(5)
+            if self._current_activity() is not activity:
+                return
+
     def _clip_ms(self):
         return FRAMES * 1000 // FPS
 
