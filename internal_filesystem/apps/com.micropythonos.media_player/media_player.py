@@ -110,7 +110,7 @@ class MediaPlayer(Activity):
     PUMP_FRAMES_PER_PASS = 4
     PUMP_MAX_WAIT_MS = 20
     VIDEO_EXTENSIONS = (".avi", ".mjpeg", ".mjpg")
-    AUDIO_EXTENSIONS = (".wav", ".mp3")
+    AUDIO_EXTENSIONS = (".wav", ".mp3", ".rtttl")
     AUDIO_TICK_MS = 100
     ENDLESS_REPEAT_COUNT = 1_000_000
     # Optional: read the clip into RAM before playing (`preload` extra). It is
@@ -181,6 +181,7 @@ class MediaPlayer(Activity):
         self._audio_icon_data = None
         self._audio_icon_dsc = None
         self._audio_generation = 0
+        self._audio_is_rtttl = False
         intent = self.getIntent()
         extras = getattr(intent, "extras", None) or {}
         path = extras.get("filename") or getattr(intent, "data", None)
@@ -276,12 +277,16 @@ class MediaPlayer(Activity):
         # Evenly spread across the bar: rewind, restart, play/pause, forward,
         # close. The FF/REW glyphs are not in the badge font, so the seek
         # controls are drawn as "<<" / ">>".
-        self._make_control(self._bar, "<<", lambda e: self._seek_by(-self.SEEK_STEP_MS), -124)
-        self._make_control(self._bar, lv.SYMBOL.REFRESH, lambda e: self._request_seek(0), -62)
+        self._rewind_icon = self._make_control(
+            self._bar, "<<", lambda e: self._seek_by(-self.SEEK_STEP_MS), -124)
+        self._restart_icon = self._make_control(
+            self._bar, lv.SYMBOL.REFRESH, lambda e: self._restart_from_start(), -62)
         self._play_icon = self._make_control(self._bar, lv.SYMBOL.PLAY,
                                              self._toggle_pause, 0)
-        self._make_control(self._bar, ">>", lambda e: self._seek_by(self.SEEK_STEP_MS), 62)
-        self._make_control(self._bar, lv.SYMBOL.CLOSE, lambda e: self._request_exit(), 124)
+        self._forward_icon = self._make_control(
+            self._bar, ">>", lambda e: self._seek_by(self.SEEK_STEP_MS), 62)
+        self._close_icon = self._make_control(
+            self._bar, lv.SYMBOL.CLOSE, lambda e: self._request_exit(), 124)
 
         self._overlays = [self.title_label, self.status_label, self.fps_label,
                           open_btn, full_btn, half_btn, self._bar]
@@ -356,6 +361,28 @@ class MediaPlayer(Activity):
         self.status_label.remove_flag(lv.obj.FLAG.HIDDEN)
         self._open_btn.remove_flag(lv.obj.FLAG.HIDDEN)
         self._bar.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._set_audio_controls(not self._audio_is_rtttl)
+
+    def _set_audio_controls(self, seek_enabled):
+        """Show the controls the current audio format can actually honour.
+
+        RTTTL is a buzzer tune with no sample position, so only restart and
+        close make sense; hiding the scrubber and pause controls is clearer
+        than leaving dead buttons on screen.
+        """
+        if seek_enabled:
+            self._seek.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._seek.add_flag(lv.obj.FLAG.HIDDEN)
+        controls = (self._rewind_icon, self._play_icon, self._forward_icon)
+        for label in controls:
+            parent = label.get_parent()
+            if parent is None:
+                continue
+            if seek_enabled:
+                parent.remove_flag(lv.obj.FLAG.HIDDEN)
+            else:
+                parent.add_flag(lv.obj.FLAG.HIDDEN)
 
     def _show_video_view(self):
         self.audio_icon.add_flag(lv.obj.FLAG.HIDDEN)
@@ -364,6 +391,7 @@ class MediaPlayer(Activity):
         self._full_btn.remove_flag(lv.obj.FLAG.HIDDEN)
         self._half_btn.remove_flag(lv.obj.FLAG.HIDDEN)
         self._open_btn.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._set_audio_controls(True)
 
     def _read_play_extras(self):
         """Loop and seek flags belong to the clip being started.
@@ -532,7 +560,7 @@ class MediaPlayer(Activity):
         lower = path.lower()
         if lower.endswith(".mp3"):
             return _MP3_SUPPORTED
-        return lower.endswith((".wav",))
+        return lower.endswith((".wav", ".rtttl"))
 
     def _is_media_path(self, path):
         lower = path.lower()
@@ -620,6 +648,7 @@ class MediaPlayer(Activity):
         self._pacer = None
         self._play_path = path
         self._audio_path = path
+        self._audio_is_rtttl = path.lower().endswith(".rtttl")
         self._audio_generation += 1
         generation = self._audio_generation
         self._show_audio_view()
@@ -639,17 +668,39 @@ class MediaPlayer(Activity):
             self._audio_failed("Error: No audio output available")
             return
 
+        rtttl_string = None
+        if self._audio_is_rtttl:
+            if getattr(output, "kind", None) != "buzzer":
+                output = self._find_buzzer_output()
+                if output is None:
+                    self._audio_failed("Error: RTTTL requires a buzzer output")
+                    return
+            try:
+                with open(path) as handle:
+                    rtttl_string = handle.read().strip()
+            except Exception as exc:
+                logger.error("media_player: cannot read %s: %s", path, exc)
+                self._audio_failed("Error: Could not read RTTTL file")
+                return
+            if rtttl_string.count(":") < 2:
+                self._audio_failed("Error: Invalid RTTTL file")
+                return
+
         # Let any other AudioManager playback (the Music Player, a
-        # notification) release the I2S before taking it.
+        # notification) release the I2S or buzzer before taking it.
         self._quiet_other_audio()
         try:
-            player = AudioManager.player(
-                file_path=path,
+            player_kwargs = dict(
                 stream_type=AudioManager.STREAM_MUSIC,
                 on_complete=lambda result, token=generation:
                     self._audio_complete(token, result),
                 output=output,
             )
+            if rtttl_string is not None:
+                player_kwargs["rtttl"] = rtttl_string
+            else:
+                player_kwargs["file_path"] = path
+            player = AudioManager.player(**player_kwargs)
             player.set_repeat(
                 self.ENDLESS_REPEAT_COUNT
                 if self._loop and len(self._playlist) <= 1 else 1)
@@ -661,6 +712,13 @@ class MediaPlayer(Activity):
             self._audio_failed("Error: Audio device unavailable or busy")
             return
         self._start_audio_timer()
+
+    @staticmethod
+    def _find_buzzer_output():
+        for output in AudioManager.get_outputs():
+            if getattr(output, "kind", None) == "buzzer":
+                return output
+        return None
 
     def _audio_failed(self, message):
         self._stop_audio_timer()
@@ -713,7 +771,7 @@ class MediaPlayer(Activity):
 
     def _start_audio_timer(self):
         self._stop_audio_timer()
-        if self._audio_player is None:
+        if self._audio_player is None or self._audio_is_rtttl:
             return
         self._audio_timer = lv.timer_create(self._audio_tick, self.AUDIO_TICK_MS, None)
         self._audio_timer.set_repeat_count(-1)
@@ -936,6 +994,8 @@ class MediaPlayer(Activity):
         and perform it on their own playback thread.
         """
         if self._audio_player is not None:
+            if self._audio_is_rtttl:
+                return
             if ms < 0:
                 ms = 0
             self._audio_player.seek(ms)
@@ -950,8 +1010,16 @@ class MediaPlayer(Activity):
             self._fps = self.DEFAULT_FPS
         return self._restart_at(ms * self._fps // 1000, resume=not self._paused)
 
+    def _restart_from_start(self):
+        if self._audio_is_rtttl:
+            self._restart_audio()
+        else:
+            self._request_seek(0)
+
     def _toggle_pause(self, event=None):
         if self._audio_player is not None:
+            if self._audio_is_rtttl:
+                return
             if self._paused:
                 self._paused = False
                 self._audio_player.resume()

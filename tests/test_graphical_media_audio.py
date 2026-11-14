@@ -14,6 +14,13 @@ sys.path.insert(0, "apps/com.micropythonos.media_player")
 import media_player
 
 WAV = "data/media_player_audio_test.wav"
+RTTTL = "data/media_player_rtttl_test.rtttl"
+RTTTL_TEXT = "Tune:d=4,o=5,b=120:c"
+
+
+class FakeOutput:
+    def __init__(self, kind="buzzer"):
+        self.kind = kind
 
 
 class FakePlayer:
@@ -26,7 +33,7 @@ class FakePlayer:
         self.paused = False
         self.seek_ms = None
         self.position = 0
-        self.duration = 4000
+        self.duration = None if "rtttl" in kwargs else 4000
         self.repeat = None
         FakePlayer.instances.append(self)
 
@@ -66,13 +73,15 @@ class TestMediaPlayerAudio(unittest.TestCase):
         self._real_player = AudioManager.__dict__["player"]
         self._real_output = AudioManager.__dict__["get_default_output"]
         AudioManager.player = staticmethod(lambda **kwargs: FakePlayer(**kwargs))
-        AudioManager.get_default_output = staticmethod(lambda: object())
+        AudioManager.get_default_output = staticmethod(lambda: FakeOutput())
         try:
             os.mkdir("data")
         except OSError:
             pass
         with open(WAV, "wb") as handle:
             handle.write(b"RIFF")
+        with open(RTTTL, "w") as handle:
+            handle.write(RTTTL_TEXT)
 
     def tearDown(self):
         for activity in self._activities():
@@ -84,10 +93,11 @@ class TestMediaPlayerAudio(unittest.TestCase):
         AudioManager.get_default_output = self._real_output
         while len(screen_stack) > 1:
             remove_and_stop_current_activity()
-        try:
-            os.remove(WAV)
-        except OSError:
-            pass
+        for path in (WAV, RTTTL):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
     def _activities(self):
         return [entry[0] for entry in screen_stack]
@@ -194,7 +204,8 @@ class TestMediaPlayerAudio(unittest.TestCase):
             os.mkdir(folder)
         except OSError:
             pass
-        names = ("01_first.wav", "02_second.avi", "03_third.mjpeg", "04_note.txt")
+        names = ("01_first.wav", "02_second.avi", "03_third.mjpeg",
+                 "04_tune.rtttl", "05_note.txt")
         for name in names:
             with open(folder + "/" + name, "wb") as handle:
                 handle.write(b"x")
@@ -205,6 +216,7 @@ class TestMediaPlayerAudio(unittest.TestCase):
                 folder + "/01_first.wav",
                 folder + "/02_second.avi",
                 folder + "/03_third.mjpeg",
+                folder + "/04_tune.rtttl",
             ])
         finally:
             for name in names:
@@ -216,6 +228,39 @@ class TestMediaPlayerAudio(unittest.TestCase):
                 os.rmdir(folder)
             except OSError:
                 pass
+
+
+    def test_rtttl_plays_through_the_buzzer_with_degraded_controls(self):
+        activity = self._launch(RTTTL)
+        player = activity._audio_player
+        self.assertTrue(activity._audio_is_rtttl)
+        self.assertEqual(player.kwargs["rtttl"], RTTTL_TEXT)
+        self.assertFalse("file_path" in player.kwargs)
+        self.assertEqual(player.kwargs["output"].kind, "buzzer")
+        self.assertTrue(player.started)
+        self.assertTrue(activity._seek.has_flag(lv.obj.FLAG.HIDDEN))
+        for label in (activity._rewind_icon, activity._play_icon,
+                      activity._forward_icon):
+            self.assertTrue(label.get_parent().has_flag(lv.obj.FLAG.HIDDEN))
+        self.assertFalse(activity._restart_icon.get_parent().has_flag(
+            lv.obj.FLAG.HIDDEN))
+        self.assertIsNone(activity._audio_timer)
+        self.assertEqual(activity._duration_ms(), 0)
+        self.assertEqual(activity._position_ms(), 0)
+        activity._request_seek(500)
+        self.assertIsNone(player.seek_ms)
+        activity._toggle_pause()
+        self.assertFalse(player.paused)
+
+    def test_rtttl_restart_reopens_the_tune(self):
+        activity = self._launch(RTTTL)
+        first = activity._audio_player
+        activity._restart_from_start()
+        second = activity._audio_player
+        self.assertIsNot(second, first)
+        self.assertTrue(first.stopped)
+        self.assertTrue(second.started)
+        self.assertTrue(activity._audio_is_rtttl)
 
     def test_mp3_is_only_accepted_when_the_firmware_can_decode_it(self):
         # Use the source module directly: AppManager executes the app without
