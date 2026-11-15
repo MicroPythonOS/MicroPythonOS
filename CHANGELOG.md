@@ -1,20 +1,3 @@
-Future release (next version)
-=====
-
-Frameworks:
-- AudioManager: WAV and MP3 streams support pause/resume and seeking — sample-accurate for WAV (ADPCM rounds to a block), frame-accurate for MP3 including VBR — and the native mixer keeps its progress across a seek.
-- Chooser: picking a handler closes the chooser before launching the target, so the target is not popped by the chooser's own `finish()`.
-
-Testing:
-- media player: playback, pause/resume, seek, loop, playlist advance, sidecar and embedded audio, AVI demuxing, and readable errors for an unsupported container, codec or soundtrack.
-- ESP32 on-device suite: host-only tests skip on `esp32`, and a reset without the relay drains the boot log instead of blocking in `print()`.
-- preload: `tests/cpython_preload_fs.py` covers the shared app list parser, BadgeHub `.mpk` extraction (including path traversal), staging, and a littlefs round-trip.
-
-Build:
-- Full flash images ship a filesystem: `scripts/preload_fs.py` stages the sample media and a shared set of apps, precompiles them and packs them into a littlefs image merged into the vfs partition. The same staging feeds the web bundle. `--no-preload-fs` (`MPOS_PRELOAD_FS=0`) builds a firmware-only image; the 4 MB targets skip it.
-- Partition tables: full images use the compact badge preamble and a 7 MB filesystem at `0x900000` on the 16 MB layout; `.ota` images stay partition-offset independent, so in-place updates keep working.
-- littlefs-python 0.19.0 is only needed to pack the device filesystem (CI installs it in a venv, pointed at with `MPOS_PRELOAD_PYTHON`).
-
 0.22.0
 ======
 
@@ -22,6 +5,8 @@ Boards:
 - Add D-Shell ESP32-S3 N16R8 support: ST7789V display, GT911 touch, keys, WS2812 LEDs, QMI8658 IMU, MAX98357A audio and buzzer, with automatic board detection.
 
 Frameworks:
+- AudioManager: WAV and MP3 streams support pause/resume and seeking — sample-accurate for WAV (ADPCM rounds to a block), frame-accurate for MP3 including VBR — and the native mixer keeps its progress across a seek.
+- Chooser: picking a handler closes the chooser before launching the target, so the target is not popped by the chooser's own `finish()`.
 - aiorepl: the console no longer freezes every asyncio task when a host program opens the USB-CDC port and writes bytes that are not a REPL session (device-detection probes send CBOR such as `0xA6` + `get_version_info` and then hold the port, previously stalling the loop for ~28 s per probe). Such bytes are discarded instead of echoing and blocking a text-mode read (#297).
 - FileExplorerActivity: in pick mode, tapping a folder now enters it instead of selecting it, so a picker can reach nested folders; long-pressing an entry selects it (a folder as a whole), and the release that follows a long press no longer navigates. Confirming without a selection still returns the current folder.
 - fonts: the two most used Montserrat faces (12px, the theme default, and 16px) are no longer RLE-compressed. Compression costs a per-glyph decode on every draw: measured on the badge, 0.062 -> 0.037ms per glyph at 12px and 0.056 -> 0.034ms at 16px, so a full text screen (about 800 glyphs) redraws 20ms faster. Firmware grows by 6.7KB; the other sizes stay compressed.
@@ -36,6 +21,9 @@ Frameworks:
 - AudioManager: a passive piezo buzzer is now a playback output. A native `buzzer` module drives an LEDC channel at 78 kHz from an 8 KB int16 ring refilled by a timer ISR, so WAV and MP3 play on the badge's buzzer; because the disc only responds near ~4 kHz, an optional per-output piezo exciter (`buzzer_gain`) overdrives harmonic-poor material. Apps that pace their own PCM can open the same streaming sink the video player uses, the audio settings expose the tuning knobs, and the interrupt/pin/duty bugs that made the first bring-up silent are fixed.
 
 Testing:
+- media player: playback, pause/resume, seek, loop, playlist advance, sidecar and embedded audio, AVI demuxing, and readable errors for an unsupported container, codec or soundtrack.
+- ESP32 on-device suite: host-only tests skip on `esp32`, and a reset without the relay drains the boot log instead of blocking in `print()`.
+- preload: `tests/cpython_preload_fs.py` covers the shared app list parser, BadgeHub `.mpk` extraction (including path traversal), staging, and a littlefs round-trip.
 - video: tap-to-pause and resume, the control bar showing while paused and hiding after its timeout, the play/pause icon, deferred close, loop and seek (a loop restarts the clip, a seek extra starts mid-clip and presents roughly half the frames), engine and pacer tests, AVI demuxing (chunk order, drop seeks, PCM/IMA extraction, 8-bit widening, and the readable errors for a non-AVI file, a non-MJPEG codec and an unsupported soundtrack), WAV sidecar parsing and decoding (8/16/24/32-bit PCM, IMA ADPCM, rejected MS ADPCM/MP3), ring-buffer regressions for a queue drained to its very end and for a refill that no longer fits, intent handling, desktop playback with a streamed sidecar and with the audio inside an AVI, and the viper IMA decoder checked against the ffmpeg reference sidecars.
 - acoustic checks: one microphone is enough for both the buzzer and the DAC/speaker — `mpos_buzzer_acoustic.py` and `mpos_dac_acoustic.py` default to a USB microphone (the webcam one sees the desk) instead of the on-board line input, and `--channels` follows the device because USB microphones refuse mono. Measured on zbox1: the C925e at 15 cm passes both the buzzer note sequence and the DAC tones (worst frequency error 0.01%, no cable to the badge).
 - mpos_controller: `write_file` gets a payload-scaled timeout, so pushing a multi-MB test asset no longer dies at the old 60 s cap.
@@ -44,6 +32,9 @@ Testing:
 - dac: acoustic verification of the headphone/DAC jack through a host capture input — `scripts/mpos_dac_acoustic.py` renders a tone WAV on the badge, plays it through an i2s output and checks the recording (optionally `--file` to score an existing audio file); manual entry point `tests/manual_test_dac.py`, synthetic tests `tests/cpython_dac_acoustic.py`, and `MPOSController.dac_acoustic_measure/verify()`.
 
 Build:
+- Full flash images ship a filesystem: `scripts/preload_fs.py` stages the sample media and a shared set of apps, precompiles them and packs them into a littlefs image merged into the vfs partition. The same staging feeds the web bundle. `--no-preload-fs` (`MPOS_PRELOAD_FS=0`) builds a firmware-only image; the 4 MB targets skip it.
+- Partition tables: full images use the compact badge preamble and a 7 MB filesystem at `0x900000` on the 16 MB layout; `.ota` images stay partition-offset independent, so in-place updates keep working.
+- littlefs-python 0.19.0 is only needed to pack the device filesystem (CI installs it in a venv, pointed at with `MPOS_PRELOAD_PYTHON`).
 - ESP32-P4: images stay compatible with rev <3.0 chips — the esp32p4 build sets `CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y` (a no-op on ESP-IDF 5.5.1; from 5.5.3 its default would build a v3-only image and a v1.x board would refuse the OTA update), and lvgl_micropython lets ESP-IDF pick the MIPI-DSI PHY PLL reference clock, which a rev 3.x LL build no longer accepts and would abort on (#376).
 - App releases: `bundle_apps.sh --app <fullname>` packages only the named apps and merges just their entries into the existing index, preserving index-only fixes and every other entry; `make check-app-versions` and a CI job for PRs touching `internal_filesystem/apps/` report apps with commits after their last `MANIFEST.JSON` version bump (and uncommitted edits), so a source change can no longer miss users silently (#388).
 
