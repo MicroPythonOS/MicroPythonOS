@@ -83,6 +83,43 @@ class TestMediaPlayer(unittest.TestCase):
         finally:
             button.delete()
 
+    def test_control_slots_fit_a_narrow_240px_bar(self):
+        offsets, button_width = media_player.MediaPlayer._control_slots(240)
+        self.assertEqual(len(offsets), 5)
+        half = 240 // 2
+        for offset in offsets:
+            self.assertGreaterEqual(offset - button_width // 2 + half, 0,
+                                    "a control ends up left of a 240px screen")
+            self.assertLessEqual(offset + button_width // 2, half,
+                                 "a control ends up right of a 240px screen")
+
+    def test_controls_stay_inside_a_narrow_240px_screen(self):
+        from mpos import DisplayMetrics
+
+        display = lv.display_get_default()
+        original_display = (display.get_horizontal_resolution(),
+                            display.get_vertical_resolution())
+        original_metrics = (DisplayMetrics.width(), DisplayMetrics.height())
+        display.set_resolution(240, 240)
+        DisplayMetrics.set_resolution(240, 240)
+        try:
+            activity = self.player_activity()
+            self.assertIsNotNone(activity)
+            bar = activity._bar
+            bar.update_layout()
+            self.assertEqual(bar.get_width(), 240)
+            for icon in (activity._rewind_icon, activity._restart_icon,
+                         activity._play_icon, activity._forward_icon,
+                         activity._close_icon):
+                button = icon.get_parent()
+                self.assertGreaterEqual(button.get_x(), 0,
+                                        "a control starts left of a 240px screen")
+                self.assertLessEqual(button.get_x() + button.get_width(), 240,
+                                     "a control ends right of a 240px screen")
+        finally:
+            display.set_resolution(original_display[0], original_display[1])
+            DisplayMetrics.set_resolution(original_metrics[0], original_metrics[1])
+
     def test_back_gesture_defers_the_exit(self):
         # A real back gesture is dispatched inside the pump's LVGL pass; the
         # activity must consume it and defer the teardown out of that callback.

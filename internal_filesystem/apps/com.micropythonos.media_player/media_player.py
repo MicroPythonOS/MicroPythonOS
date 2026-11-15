@@ -113,6 +113,9 @@ class MediaPlayer(Activity):
     AUDIO_EXTENSIONS = (".wav", ".mp3", ".rtttl")
     AUDIO_TICK_MS = 100
     ENDLESS_REPEAT_COUNT = 1_000_000
+    CONTROL_COUNT = 5
+    CONTROL_WIDTH = 56
+    CONTROL_PITCH = 62
     # Optional: read the clip into RAM before playing (`preload` extra). It is
     # off by default because on this board it loses: a 1.1MB clip goes from
     # 15.7 to 1.3 ms of read per frame, but the start grows by 1.7s and the
@@ -235,7 +238,7 @@ class MediaPlayer(Activity):
         self._load_audio_icon()
         self.fps_label = lv.label(screen)
         self.fps_label.set_text("sysmon: - FPS")
-        self.fps_label.align(lv.ALIGN.BOTTOM_LEFT, 4, -4)
+        self.fps_label.align(lv.ALIGN.BOTTOM_LEFT, 4, -46)
         full_btn = lv.button(screen)
         full_btn.align(lv.ALIGN.BOTTOM_MID, -70, -4)
         full_btn.add_event_cb(lambda e: self.start_benchmark(self.FULL_W, self.FULL_H), lv.EVENT.CLICKED, None)
@@ -277,16 +280,23 @@ class MediaPlayer(Activity):
         # Evenly spread across the bar: rewind, restart, play/pause, forward,
         # close. The FF/REW glyphs are not in the badge font, so the seek
         # controls are drawn as "<<" / ">>".
+        offsets, control_width = self._control_slots(
+            DisplayMetrics.width() or self._bar.get_width() or self.FULL_W)
         self._rewind_icon = self._make_control(
-            self._bar, "<<", lambda e: self._seek_by(-self.SEEK_STEP_MS), -124)
+            self._bar, "<<", lambda e: self._seek_by(-self.SEEK_STEP_MS),
+            offsets[0], control_width)
         self._restart_icon = self._make_control(
-            self._bar, lv.SYMBOL.REFRESH, lambda e: self._restart_from_start(), -62)
-        self._play_icon = self._make_control(self._bar, lv.SYMBOL.PLAY,
-                                             self._toggle_pause, 0)
+            self._bar, lv.SYMBOL.REFRESH, lambda e: self._restart_from_start(),
+            offsets[1], control_width)
+        self._play_icon = self._make_control(
+            self._bar, lv.SYMBOL.PLAY, self._toggle_pause, offsets[2],
+            control_width)
         self._forward_icon = self._make_control(
-            self._bar, ">>", lambda e: self._seek_by(self.SEEK_STEP_MS), 62)
+            self._bar, ">>", lambda e: self._seek_by(self.SEEK_STEP_MS),
+            offsets[3], control_width)
         self._close_icon = self._make_control(
-            self._bar, lv.SYMBOL.CLOSE, lambda e: self._request_exit(), 124)
+            self._bar, lv.SYMBOL.CLOSE, lambda e: self._request_exit(),
+            offsets[4], control_width)
 
         self._overlays = [self.title_label, self.status_label, self.fps_label,
                           open_btn, full_btn, half_btn, self._bar]
@@ -413,9 +423,31 @@ class MediaPlayer(Activity):
 
     CONTROLS_MS = 3000
 
-    def _make_control(self, parent, symbol, callback, x_offset):
+    @staticmethod
+    def _control_slots(width):
+        """Evenly spaced control slots that stay on a narrow bar.
+
+        The pitch follows the bar (capped at the 320px design's 62px) and the
+        buttons shrink with it, so five controls fit a 240px screen instead of
+        the outermost pair hanging past both edges.
+        """
+        pitch = width // MediaPlayer.CONTROL_COUNT
+        if pitch > MediaPlayer.CONTROL_PITCH:
+            pitch = MediaPlayer.CONTROL_PITCH
+        if pitch < 16:
+            pitch = 16
+        button_width = MediaPlayer.CONTROL_WIDTH
+        if button_width > pitch - 2:
+            button_width = pitch - 2
+        middle = MediaPlayer.CONTROL_COUNT // 2
+        offsets = []
+        for index in range(MediaPlayer.CONTROL_COUNT):
+            offsets.append((index - middle) * pitch)
+        return offsets, button_width
+
+    def _make_control(self, parent, symbol, callback, x_offset, width=None):
         button = lv.button(parent)
-        button.set_size(56, 40)
+        button.set_size(self.CONTROL_WIDTH if width is None else width, 40)
         button.align(lv.ALIGN.BOTTOM_MID, x_offset, -2)
         button.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         button.set_style_border_width(0, lv.PART.MAIN)
@@ -447,6 +479,10 @@ class MediaPlayer(Activity):
         self._bar.remove_flag(lv.obj.FLAG.HIDDEN)
         self._controls_until = 0 if ms is None else time.ticks_ms() + ms
         self._update_play_icon()
+        # The bar was hidden while playing, so the scrubber still holds the
+        # position it had when it last showed (usually 0). Put it where
+        # playback actually is, or tapping to pause shows a stale slider.
+        self._sync_scrubber()
 
     def _hide_controls(self):
         self._bar.add_flag(lv.obj.FLAG.HIDDEN)
@@ -1418,30 +1454,11 @@ class MediaPlayer(Activity):
                     stats["audio_us"] += time.ticks_diff(time.ticks_us(), t)
                 wait = self._pacer.wait_ms(now)
                 if wait > 1:
-                    # Nap in tick-sized chunks and keep the sink fed between
-                    # them: one long sleep would let the queue drain for the
-                    # length of the nap, and the whole nap again if the frame
-                    # before it was slow.
-                    while self._playing:
-                        now = time.ticks_ms()
-                        left = self._pacer.wait_ms(now)
-                        if left <= 1:
-                            # Sleeping out the last tick here instead of
-                            # returning costs that tick of the frame budget:
-                            # the timer is not re-armed from its own callback.
-                            break
-                        t = time.ticks_us()
-                        self._audio_tick(now)
-                        stats = self._stats
-                        if stats is not None:
-                            stats["audio_us"] += time.ticks_diff(time.ticks_us(), t)
-                        nap = left - 1
-                        if nap > self.PUMP_TICK_MS:
-                            nap = self.PUMP_TICK_MS
-                        t = time.ticks_us()
-                        time.sleep_ms(nap)
-                        if stats is not None:
-                            stats["sleep_us"] += time.ticks_diff(time.ticks_us(), t)
+                    # The frame is not due yet: return and let the timer fire
+                    # again in a tick. Sleeping out the gap inside this callback
+                    # is what keeps the interpreter (and therefore the console)
+                    # from running while a clip plays; the audio refill and the
+                    # frame timing stay on the same tick grid either way.
                     return
                 self._service_controls()
                 stats = self._stats

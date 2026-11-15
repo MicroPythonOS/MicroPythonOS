@@ -479,6 +479,47 @@ class TestMediaPlayback(unittest.TestCase):
         self.assertIsNotNone(activity._audio, "resuming should reopen the sound")
         activity._stop_playback()
 
+    def test_pump_pass_returns_while_waiting_for_the_next_frame(self):
+        # The own pump runs from a timer callback on device. Sleeping out the
+        # gap between frames inside that callback starves the interpreter, so
+        # the REPL cannot even read a queued line until the clip ends.
+        from video_engine import Pacer
+
+        intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
+        activity = self._current_activity()
+        activity._playing = True
+        activity._paused = False
+        activity._pacer = Pacer(15, time.ticks_ms() + 1000)
+        started = time.ticks_ms()
+        activity._pump_pass(0)
+        elapsed = time.ticks_diff(time.ticks_ms(), started)
+        self.assertTrue(elapsed < 100,
+                        "the pump slept %d ms inside its callback" % elapsed)
+        activity._stop_playback()
+
+    def test_tap_while_playing_shows_the_current_position(self):
+        self._make_avi()
+        intent = Intent(action="view", data=AVI, extras={"loop": "1"})
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
+        activity = self._current_activity()
+        self.assertIsNotNone(activity)
+        deadline = time.ticks_ms() + 5000
+        while time.ticks_ms() < deadline and activity._position_ms() < 400:
+            lv.timer_handler()
+            time.sleep_ms(2)
+        position = activity._position_ms()
+        self.assertTrue(position >= 400, "position %s" % position)
+
+        activity._image_clicked(None)
+
+        self.assertTrue(activity._paused)
+        self.assertFalse(activity._bar.has_flag(lv.obj.FLAG.HIDDEN),
+                         "the controls should show while paused")
+        self.assertEqual(activity._seek.get_value(), position,
+                         "the scrub bar did not follow the paused position")
+        activity._stop_playback()
+
     def test_controls_hide_after_a_few_seconds(self):
         intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
         self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
