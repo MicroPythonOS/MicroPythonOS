@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Testing:
+- screen camera: `cell_ncc_min` skips cells that are one flat colour, so a mostly blank screen such as the About app no longer fails webcam verification with `cell_ncc_min 0`.
+
 0.22.0
 ======
 
