@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the updates (OTA) and install (web installer) repos for a release.
+"""Prepare the updates (OTA), install (web installer) and web repos for a release.
 
 The assets come from the published GitHub release of this repository, not from
 a local build tree, and the metadata is rewritten the way
@@ -12,18 +12,23 @@ a local build tree, and the metadata is rewritten the way
   install/  firmware_images/<target>/MicroPythonOS_<target>_<version>.bin,
             manifests/<target>/MicroPythonOS_<target>_<major.minor>.x.json,
             and index.html (current entries, old-release block, fallback).
+  web/      the files of MicroPythonOS_web_<version>.zip, extracted over the
+            working copy that ../upload_web.sh serves.
 
 Usage:
     scripts/release_metadata.py 0.22.0
     scripts/release_metadata.py 0.22.0 --dry-run
     scripts/release_metadata.py 0.22.0 --commit --push
     scripts/release_metadata.py 0.22.0 --install-only
+    scripts/release_metadata.py 0.22.0 --web-only
     scripts/release_metadata.py 0.22.0 --assets-dir tmp/release_0220
 
 --assets-dir skips the GitHub download and uses already-fetched files (handy
-when the release is not public yet). Both repos default to siblings of this
-checkout (../install and ../updates); override with --install-dir /
---updates-dir or MPOS_INSTALL_DIR / MPOS_UPDATES_DIR.
+when the release is not public yet). All three repos default to siblings of
+this checkout (../install, ../updates and ../web); override with --install-dir /
+--updates-dir / --web-dir or MPOS_INSTALL_DIR / MPOS_UPDATES_DIR / MPOS_WEB_DIR.
+The web repo has no remote in the usual setup, so --push only pushes install
+and updates; upload the web build with ../upload_web.sh.
 """
 
 import argparse
@@ -33,6 +38,7 @@ import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -75,18 +81,26 @@ def release_assets(version):
     return {asset["name"]: asset["size"] for asset in json.loads(completed.stdout)["assets"]}
 
 
-def needed_assets(version):
+def needed_assets(version, include_install=True, include_updates=True,
+                  include_web=False):
     names = []
-    for target in TARGETS:
-        for suffix in (".bin", ".ota"):
-            names.append("MicroPythonOS_%s_%s%s" % (target, version, suffix))
+    if include_install:
+        names.extend("MicroPythonOS_%s_%s.bin" % (target, version)
+                     for target in TARGETS)
+    if include_updates:
+        names.extend("MicroPythonOS_%s_%s.ota" % (target, version)
+                     for target in TARGETS)
+    if include_web:
+        names.append("MicroPythonOS_web_%s.zip" % version)
     return names
 
 
-def download_assets(version, destination):
+def download_assets(version, destination, include_install=True,
+                    include_updates=True, include_web=False):
     destination.mkdir(parents=True, exist_ok=True)
     sizes = release_assets(version)
-    for name in needed_assets(version):
+    for name in needed_assets(version, include_install, include_updates,
+                              include_web):
         path = destination / name
         if path.is_file() and path.stat().st_size == sizes.get(name):
             continue
@@ -102,12 +116,14 @@ def download_assets(version, destination):
     return destination
 
 
-def verify_assets(assets_dir, version):
+def verify_assets(assets_dir, version, include_install=True,
+                  include_updates=True, include_web=False):
     try:
         sizes = release_assets(version)
     except (subprocess.CalledProcessError, FileNotFoundError):
         sizes = {}
-    for name in needed_assets(version):
+    for name in needed_assets(version, include_install, include_updates,
+                              include_web):
         path = assets_dir / name
         if not path.is_file():
             raise ReleaseError("missing release asset: %s" % path)
@@ -245,6 +261,22 @@ def update_install_repo(install_dir, version, assets_dir):
         % (current_version, version, previous, minor))
 
 
+def update_web_repo(web_dir, version, assets_dir):
+    asset = find_asset(assets_dir, "MicroPythonOS_web_%s.zip" % version)
+    with zipfile.ZipFile(asset) as archive:
+        names = [name for name in archive.namelist() if not name.endswith("/")]
+        if not names:
+            raise ReleaseError("%s is empty" % asset.name)
+        for name in names:
+            if "/" in name or name.startswith("."):
+                raise ReleaseError(
+                    "%s has an unexpected path: %s" % (asset.name, name))
+        for name in names:
+            with archive.open(name) as source, (web_dir / name).open("wb") as target:
+                shutil.copyfileobj(source, target)
+            log("  web: %s" % name)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -253,6 +285,8 @@ def main():
         "MPOS_INSTALL_DIR", str(REPO_ROOT.parent / "install")))
     parser.add_argument("--updates-dir", default=os.environ.get(
         "MPOS_UPDATES_DIR", str(REPO_ROOT.parent / "updates")))
+    parser.add_argument("--web-dir", default=os.environ.get(
+        "MPOS_WEB_DIR", str(REPO_ROOT.parent / "web")))
     parser.add_argument("--assets-dir", default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--commit", action="store_true")
@@ -260,64 +294,79 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--install-only", action="store_true")
     group.add_argument("--updates-only", action="store_true")
+    group.add_argument("--web-only", action="store_true")
     args = parser.parse_args()
 
     version = args.version
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ReleaseError("expected a version like 0.22.0, got %r" % version)
 
+    update_install = not (args.updates_only or args.web_only)
+    update_updates = not (args.install_only or args.web_only)
+    update_web = not (args.install_only or args.updates_only)
+
     if args.assets_dir is None:
         assets_dir = REPO_ROOT / "tmp" / ("release_%s" % version.replace(".", ""))
         log("Downloading %s release assets into %s" % (version, assets_dir))
         if not args.dry_run:
-            download_assets(version, assets_dir)
+            download_assets(version, assets_dir, update_install, update_updates,
+                            update_web)
     else:
         assets_dir = Path(args.assets_dir)
     log("Assets: %s" % assets_dir)
 
-    for target in TARGETS:
-        for suffix in (".bin", ".ota"):
-            path = assets_dir / ("MicroPythonOS_%s_%s%s" % (target, version, suffix))
-            if args.dry_run:
-                continue
-            if not path.is_file():
-                raise ReleaseError("missing release asset: %s" % path)
+    for name in needed_assets(version, update_install, update_updates, update_web):
+        if args.dry_run:
+            continue
+        if not (assets_dir / name).is_file():
+            raise ReleaseError("missing release asset: %s" % (assets_dir / name))
     if not args.dry_run:
-        verify_assets(assets_dir, version)
+        verify_assets(assets_dir, version, update_install, update_updates,
+                      update_web)
 
     updates_dir = Path(args.updates_dir)
     install_dir = Path(args.install_dir)
-    if not args.install_only and not updates_dir.is_dir():
+    web_dir = Path(args.web_dir)
+    if update_updates and not updates_dir.is_dir():
         raise ReleaseError("%s is not a checkout of the updates repo" % updates_dir)
-    if not args.updates_only and not install_dir.is_dir():
+    if update_install and not install_dir.is_dir():
         raise ReleaseError("%s is not a checkout of the install repo" % install_dir)
+    if update_web and not web_dir.is_dir():
+        raise ReleaseError("%s is not a checkout of the web repo" % web_dir)
 
     if args.dry_run:
         log("Dry run: changelog for the JSON would be:")
         log("  " + json_changelog(version)[:200] + " ...")
         return 0
 
-    if not args.updates_only:
+    if update_install:
         log("Updating %s" % install_dir)
         update_install_repo(install_dir, version, assets_dir)
-    if not args.install_only:
+    if update_updates:
         log("Updating %s" % updates_dir)
         update_updates_repo(updates_dir, version, assets_dir)
+    if update_web:
+        log("Updating %s" % web_dir)
+        update_web_repo(web_dir, version, assets_dir)
 
     if args.commit:
-        if not args.updates_only:
+        if update_install:
             commit(install_dir, version)
-        if not args.install_only:
+        if update_updates:
             commit(updates_dir, version)
+        if update_web:
+            commit(web_dir, version)
     if args.push:
-        if not args.updates_only:
+        if update_install:
             run_git(install_dir, ["push"])
-        if not args.install_only:
+        if update_updates:
             run_git(updates_dir, ["push"])
+        if update_web:
+            log("  web: not pushed (no remote); upload it with ../upload_web.sh")
 
     log("")
-    log("Next: run ../upload_install.sh and ../upload_updates.sh from the parent")
-    log("      folder (one level up), or check the results with")
+    log("Next: run ../upload_install.sh, ../upload_updates.sh and ../upload_web.sh")
+    log("      from the parent folder (one level up), or check the results with")
     log("      curl -s https://updates.micropythonos.com/osupdate_esp32s3.json")
     log("      curl -s https://install.micropythonos.com/manifests/esp32s3/")
     return 0
