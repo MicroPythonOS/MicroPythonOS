@@ -320,4 +320,5 @@ Full guide: `../docs/docs/apps/app-performance.md`. Load-bearing rules:
 - Prefer `mpos.ui.SettingsActivity`/`SettingActivity` over custom dialogs.
 - Follow symlinks in `internal_filesystem/apps/` when searching.
 - `nostr_service.py` shared between nostr/displaywallet — update both copies.
+- **CHANGELOG.md:** only OS-level changes — frameworks (`internal_filesystem/lib/`), OS/runtime, board support, drivers, build and testing, and builtin apps (`internal_filesystem/builtin/apps/`). Regular apps in `internal_filesystem/apps/` are versioned and shipped through the AppStore, so never list them. Keep entries short and factual: what changed for the user, no background story.
 - Docs: sibling `../docs/`. `mkdocs build` to check. Some `.md` files intentionally excluded from nav (included by other pages) — don't add them.
