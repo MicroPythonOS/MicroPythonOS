@@ -1006,6 +1006,15 @@ class MediaPlayer(Activity):
         self.image.set_scale(256)
         self.image.set_size(w, h)
         self.image.center()
+        # A frame bigger than the panel loses its edges to the centred image,
+        # and nothing else would say so.
+        disp_w = DisplayMetrics.width() or self.FULL_W
+        disp_h = DisplayMetrics.height() or self.FULL_H
+        if w > disp_w or h > disp_h:
+            message = ("%dx%d clip: only the centre %dx%d is shown "
+                       "(re-encode to fit)" % (w, h, disp_w, disp_h))
+            logger.warning("media_player: %s", message)
+            self.status_label.set_text(message)
 
     # ----- seeking and looping -------------------------------------------
 
