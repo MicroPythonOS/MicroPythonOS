@@ -346,6 +346,7 @@ Read this before writing another one.
 - Native module import cost is real: a 267 KB `.mpy` (256 KB rodata + 256 KB BSS) imports in **443 ms** and takes **537 KB** of heap. Fine on a fresh boot (~7 MB free) but a visible pause.
 - The filesystem, not the panel, is the asset bottleneck: LittleFS reads **~1.3 MB/s** (16 KB = 12.5 ms, 256 KB = 257 ms); a raw flash partition reads 16 KB in 1.6 ms (~8 MB/s). Never read a game lump per frame — load/cache in RAM.
 - `tests/test_graphical_native_display.py` covers the framework copy of `NativeDisplay`; on a badge whose firmware predates the change it fails (the frozen module is old) until the firmware is reflashed. The app ships its own copy, which is what actually runs from an `.mpk`.
+- Engine ports are mostly a **writable-data** problem: a natmod has text/rodata/BSS but no data section and no `static` BSS, so every writable file-scope variable must become a non-static global with no initializer and its value set in an init call (`const` tables stay as they are). 256 KB of global BSS imports fine. Do not move engine globals into Python-heap bytearrays behind getters — an earlier Doom attempt did and stalled there.
 
 **Sound**
 - A piezo beep is a PWM channel whose frequency/duty are set per event and cleared by a deadline check every frame — never `AudioManager.player()`, which costs milliseconds and allocates.
