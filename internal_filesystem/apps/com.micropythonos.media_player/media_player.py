@@ -206,6 +206,20 @@ class MediaPlayer(Activity):
 
         screen = lv.obj()
         screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        # A 1:1 clip leaves bars when it does not fill the panel; they should be
+        # black rather than the theme background. This object sits behind
+        # everything and only appears while a video is on screen, so the picker
+        # and the labels keep the theme background.
+        self.video_bg = lv.obj(screen)
+        self.video_bg.set_size(lv.pct(100), lv.pct(100))
+        self.video_bg.align(lv.ALIGN.CENTER, 0, 0)
+        self.video_bg.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
+        self.video_bg.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
+        self.video_bg.set_style_border_width(0, lv.PART.MAIN)
+        self.video_bg.set_style_radius(0, lv.PART.MAIN)
+        self.video_bg.set_style_pad_all(0, lv.PART.MAIN)
+        self.video_bg.remove_flag(lv.obj.FLAG.CLICKABLE)
+        self.video_bg.add_flag(lv.obj.FLAG.HIDDEN)
         self.image = lv.image(screen)
         self.image.center()
         self.image.add_flag(lv.obj.FLAG.CLICKABLE)
@@ -1006,6 +1020,7 @@ class MediaPlayer(Activity):
         self.image.set_scale(256)
         self.image.set_size(w, h)
         self.image.center()
+        self.video_bg.remove_flag(lv.obj.FLAG.HIDDEN)
         # A frame bigger than the panel loses its edges to the centred image,
         # and nothing else would say so.
         disp_w = DisplayMetrics.width() or self.FULL_W
@@ -1666,6 +1681,7 @@ class MediaPlayer(Activity):
         self._play_bufs = None
         self._play_dscs = None
         self._pacer = None
+        self.video_bg.add_flag(lv.obj.FLAG.HIDDEN)
 
     def _report_playback(self):
         if self._reported or not self._stats:
