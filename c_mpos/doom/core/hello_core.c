@@ -10,13 +10,16 @@
 
 #include "../../core_abi.h"
 
+// No rodata handed back to the host in this test: a blob's strings live in the
+// instruction window, which the data bus cannot read (the loader maps the blob
+// as INST at its load address). Passing a rodata pointer to a host callback
+// makes the host load it as data and fault. The engine layout fixes that by
+// putting rodata in the data window; this core avoids the question so the mmap
+// + ABI + trampoline path can be proven on its own.
 static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
+    (void)wad_path;
     if (abi->version != MPOS_CORE_ABI_VERSION) {
         return -1;
-    }
-    abi->log(abi->host, "hello_core: init");
-    if (wad_path != 0 && wad_path[0] != 0) {
-        abi->log(abi->host, wad_path);
     }
     return 0;
 }
@@ -49,7 +52,7 @@ static void core_tick(const mpos_core_abi_t *abi, uint32_t now_ms) {
 }
 
 static void core_stop(const mpos_core_abi_t *abi) {
-    abi->log(abi->host, "hello_core: stop");
+    (void)abi;
 }
 
 // At offset 0 of the blob: the loader reads this before anything else.
