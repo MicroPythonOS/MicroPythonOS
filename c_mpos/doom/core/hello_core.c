@@ -53,10 +53,15 @@ static void core_stop(const mpos_core_abi_t *abi) {
 }
 
 // At offset 0 of the blob: the loader reads this before anything else.
+// Must match the address in core.ld; the loader maps the blob there and the
+// blob's absolute jumps only resolve at that address.
+#define HELLO_CORE_LOAD_ADDR 0x43000000u
+
 __attribute__((section(".core_entry")))
 const mpos_core_entry_t mpos_core_entry = {
     .abi_version = MPOS_CORE_ABI_VERSION,
     .flags = MPOS_CORE_FLAG_FRAMEBUFFER_PALETTED,
+    .load_addr = HELLO_CORE_LOAD_ADDR,
     .init = core_init,
     .tick = core_tick,
     .stop = core_stop,

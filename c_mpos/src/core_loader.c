@@ -29,13 +29,20 @@
 #include "py/mphal.h"
 
 #include "esp_partition.h"
+#include "esp_mmu_map.h"
+#include "hal/mmu_hal.h"
+#include "hal/mmu_types.h"
+#include "soc/soc_caps.h"
 
 #include "../core_abi.h"
+
+// The instruction window the MMU can serve (IBUS). A core must live inside it.
+#define MPOS_CORE_VADDR_MIN 0x42000000u
+#define MPOS_CORE_VADDR_MAX 0x44000000u
 
 // -- state -------------------------------------------------------------------
 
 static const esp_partition_t *s_partition;
-static esp_partition_mmap_handle_t s_handle;
 static const mpos_core_entry_t *s_entry;
 static void *s_mapped;
 static size_t s_mapped_size;
@@ -56,6 +63,52 @@ static mp_obj_t s_log_fun;
 static mp_obj_t s_allocations;
 
 static mpos_core_abi_t s_abi;
+
+// -- mapping ----------------------------------------------------------------
+
+// Map flash pages at a *chosen* virtual address.
+//
+// esp_partition_mmap()/spi_flash_mmap() pick the vaddr themselves (first free
+// MMU block), which is useless for a blob that is linked for a fixed address:
+// its absolute jumps point into unmapped instruction space and the CPU faults
+// with "MMU entry fault".
+//
+// Two steps, deliberately:
+//
+//  1. esp_mmu_map() for the same physical range. It validates the paddr, books
+//     the pages so the allocator will not hand them out again, and does its own
+//     cache/MMU dance (which must not be copied here: doing disable-interrupts,
+//     reprogram, enable by hand from a MicroPython task deadlocks the interrupt
+//     watchdog on the S3 - tried it).
+//  2. mmu_hal_map_region() to programme the entry at the address the blob was
+//     linked for. No cache maintenance is needed: that vaddr was never
+//     accessed, and the L1 cache is physically tagged, so the two aliases of
+//     the same flash pages cannot disagree.
+static esp_err_t map_fixed(uint32_t paddr, uint32_t vaddr, uint32_t size) {
+    if ((paddr % CONFIG_MMU_PAGE_SIZE) != 0 || (vaddr % CONFIG_MMU_PAGE_SIZE) != 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (vaddr + size > MPOS_CORE_VADDR_MAX) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    size_t map_size = (size + CONFIG_MMU_PAGE_SIZE - 1) & ~(size_t)(CONFIG_MMU_PAGE_SIZE - 1);
+    void *reserved = NULL;
+    esp_err_t err = esp_mmu_map(paddr, map_size, MMU_TARGET_FLASH0,
+                                MMU_MEM_CAP_READ | MMU_MEM_CAP_EXEC, 0, &reserved);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    uint32_t mapped = 0;
+    mmu_hal_map_region(0, MMU_TARGET_FLASH0, vaddr, paddr, map_size, &mapped);
+    return (mapped >= map_size) ? ESP_OK : ESP_ERR_INVALID_SIZE;
+}
+
+static void unmap_fixed(uint32_t vaddr, uint32_t size) {
+    size_t map_size = (size + CONFIG_MMU_PAGE_SIZE - 1) & ~(size_t)(CONFIG_MMU_PAGE_SIZE - 1);
+    mmu_hal_unmap_region(0, vaddr, map_size);
+}
 
 // -- ABI trampolines (host side) ---------------------------------------------
 
@@ -181,27 +234,47 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
         mp_raise_ValueError(MP_ERROR_TEXT("core does not fit the partition"));
     }
 
-    // Map the blob as instruction memory. This is the whole point: the code is
-    // executed from flash through the cache, with no IRAM and no heap involved.
-    const void *mapped = NULL;
-    esp_partition_mmap_handle_t handle = 0;
+    // Read the entry table through a temporary data mapping to learn where the
+    // blob wants to live. The paddr must be page aligned: the blob is mapped
+    // at exactly load_addr, so the flash page must start there too.
+    const void *tmp = NULL;
+    esp_partition_mmap_handle_t tmp_handle = 0;
     esp_err_t err = esp_partition_mmap(partition, offset, size,
-                                       ESP_PARTITION_MMAP_INST, &mapped, &handle);
-    if (err != ESP_OK || mapped == NULL) {
-        mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("mmap failed: %d"), (int)err);
+                                       ESP_PARTITION_MMAP_DATA, &tmp, &tmp_handle);
+    if (err != ESP_OK || tmp == NULL) {
+        mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("core read failed: %d"), (int)err);
     }
-
-    const mpos_core_entry_t *entry = (const mpos_core_entry_t *)mapped;
-    if (entry->abi_version != MPOS_CORE_ABI_VERSION || entry->init == NULL) {
-        esp_partition_munmap(handle);
+    const mpos_core_entry_t *probe = (const mpos_core_entry_t *)tmp;
+    if (probe->abi_version != MPOS_CORE_ABI_VERSION || probe->init == NULL) {
+        esp_partition_munmap(tmp_handle);
         mp_raise_msg_varg(&mp_type_ValueError,
                           MP_ERROR_TEXT("core ABI %u, expected %u"),
-                          (unsigned)entry->abi_version,
+                          (unsigned)probe->abi_version,
                           (unsigned)MPOS_CORE_ABI_VERSION);
     }
+    const uint32_t load_addr = probe->load_addr;
+    esp_partition_munmap(tmp_handle);
+
+    if (load_addr < MPOS_CORE_VADDR_MIN || (load_addr % CONFIG_MMU_PAGE_SIZE) != 0) {
+        mp_raise_msg_varg(&mp_type_ValueError,
+                          MP_ERROR_TEXT("core load address 0x%x is not usable"),
+                          (unsigned)load_addr);
+    }
+
+    // Map the blob at its linked address: this is the whole point, the code is
+    // executed from flash through the cache, with no IRAM and no heap involved.
+    err = map_fixed((uint32_t)partition->address + (uint32_t)offset, load_addr,
+                    (uint32_t)size);
+    if (err != ESP_OK) {
+        mp_raise_msg_varg(&mp_type_OSError,
+                          MP_ERROR_TEXT("core map at 0x%x failed: %d"),
+                          (unsigned)load_addr, (int)err);
+    }
+
+    const void *mapped = (const void *)load_addr;
+    const mpos_core_entry_t *entry = (const mpos_core_entry_t *)mapped;
 
     s_partition = partition;
-    s_handle = handle;
     s_mapped = (void *)mapped;
     s_mapped_size = size;
     s_entry = entry;
@@ -234,7 +307,7 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     int result = s_entry->init(&s_abi, mp_obj_str_get_str(args[9]));
     if (result != 0) {
         s_entry->stop(&s_abi);
-        esp_partition_munmap(s_handle);
+        unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size);
         s_active = 0;
         s_entry = NULL;
         mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("core init failed: %d"), result);
@@ -260,7 +333,7 @@ static mp_obj_t mpos_core_stop(void) {
     if (s_entry != NULL && s_entry->stop != NULL) {
         s_entry->stop(&s_abi);
     }
-    esp_partition_munmap(s_handle);
+    unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size);
     s_entry = NULL;
     s_mapped = NULL;
     s_mapped_size = 0;

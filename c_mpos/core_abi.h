@@ -95,6 +95,14 @@ typedef struct mpos_core_abi {
 typedef struct mpos_core_entry {
     uint32_t abi_version;
     uint32_t flags;
+    /*
+     * Where this blob was linked, and therefore where it must be mapped: the
+     * code uses absolute addresses within its own image. Must be 64 KB aligned
+     * and inside the instruction window (0x42000000..0x44000000 on S3). The
+     * loader maps the partition's flash pages there; a blob that is not mapped
+     * at its load address faults on the first instruction fetch.
+     */
+    uint32_t load_addr;
     int (*init)(const mpos_core_abi_t *abi, const char *wad_path);
     void (*tick)(const mpos_core_abi_t *abi, uint32_t now_ms);
     void (*stop)(const mpos_core_abi_t *abi);
