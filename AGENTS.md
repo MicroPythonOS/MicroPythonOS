@@ -313,11 +313,50 @@ Full guide: `../docs/docs/apps/app-performance.md`. Load-bearing rules:
 - `set_text()`/`set_offset_x()` always invalidate → guard on change. `set_x/set_y` are free when unchanged.
 - Permanent `set_rotation()` = per-pixel transform forever → ship pre-rotated assets. `TILE` = 1 draw call per tile → pre-compose strips. Translucent+rounded panels = blend+mask+overdraw.
 - `ruff`/`mpy-cross` on the real path: symlinked external-app files are NOT covered by `make lint`/`syntax-tests`.
+- **A native game does not go through LVGL's widgets at all** — see the next section. A 320x240 frame costs ~25 ms of SPI (153600 B at ~6.2 MB/s); one band of 45 rows is 4.6 ms, and two bands per frame is ~10 ms end to end (Breakout: 56 fps). That is the ceiling to design against.
+
+## Native modules and fast 2D games
+
+Guide with the measurements: `../docs/docs/apps/native-apps.md`. Reference
+implementation: `c_mpos/breakout/` + `internal_filesystem/apps/com.micropythonos.breakout/`.
+Read this before writing another one.
+
+**Build**
+- Source in `c_mpos/<app>/`, Makefile includes `lvgl_micropython/lib/micropython/py/dynruntime.mk`, `ARCHES = x64 xtensawin`.
+- Each architecture needs its **own object dir** (`BUILD=build_$@`). With the default `BUILD=build` the second architecture links the first one's objects and you get an "incompatible arch" link error or a silently wrong `.mpy`.
+- xtensawin needs `xtensa-esp32-elf-gcc` on `PATH` (`~/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin`) and `ar` + `pyelftools` importable by the python that runs `mpy_ld.py` — system pip is blocked, so build with `PATH="$PWD/tmp/venv/bin:$PATH" make` (or `build.sh`).
+- libc is not linked: provide `memset`/`memcpy` (word-wise; the band clear runs once per band).
+
+**Never import in C on the hot path**
+- `mp_import_name("time")` costs **32 ms** on the badge even when `time` is loaded. One `ticks_ms()` helper that imported on every call cost 32 ms of every frame. Take `now_ms` as an argument from Python.
+- Prefer a "`tick(now_ms)` + `next_dirty()` + `render_band(band)` + `poll_events()`" module shape: no globals the Python side must poll, no clock in C, and the clock can be faked in tests.
+
+**Rendering (the part that used to be wrong)**
+- Use `mpos.ui.native_display.NativeDisplay`. It owns an RGB565 surface shown by a full-screen `lv_image`; `present(bands, render)` blits + flushes only the dirty bands and then calls `lv.refr_now()`.
+- Do **not** draw into `main_display._frame_buffer1/2` and flush with `_data_bus.tx_color()`. Those are LVGL's draw buffers: two writers on one panel = flicker + one pass of latency per chunk (Breakout was 7.6 fps). The surface copy is free — the next band's blit overlaps the current band's DMA.
+- Do **not** try to stop LVGL refreshing: `get_refr_timer().pause()` is undone by LVGL itself (it pauses at the start of each refresh and resumes when something is invalidated), and replacing the bus callback hangs LVGL in `wait_for_flushing`.
+- Draw bands at their **own rows**: the surface is the whole screen, so clear at `band * rows_per_band` and index rows absolutely. Getting this wrong still shows bricks and puts the paddle at the top.
+- Mark both the old and the new rectangle of anything that moves before redrawing. One band = one draw-buffer = one blit + one SPI transfer.
+- Pace on the pass grid and present up to ~5 ms **early**; a deadline checked only after it expires slips a whole pass per frame (asked for 30 fps, got 25).
+
+**Sound**
+- A piezo beep is a PWM channel whose frequency/duty are set per event and cleared by a deadline check every frame — never `AudioManager.player()`, which costs milliseconds and allocates.
+- Get the pin from `AudioManager.find_output_by_kind("buzzer")` and no-op when there is none: `get_outputs()` can be empty (the Waveshare boards have no audio at all). Poll the off-deadline **every** frame, not only on events.
+
+**Testing**
+- Graphical tests run both on desktop and on the device (`MPOSController.run_test_file`).
+- Never delete the screen that is still loaded in `tearDown` (`lv.screen_load(lv.obj())` instead) — the device hangs.
+- An app pumping 50 fps starves the REPL: keep device `exec` snippets short, and pause the activity between measurement steps instead of issuing long execs against a running game.
+- Assert drawn **rows**, not just "some pixels": the band-offset bug passes a naive check.
+
+**Packaging**
+- A released `.mpk` must run on firmware older than your tree. Do not import a frozen module you just added to `lib/mpos/`; ship a copy in the app folder (Breakout ships `native_display.py`) and add a test that the two copies are identical.
 
 ## Apps & docs
 
 - Install: `./scripts/install.sh com.micropythonos.appname` then `AppManager.refresh_apps()`.
 - Deploy files: `mpremote cp source :/dest/` then `machine.reset()`.
+- **Releasing an app:** bump `MANIFEST.JSON` → `make check-app-versions ARGS='--changed'` → `./scripts/bundle_apps.sh --app <fullname>` → commit/push `../apps` + `upload_apps.sh` → `cd ../badgehub && ./synchronize_apps.py --app <fullname>` (token per app in `../badgehub/apps.csv`). Full checklist: `../docs/docs/apps/publishing-apps.md`. Install the *extracted* `.mpk` on the badge and re-measure before publishing — that is the artifact users get.
 - `self.appFullName` auto-set by ActivityNavigator — use for `SharedPreferences(self.appFullName)`.
 - Prefer `mpos.ui.SettingsActivity`/`SettingActivity` over custom dialogs.
 - Follow symlinks in `internal_filesystem/apps/` when searching.
