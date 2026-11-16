@@ -29,6 +29,7 @@
 #include "py/mphal.h"
 
 #include "esp_partition.h"
+#include "esp_heap_caps.h"
 #include "esp_mmu_map.h"
 #include "hal/mmu_hal.h"
 #include "hal/mmu_types.h"
@@ -36,31 +37,58 @@
 
 #include "../core_abi.h"
 
-// The instruction window the MMU can serve (IBUS). A core must live inside it.
-#define MPOS_CORE_VADDR_MIN 0x42000000u
-#define MPOS_CORE_VADDR_MAX 0x44000000u
+// The two windows the MMU can serve a flash partition from. A core's text must
+// live in the instruction window (IBUS) and its read-only data in the data
+// window (DBUS), because instruction memory is not data-readable.
+#define MPOS_CORE_TEXT_MIN 0x42000000u
+#define MPOS_CORE_TEXT_MAX 0x44000000u
+#define MPOS_CORE_DATA_MIN 0x3C000000u
+#define MPOS_CORE_DATA_MAX 0x3E000000u
+
+// The Python callbacks are kept alive by the garbage collector only through a
+// registered root pointer: a plain C static is invisible to it, and a collected
+// bound method would be a dangling pointer the next time the core called back.
+MP_REGISTER_ROOT_POINTER(mp_obj_t mpos_core_refs);
 
 // -- state -------------------------------------------------------------------
 
 static const esp_partition_t *s_partition;
+// The entry table is copied out of the blob before it is mapped: the loader must
+// not read it through the instruction window.
+static mpos_core_entry_t s_entry_copy;
 static const mpos_core_entry_t *s_entry;
 static void *s_mapped;
 static size_t s_mapped_size;
+// The MMU blocks esp_mmu_map() reserved for us (one per window), released on
+// stop(). Without them the pages stay booked for the life of the boot.
+static void *s_text_alias;
+static void *s_data_alias;
+// The core's writable memory: ordinary RAM that is also mapped at the fixed
+// address the blob was linked for.
+static void *s_arena_buf;
+static uint32_t s_arena_addr;
+static uint32_t s_arena_size;
+static uint32_t s_data_addr;
+static uint32_t s_data_size;
 static uint32_t s_now_ms;
 static int s_width;
 static int s_height;
+static uint32_t s_flags;
 static int s_active;
 
 static mp_obj_t s_present_fun;
 static mp_obj_t s_palette_fun;
 static mp_obj_t s_poll_fun;
 static mp_obj_t s_read_fun;
-static mp_obj_t s_alloc_fun;
+static mp_obj_t s_size_fun;
 static mp_obj_t s_log_fun;
 
-// Allocations handed to the core are kept alive until the core stops: the core
-// holds raw pointers, so the bytearray behind each one must not be collected.
-static mp_obj_t s_allocations;
+// Memory handed to the core is allocated here, not in Python: the core holds
+// raw pointers for as long as it runs, so the host owns them and releases them
+// when the core stops.
+#define MPOS_CORE_MAX_ALLOCATIONS 64
+static void *s_allocs[MPOS_CORE_MAX_ALLOCATIONS];
+static int s_alloc_count;
 
 static mpos_core_abi_t s_abi;
 
@@ -84,11 +112,9 @@ static mpos_core_abi_t s_abi;
 //     linked for. No cache maintenance is needed: that vaddr was never
 //     accessed, and the L1 cache is physically tagged, so the two aliases of
 //     the same flash pages cannot disagree.
-static esp_err_t map_fixed(uint32_t paddr, uint32_t vaddr, uint32_t size) {
+static esp_err_t map_fixed(uint32_t paddr, uint32_t vaddr, uint32_t size,
+                           void **alias) {
     if ((paddr % CONFIG_MMU_PAGE_SIZE) != 0 || (vaddr % CONFIG_MMU_PAGE_SIZE) != 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (vaddr + size > MPOS_CORE_VADDR_MAX) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -102,12 +128,50 @@ static esp_err_t map_fixed(uint32_t paddr, uint32_t vaddr, uint32_t size) {
 
     uint32_t mapped = 0;
     mmu_hal_map_region(0, MMU_TARGET_FLASH0, vaddr, paddr, map_size, &mapped);
-    return (mapped >= map_size) ? ESP_OK : ESP_ERR_INVALID_SIZE;
+    if (mapped < map_size) {
+        esp_mmu_unmap(reserved);
+        return ESP_ERR_INVALID_SIZE;
+    }
+    *alias = reserved;
+    return ESP_OK;
 }
 
-static void unmap_fixed(uint32_t vaddr, uint32_t size) {
+// Map a RAM allocation at a chosen address, one MMU page at a time: the pages
+// behind a heap allocation are not guaranteed to be physically contiguous, so
+// each page is translated back to its paddr and programmed separately.
+static esp_err_t map_arena(uint32_t vaddr, void *buf, uint32_t size) {
+    for (uint32_t done = 0; done < size; done += CONFIG_MMU_PAGE_SIZE) {
+        esp_paddr_t paddr = 0;
+        mmu_target_t target = MMU_TARGET_FLASH0;
+        esp_err_t err = esp_mmu_vaddr_to_paddr((void *)((uintptr_t)buf + done),
+                                               &paddr, &target);
+        if (err != ESP_OK) {
+            return err;
+        }
+        if ((paddr % CONFIG_MMU_PAGE_SIZE) != 0) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        uint32_t mapped = 0;
+        mmu_hal_map_region(0, target, vaddr + done, paddr,
+                           CONFIG_MMU_PAGE_SIZE, &mapped);
+        if (mapped < CONFIG_MMU_PAGE_SIZE) {
+            return ESP_ERR_INVALID_SIZE;
+        }
+    }
+    return ESP_OK;
+}
+
+static void unmap_arena(uint32_t vaddr, uint32_t size, void *buf) {
+    mmu_hal_unmap_region(0, vaddr, size);
+    heap_caps_free(buf);
+}
+
+static void unmap_fixed(uint32_t vaddr, uint32_t size, void *alias) {
     size_t map_size = (size + CONFIG_MMU_PAGE_SIZE - 1) & ~(size_t)(CONFIG_MMU_PAGE_SIZE - 1);
     mmu_hal_unmap_region(0, vaddr, map_size);
+    if (alias != NULL) {
+        esp_mmu_unmap(alias);
+    }
 }
 
 // -- ABI trampolines (host side) ---------------------------------------------
@@ -117,11 +181,12 @@ static void abi_present_band(void *host, int band, int rows, const uint8_t *pixe
     if (s_present_fun == MP_OBJ_NULL) {
         return;
     }
+    const bool rgb565 = (s_flags & MPOS_CORE_FLAG_BAND_RGB565) != 0;
     mp_obj_t args[3];
     args[0] = mp_obj_new_int(band);
     args[1] = mp_obj_new_int(rows);
-    args[2] = mp_obj_new_bytearray_by_ref((size_t)rows * (size_t)s_width,
-                                          (void *)pixels);
+    args[2] = mp_obj_new_bytearray_by_ref(
+        (size_t)rows * (size_t)s_width * (rgb565 ? 2u : 1u), (void *)pixels);
     mp_call_function_n_kw(s_present_fun, 3, 0, args);
 }
 
@@ -177,23 +242,49 @@ static int abi_read_file(void *host, const char *path, uint32_t offset,
     return (int)mp_obj_get_int(result);
 }
 
+static int abi_file_size(void *host, const char *path) {
+    (void)host;
+    if (s_size_fun == MP_OBJ_NULL) {
+        return -1;
+    }
+    mp_obj_t result = mp_call_function_1(s_size_fun, mp_obj_new_str(path, strlen(path)));
+    if (result == mp_const_none) {
+        return -1;
+    }
+    return (int)mp_obj_get_int(result);
+}
+
 static void *abi_alloc(void *host, uint32_t bytes) {
     (void)host;
-    if (s_alloc_fun == MP_OBJ_NULL) {
+    if (s_alloc_count >= MPOS_CORE_MAX_ALLOCATIONS) {
         return NULL;
     }
-    mp_obj_t result = mp_call_function_1(s_alloc_fun, mp_obj_new_int_from_uint(bytes));
-    mp_buffer_info_t buf;
-    if (!mp_get_buffer(result, &buf, MP_BUFFER_RW) || buf.len < bytes) {
+    void *ptr = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (ptr == NULL) {
+        ptr = heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    if (ptr == NULL) {
         return NULL;
     }
-    mp_obj_list_append(s_allocations, result);
-    return buf.buf;
+    s_allocs[s_alloc_count++] = ptr;
+    return ptr;
 }
 
 static void abi_dealloc(void *host, void *ptr) {
     (void)host;
-    (void)ptr;  // released when the core stops
+    for (int i = 0; i < s_alloc_count; i++) {
+        if (s_allocs[i] == ptr) {
+            s_allocs[i] = s_allocs[--s_alloc_count];
+            heap_caps_free(ptr);
+            return;
+        }
+    }
+}
+
+static void free_allocations(void) {
+    while (s_alloc_count > 0) {
+        heap_caps_free(s_allocs[--s_alloc_count]);
+    }
 }
 
 static void abi_log(void *host, const char *text) {
@@ -208,7 +299,7 @@ static void abi_log(void *host, const char *text) {
 
 static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     // start(label, offset, size, present_band, palette, poll_key, read_file,
-    //       alloc, log, wad_path, width, height)
+    //       file_size, log, wad_path, width, height)
     if (n_args != 12) {
         mp_raise_TypeError(MP_ERROR_TEXT("start() takes 12 arguments"));
     }
@@ -246,38 +337,157 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     }
     const mpos_core_entry_t *probe = (const mpos_core_entry_t *)tmp;
     if (probe->abi_version != MPOS_CORE_ABI_VERSION || probe->init == NULL) {
+        uint32_t found = probe->abi_version;
         esp_partition_munmap(tmp_handle);
         mp_raise_msg_varg(&mp_type_ValueError,
                           MP_ERROR_TEXT("core ABI %u, expected %u"),
-                          (unsigned)probe->abi_version,
+                          (unsigned)found,
                           (unsigned)MPOS_CORE_ABI_VERSION);
     }
-    const uint32_t load_addr = probe->load_addr;
+    // Copy the table out now: after the temporary mapping goes away the blob is
+    // only reachable through the instruction window, and the host must not read
+    // data from there (that is exactly the LoadStoreError this layout avoids).
+    mpos_core_entry_t entry = *probe;
     esp_partition_munmap(tmp_handle);
 
-    if (load_addr < MPOS_CORE_VADDR_MIN || (load_addr % CONFIG_MMU_PAGE_SIZE) != 0) {
+    if (entry.load_addr < MPOS_CORE_TEXT_MIN
+            || (entry.load_addr % CONFIG_MMU_PAGE_SIZE) != 0) {
         mp_raise_msg_varg(&mp_type_ValueError,
                           MP_ERROR_TEXT("core load address 0x%x is not usable"),
-                          (unsigned)load_addr);
+                          (unsigned)entry.load_addr);
     }
 
-    // Map the blob at its linked address: this is the whole point, the code is
+    // The text region is everything before the data region; a blob with no
+    // rodata maps all of itself as text.
+    uint32_t text_size = (uint32_t)size;
+    uint32_t data_size = 0;
+    if (entry.data_addr != 0) {
+        if (entry.data_addr < MPOS_CORE_DATA_MIN
+                || entry.data_addr > MPOS_CORE_DATA_MAX
+                || (entry.data_addr % CONFIG_MMU_PAGE_SIZE) != 0) {
+            mp_raise_msg_varg(&mp_type_ValueError,
+                              MP_ERROR_TEXT("core data address 0x%x is not usable"),
+                              (unsigned)entry.data_addr);
+        }
+        if (entry.data_offset == 0
+                || (entry.data_offset % CONFIG_MMU_PAGE_SIZE) != 0
+                || entry.data_offset > (uint32_t)size) {
+            mp_raise_msg_varg(&mp_type_ValueError,
+                              MP_ERROR_TEXT("core data offset %u is not usable"),
+                              (unsigned)entry.data_offset);
+        }
+        // A data size of 0 means "everything after the offset": in a blob the
+        // data region is last, so the caller's size already describes it.
+        data_size = entry.data_size != 0
+                    ? entry.data_size
+                    : (uint32_t)size - entry.data_offset;
+        if (data_size > (uint32_t)size - entry.data_offset) {
+            mp_raise_msg_varg(&mp_type_ValueError,
+                              MP_ERROR_TEXT("core data region %u+%u does not fit %u bytes"),
+                              (unsigned)entry.data_offset,
+                              (unsigned)data_size,
+                              (unsigned)size);
+        }
+        text_size = entry.data_offset;
+    }
+    if (entry.load_addr + text_size > MPOS_CORE_TEXT_MAX) {
+        mp_raise_ValueError(MP_ERROR_TEXT("core text does not fit the instruction window"));
+    }
+    // Mapping rounds up to a page, so the rounded end must still be inside the
+    // partition: mapping past it would alias whatever is stored next.
+    size_t data_end = (size_t)text_size
+                    + ((data_size + CONFIG_MMU_PAGE_SIZE - 1)
+                       & ~(size_t)(CONFIG_MMU_PAGE_SIZE - 1));
+    if (offset + data_end > partition->size) {
+        mp_raise_ValueError(MP_ERROR_TEXT("core does not fit the partition"));
+    }
+
+    // Map the blob at its linked addresses: this is the whole point, the code is
     // executed from flash through the cache, with no IRAM and no heap involved.
-    err = map_fixed((uint32_t)partition->address + (uint32_t)offset, load_addr,
-                    (uint32_t)size);
+    // The same flash pages appear twice, as INST for the text and as DATA for
+    // the read-only data.
+    void *text_alias = NULL;
+    err = map_fixed((uint32_t)partition->address + (uint32_t)offset,
+                    entry.load_addr, text_size, &text_alias);
     if (err != ESP_OK) {
         mp_raise_msg_varg(&mp_type_OSError,
                           MP_ERROR_TEXT("core map at 0x%x failed: %d"),
-                          (unsigned)load_addr, (int)err);
+                          (unsigned)entry.load_addr, (int)err);
+    }
+    void *data_alias = NULL;
+    if (entry.data_addr != 0) {
+        err = map_fixed((uint32_t)partition->address + (uint32_t)offset + entry.data_offset,
+                        entry.data_addr, data_size, &data_alias);
+        if (err != ESP_OK) {
+            unmap_fixed(entry.load_addr, text_size, text_alias);
+            mp_raise_msg_varg(&mp_type_OSError,
+                              MP_ERROR_TEXT("core data map at 0x%x failed: %d"),
+                              (unsigned)entry.data_addr, (int)err);
+        }
     }
 
-    const void *mapped = (const void *)load_addr;
-    const mpos_core_entry_t *entry = (const mpos_core_entry_t *)mapped;
+    // The core's writable memory, mapped at the address it was linked for. It
+    // is ordinary RAM (PSRAM when available) that belongs to the host, zeroed
+    // because .bss is expected to start at zero.
+    void *arena_buf = NULL;
+    if (entry.arena_addr != 0) {
+        if (entry.arena_addr < MPOS_CORE_DATA_MIN
+                || entry.arena_addr > MPOS_CORE_DATA_MAX
+                || (entry.arena_addr % CONFIG_MMU_PAGE_SIZE) != 0
+                || entry.arena_size == 0
+                || (entry.arena_size % CONFIG_MMU_PAGE_SIZE) != 0
+                || entry.arena_addr + entry.arena_size > MPOS_CORE_DATA_MAX) {
+            unmap_fixed(entry.load_addr, text_size, text_alias);
+            if (data_alias != NULL) {
+                unmap_fixed(entry.data_addr, data_size, data_alias);
+            }
+            mp_raise_msg_varg(&mp_type_ValueError,
+                              MP_ERROR_TEXT("core arena 0x%x+%u is not usable"),
+                              (unsigned)entry.arena_addr,
+                              (unsigned)entry.arena_size);
+        }
+        arena_buf = heap_caps_aligned_alloc(CONFIG_MMU_PAGE_SIZE, entry.arena_size,
+                                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (arena_buf == NULL) {
+            arena_buf = heap_caps_aligned_alloc(CONFIG_MMU_PAGE_SIZE, entry.arena_size,
+                                                MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        }
+        if (arena_buf == NULL) {
+            unmap_fixed(entry.load_addr, text_size, text_alias);
+            if (data_alias != NULL) {
+                unmap_fixed(entry.data_addr, data_size, data_alias);
+            }
+            mp_raise_msg_varg(&mp_type_OSError,
+                              MP_ERROR_TEXT("no memory for a %u byte arena"),
+                              (unsigned)entry.arena_size);
+        }
+        memset(arena_buf, 0, entry.arena_size);
+        err = map_arena(entry.arena_addr, arena_buf, entry.arena_size);
+        if (err != ESP_OK) {
+            heap_caps_free(arena_buf);
+            unmap_fixed(entry.load_addr, text_size, text_alias);
+            if (data_alias != NULL) {
+                unmap_fixed(entry.data_addr, data_size, data_alias);
+            }
+            mp_raise_msg_varg(&mp_type_OSError,
+                              MP_ERROR_TEXT("core arena map at 0x%x failed: %d"),
+                              (unsigned)entry.arena_addr, (int)err);
+        }
+    }
 
+    s_arena_buf = arena_buf;
+    s_arena_addr = entry.arena_addr;
+    s_arena_size = entry.arena_size;
+    s_entry_copy = entry;
+    s_flags = entry.flags;
     s_partition = partition;
-    s_mapped = (void *)mapped;
-    s_mapped_size = size;
-    s_entry = entry;
+    s_mapped = (void *)entry.load_addr;
+    s_mapped_size = text_size;
+    s_text_alias = text_alias;
+    s_data_alias = data_alias;
+    s_data_addr = entry.data_addr;
+    s_data_size = data_size;
+    s_entry = &s_entry_copy;
     s_width = (int)mp_obj_get_int(args[10]);
     s_height = (int)mp_obj_get_int(args[11]);
 
@@ -285,9 +495,10 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     s_palette_fun = args[4];
     s_poll_fun = args[5];
     s_read_fun = args[6];
-    s_alloc_fun = args[7];
+    s_size_fun = args[7];
     s_log_fun = args[8];
-    s_allocations = mp_obj_new_list(0, NULL);
+    // Root every callback in one tuple: the statics above are not roots.
+    MP_STATE_VM(mpos_core_refs) = mp_obj_new_tuple(6, &args[3]);
     s_now_ms = mp_hal_ticks_ms();
     s_active = 1;
 
@@ -298,6 +509,7 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     s_abi.poll_key = abi_poll_key;
     s_abi.now_ms = abi_now_ms;
     s_abi.read_file = abi_read_file;
+    s_abi.file_size = abi_file_size;
     s_abi.alloc = abi_alloc;
     s_abi.dealloc = abi_dealloc;
     s_abi.log = abi_log;
@@ -307,7 +519,17 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     int result = s_entry->init(&s_abi, mp_obj_str_get_str(args[9]));
     if (result != 0) {
         s_entry->stop(&s_abi);
-        unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size);
+        unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size, s_text_alias);
+        if (s_data_alias != NULL) {
+            unmap_fixed(s_data_addr, s_data_size, s_data_alias);
+        }
+        if (s_arena_buf != NULL) {
+            unmap_arena(s_arena_addr, s_arena_size, s_arena_buf);
+        }
+        free_allocations();
+        s_text_alias = NULL;
+        s_data_alias = NULL;
+        s_arena_buf = NULL;
         s_active = 0;
         s_entry = NULL;
         mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("core init failed: %d"), result);
@@ -333,17 +555,31 @@ static mp_obj_t mpos_core_stop(void) {
     if (s_entry != NULL && s_entry->stop != NULL) {
         s_entry->stop(&s_abi);
     }
-    unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size);
-    s_entry = NULL;
+    unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size, s_text_alias);
+    if (s_data_alias != NULL) {
+        unmap_fixed(s_data_addr, s_data_size, s_data_alias);
+    }
+    if (s_arena_buf != NULL) {
+        unmap_arena(s_arena_addr, s_arena_size, s_arena_buf);
+    }
+    free_allocations();
+    s_text_alias = NULL;
+    s_data_alias = NULL;
+    s_arena_buf = NULL;
+    s_arena_addr = 0;
+    s_arena_size = 0;
     s_mapped = NULL;
     s_mapped_size = 0;
+    s_data_addr = 0;
+    s_data_size = 0;
+    s_entry = NULL;
     s_present_fun = MP_OBJ_NULL;
     s_palette_fun = MP_OBJ_NULL;
     s_poll_fun = MP_OBJ_NULL;
     s_read_fun = MP_OBJ_NULL;
-    s_alloc_fun = MP_OBJ_NULL;
+    s_size_fun = MP_OBJ_NULL;
     s_log_fun = MP_OBJ_NULL;
-    s_allocations = MP_OBJ_NULL;
+    MP_STATE_VM(mpos_core_refs) = MP_OBJ_NULL;
     s_active = 0;
     return mp_const_none;
 }

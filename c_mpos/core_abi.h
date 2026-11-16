@@ -1,5 +1,5 @@
 /*
- * mpos_core ABI v1 — the contract between MicroPythonOS and a loadable native
+ * mpos_core ABI v2 — the contract between MicroPythonOS and a loadable native
  * core (Doom first, other engines later).
  *
  * Why this exists
@@ -22,6 +22,18 @@
  *      host calls tick() and the core drives its own engine, reporting pixels
  *      through present_band().
  *
+ * Two windows, because the S3 has two
+ * -----------------------------------
+ * Instruction memory (IROM) is fetched through its own bus and is not
+ * data-readable, so a string or table cannot live where the code lives - the
+ * host faults with LoadStoreError the moment it reads one. The firmware itself
+ * is linked the same way (.flash.text in IROM, .flash.rodata in DROM), and a
+ * core does too: `load_addr` is where the blob's text is mapped, `data_addr` is
+ * where its read-only data is mapped, and both come from the *same* flash
+ * pages (the loader maps the partition twice, INST and DATA). A blob declares
+ * both addresses in its entry table, and `data_offset` - a 64 KB boundary in
+ * the partition - is where the data region starts.
+ *
  * Versioning: abi_version must match exactly; a mismatch is refused rather than
  * guessed at. Bump it whenever a field is added, removed or reordered.
  */
@@ -30,11 +42,16 @@
 
 #include <stdint.h>
 
-#define MPOS_CORE_ABI_VERSION 1
+#define MPOS_CORE_ABI_VERSION 4
 
 /* Flags for mpos_core_entry_t.flags. */
 #define MPOS_CORE_FLAG_FRAMEBUFFER_PALETTED (1u << 0)  /* 8-bit indices */
 #define MPOS_CORE_FLAG_FRAMEBUFFER_RGB565   (1u << 1)
+/* present_band() carries RGB565 pixels instead of palette indices: the core
+ * converted the frame itself, which is the only way to rotate and convert in C
+ * rather than in Python. `frame_width`/`frame_height` then describe the
+ * surface the host shows, not the engine's own resolution. */
+#define MPOS_CORE_FLAG_BAND_RGB565          (1u << 2)
 
 /*
  * Host services, called from core code. `host` is opaque to the core and is
@@ -59,6 +76,9 @@
  * read_file(host, path, offset, dst, len): returns bytes read, -1 on error.
  *     Hosts may cache the open file; a core must not assume an fd survives.
  *
+ * file_size(host, path): length in bytes, or -1 on error. A core's stdio needs
+ *     it to seek to the end, which is how the engine measures a WAD.
+ *
  * alloc/dealloc: memory for the engine's own arena (the zone). May return NULL.
  *
  * log(host, text): diagnostics to the console. Never called per frame.
@@ -73,6 +93,7 @@ typedef struct mpos_core_abi {
     uint32_t (*now_ms)(void *host);
     int (*read_file)(void *host, const char *path, uint32_t offset,
                      void *dst, uint32_t len);
+    int (*file_size)(void *host, const char *path);
     void *(*alloc)(void *host, uint32_t bytes);
     void (*dealloc)(void *host, void *ptr);
     void (*log)(void *host, const char *text);
@@ -84,7 +105,9 @@ typedef struct mpos_core_abi {
 
 /*
  * Entry table. A core blob places this at offset 0 of the partition region it
- * is mapped at, so the loader can find it without symbol lookup.
+ * is mapped at, so the loader can find it without symbol lookup. The loader
+ * copies the table out through a temporary data mapping before it maps
+ * anything, so this struct is never read through the instruction window.
  *
  * init(abi, wad_path): return 0 on success; the loader turns a negative value
  *     into an OSError. The ABI pointer stays valid until stop().
@@ -99,10 +122,32 @@ typedef struct mpos_core_entry {
      * Where this blob was linked, and therefore where it must be mapped: the
      * code uses absolute addresses within its own image. Must be 64 KB aligned
      * and inside the instruction window (0x42000000..0x44000000 on S3). The
-     * loader maps the partition's flash pages there; a blob that is not mapped
-     * at its load address faults on the first instruction fetch.
+     * loader maps the partition's first `data_offset` bytes there; a blob that
+     * is not mapped at its load address faults on the first instruction fetch.
      */
     uint32_t load_addr;
+    /*
+     * The read-only data window (0 disables it, for a blob that has no rodata).
+     * Must be 64 KB aligned and inside the data window (0x3C000000..0x3E000000
+     * on S3). The same flash pages are mapped here a second time, as DATA, so
+     * the code and the host can read strings and tables.
+     */
+    uint32_t data_addr;
+    /* Offset of the data region in the blob; also the size of the text region.
+     * Must be 64 KB aligned (the mapping is page aligned). */
+    uint32_t data_offset;
+    /* Bytes of read-only data at `data_offset`. Rounded up to a page on map. */
+    uint32_t data_size;
+    /*
+     * Writable memory (0 disables it). The blob's .data/.bss are linked at
+     * `arena_addr`, so the host has to hand the core exactly that address: it
+     * allocates `arena_size` bytes of page-aligned RAM, zeroes them, and maps
+     * them at `arena_addr` in the data window. The pages stay the host's, so
+     * they are released when the core stops. `arena_addr` must be 64 KB
+     * aligned and inside the data window.
+     */
+    uint32_t arena_addr;
+    uint32_t arena_size;
     int (*init)(const mpos_core_abi_t *abi, const char *wad_path);
     void (*tick)(const mpos_core_abi_t *abi, uint32_t now_ms);
     void (*stop)(const mpos_core_abi_t *abi);

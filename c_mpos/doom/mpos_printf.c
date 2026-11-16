@@ -6,7 +6,13 @@
 // printed the format character instead of the value ("joystick_buttoni"
 // instead of "joystick_button0"), so the formatting happens here.
 
+// A core blob has no MicroPython to call, so it gets the same formatter with a
+// console that writes through the core ABI (see core/core_console.h).
+#ifdef MPOS_CORE
+#include "core/core_console.h"
+#else
 #include "py/dynruntime.h"
+#endif
 
 #include <stddef.h>
 #include <stdarg.h>
