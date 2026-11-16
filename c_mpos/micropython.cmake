@@ -23,6 +23,7 @@ set(MPOS_C_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/jpegdec.c
     ${CMAKE_CURRENT_LIST_DIR}/src/mp3dec.c
     ${CMAKE_CURRENT_LIST_DIR}/src/hosted_module.c
+    ${CMAKE_CURRENT_LIST_DIR}/src/core_loader.c
     ${CMAKE_CURRENT_LIST_DIR}/quirc/lib/identify.c
     ${CMAKE_CURRENT_LIST_DIR}/quirc/lib/version_db.c
     ${CMAKE_CURRENT_LIST_DIR}/quirc/lib/decode.c
