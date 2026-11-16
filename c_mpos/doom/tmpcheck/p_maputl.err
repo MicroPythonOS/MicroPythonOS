@@ -1,0 +1,4 @@
+gen/p_maputl.c: In function ‘InterceptsOverrun’:
+gen/p_maputl.c:849:43: warning: cast from pointer to integer of different size [-Wpointer-to-int-cast]
+  849 |     InterceptsMemoryOverrun(location + 8, (int) intercept->d.thing);
+      |                                           ^

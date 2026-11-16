@@ -173,17 +173,22 @@ class ProbeTest(unittest.TestCase):
         whole = bytearray(width * height * 2)
         banded = bytearray(width * height * 2)
         probe.expand8_lut(src, whole)
+        # Bands are rows: with a width of 8 and two rows each, three bands
+        # cover the 6-row surface.
         for band in range(3):
-            probe.expand8_band(src, banded, band, 16)
+            probe.expand8_band(src, banded, band, 2, width)
         self.assertEqual(bytes(whole), bytes(banded))
 
     def test_banded_expansion_stops_at_the_end(self):
         probe.set_palette(self._palette())
-        src = bytearray(10)
-        dst = bytearray(20)
-        probe.expand8_band(src, dst, 2, 4)   # rows 8..9 only
-        probe.expand8_band(src, dst, 9, 4)   # past the end: no-op
-        self.assertNotEqual(bytes(dst), bytes(20))
+        src = bytearray([1] * 20)
+        dst = bytearray(40)
+        probe.expand8_band(src, dst, 2, 4, 2)   # pixels 16..19, clipped
+        probe.expand8_band(src, dst, 9, 4, 2)   # past the end: no-op
+        pixels = [dst[i] | (dst[i + 1] << 8) for i in range(0, 40, 2)]
+        self.assertEqual(pixels[:16], [0] * 16, "pixels before the band were written")
+        self.assertEqual(len([p for p in pixels[16:] if p]), 4,
+                         "the clipped band was not written")
 
     # -- the engine's own framebuffer --------------------------------------
 

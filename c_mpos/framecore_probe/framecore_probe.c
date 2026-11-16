@@ -380,11 +380,14 @@ static mp_obj_t expand8_band(size_t n_args, const mp_obj_t *args) {
         mp_raise_ValueError("set_palette first");
     }
     const size_t total = src.len;
-    const size_t start = (size_t)mp_obj_get_int(args[2]) * (size_t)mp_obj_get_int(args[3]);
+    // `rows` is a row count: a band is rows*width pixels.
+    const size_t width = (size_t)mp_obj_get_int(args[4]);
+    const size_t start = (size_t)mp_obj_get_int(args[2]) *
+                         (size_t)mp_obj_get_int(args[3]) * width;
     if (start >= total) {
         return mp_const_none;
     }
-    size_t count = (size_t)mp_obj_get_int(args[3]);
+    size_t count = (size_t)mp_obj_get_int(args[3]) * width;
     if (start + count > total) {
         count = total - start;
     }
@@ -398,7 +401,7 @@ static mp_obj_t expand8_band(size_t n_args, const mp_obj_t *args) {
     }
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(expand8_band_obj, 4, 4, expand8_band);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(expand8_band_obj, 5, 5, expand8_band);
 
 // expand32(src, dst): RGBA pixels, which is doomgeneric's default pixel_t.
 static mp_obj_t expand32(mp_obj_t src_obj, mp_obj_t dst_obj) {
@@ -428,11 +431,13 @@ static mp_obj_t expand32_band(size_t n_args, const mp_obj_t *args) {
     mp_get_buffer_raise(args[0], &src, MP_BUFFER_READ);
     mp_get_buffer_raise(args[1], &dst, MP_BUFFER_WRITE);
     const size_t pixels = src.len / 4;
-    const size_t start = (size_t)mp_obj_get_int(args[2]) * (size_t)mp_obj_get_int(args[3]);
+    const size_t width = (size_t)mp_obj_get_int(args[4]);
+    const size_t start = (size_t)mp_obj_get_int(args[2]) *
+                         (size_t)mp_obj_get_int(args[3]) * width;
     if (start >= pixels) {
         return mp_const_none;
     }
-    size_t count = (size_t)mp_obj_get_int(args[3]);
+    size_t count = (size_t)mp_obj_get_int(args[3]) * width;
     if (start + count > pixels) {
         count = pixels - start;
     }
@@ -447,7 +452,7 @@ static mp_obj_t expand32_band(size_t n_args, const mp_obj_t *args) {
     }
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(expand32_band_obj, 4, 4, expand32_band);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(expand32_band_obj, 5, 5, expand32_band);
 
 // fill_index(src): a paletted test source with every palette entry used.
 static mp_obj_t fill_index(mp_obj_t src_obj) {

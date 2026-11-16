@@ -380,11 +380,13 @@ class FramecoreProbe(Activity):
             # band is on the SPI bus, instead of converting everything first.
             def banded_lut():
                 display.present_all(
-                    lambda band: probe.expand8_band(src8, dst, band, rows))
+                    lambda band: probe.expand8_band(
+                        src8, dst, band, rows, ENGINE_WIDTH))
 
             def banded_32():
                 display.present_all(
-                    lambda band: probe.expand32_band(src32, dst, band, rows))
+                    lambda band: probe.expand32_band(
+                        src32, dst, band, rows, ENGINE_WIDTH))
 
             lut_ms = self._time_call(count, one_lut)
             expand32_ms = self._time_call(count, one_32)
