@@ -3,7 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-  <title>MicroPythonOS Web</title>
+  <title>MicroPythonOS - run it in your browser</title>
+  <meta name="description" content="Run MicroPythonOS in your browser: a touch-screen MicroPython operating system with an App Store, OTA updates, MP3 and video playback. No install needed.">
+  <link rel="canonical" href="https://web.micropythonos.com/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="MicroPythonOS">
+  <meta property="og:title" content="MicroPythonOS - run it in your browser">
+  <meta property="og:description" content="Try the touch-screen MicroPython OS without any hardware.">
+  <meta property="og:url" content="https://web.micropythonos.com/">
+  <meta property="og:image" content="https://micropythonos.com/images/og-card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#0A4D68">
   <style>
     html, body {
       margin: 0;
@@ -13,6 +23,9 @@
       font-family: system-ui, sans-serif;
     }
     #app {
+      position: relative;
+      box-sizing: border-box;
+      padding-top: 46px;
       display: flex;
       flex-direction: column;
       height: 100%;
@@ -138,7 +151,7 @@
     #log.hidden { display: none; }
     #log-toggle {
       position: fixed;
-      top: 8px;
+      bottom: 8px;
       right: 8px;
       z-index: 10;
       padding: 4px 10px;
@@ -152,7 +165,7 @@
     #log-toggle:hover { background: rgba(20, 30, 45, 0.9); }
     #reset-storage {
       position: fixed;
-      top: 8px;
+      bottom: 8px;
       right: 64px;
       z-index: 10;
       padding: 4px 10px;
@@ -164,10 +177,76 @@
       cursor: pointer;
     }
     #reset-storage:hover { background: rgba(45, 20, 20, 0.9); }
+
+    /* Slim header linking back to the project site: this page is often
+       reached from a shared link, so it must not be a dead end. */
+    #sitebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 4px 16px;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: #9ad;
+      background: rgba(0, 0, 0, 0.35);
+      border-bottom: 1px solid #234;
+    }
+
+    #sitebar a {
+      color: #cfe6f2;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    #sitebar a:hover,
+    #sitebar a:focus-visible {
+      text-decoration: underline;
+    }
+
+    #sitebar .sitebar-brand {
+      font-weight: 600;
+      color: #fff;
+    }
+
+    #sitebar .sitebar-version {
+      color: #ff6b6b;
+    }
+
+    /* Narrow screens: the controls row was wider than the viewport, which
+       clipped the right-hand button and pushed the header out of view. */
+    @media (max-width: 560px) {
+      #controls {
+        gap: 18px;
+      }
+
+      #sitebar {
+        gap: 4px 10px;
+        font-size: 11px;
+      }
+
+      /* The brand link already goes to the site, and the version is on the
+         homepage: drop both rather than let the bar overflow. */
+      #sitebar .sitebar-hide-narrow {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
   <div id="app">
+  <div id="sitebar">
+    <a class="sitebar-brand" href="https://micropythonos.com/">MicroPythonOS</a>
+    <span class="sitebar-version sitebar-hide-narrow">release 0.22.0</span>
+    <a href="https://micropythonos.com/news/0.22.0.html">What's new</a>
+    <a class="sitebar-hide-narrow" href="https://micropythonos.com/">Website</a>
+    <a href="https://docs.micropythonos.com/">Documentation</a>
+    <a href="https://github.com/MicroPythonOS">GitHub</a>
+  </div>
     <div id="status">Loading MicroPythonOS…</div>
     <!-- Emulated badge NeoPixels; count adapts to Module.__webio.onLeds data. -->
     <div id="leds"></div>
