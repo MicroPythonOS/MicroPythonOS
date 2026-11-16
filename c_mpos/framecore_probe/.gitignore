@@ -1,0 +1,3 @@
+build_*/
+*.mpy
+.mpy_ld_cache/

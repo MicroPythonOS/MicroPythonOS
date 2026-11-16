@@ -52,20 +52,42 @@ import mpos.ui
 
 
 class NativeDisplay:
-    """An RGB565 framebuffer shown by a full-screen image widget."""
+    """An RGB565 framebuffer shown by an image widget.
 
-    def __init__(self, screen, display=None):
+    ``width`` and ``height`` default to the whole display. A surface smaller than
+    the display is centred, which is how a 320x200 engine gets letterboxed on a
+    320x240 panel.
+
+    ``buffer`` lets the caller own the pixels: an engine that insists on its own
+    framebuffer is wrapped with no allocation and no copy. The buffer is not
+    copied into or out of, so the engine may write to it between frames.
+    """
+
+    bytes_per_pixel = 2
+
+    def __init__(self, screen, display=None, buffer=None, width=None, height=None):
         if display is None:
             display = mpos.ui.main_display
         self.display = display
-        self.width = display.get_horizontal_resolution()
-        self.height = display.get_vertical_resolution()
+        screen_width = display.get_horizontal_resolution()
+        screen_height = display.get_vertical_resolution()
+        if width is None:
+            width = screen_width
+        if height is None:
+            height = screen_height
+        if width < 1 or height < 1:
+            raise ValueError("surface size must be positive")
+        if width > screen_width or height > screen_height:
+            raise ValueError("surface is larger than the display")
+        self.width = width
+        self.height = height
+        self.stride = width * self.bytes_per_pixel
 
         # One band is what one of the display driver's draw buffers can hold, so
         # a band is a single blit and a single SPI transfer.
         draw_buffer = getattr(display, "_frame_buffer1", None)
-        if draw_buffer and self.width > 0:
-            rows = len(draw_buffer) // (self.width * 2)
+        if draw_buffer and width > 0:
+            rows = len(draw_buffer) // self.stride
         else:
             rows = self.height
         if rows < 1:
@@ -75,22 +97,31 @@ class NativeDisplay:
         self.rows_per_band = rows
         self.band_count = (self.height + rows - 1) // rows
 
-        self.buffer = bytearray(self.width * self.height * 2)
+        if buffer is None:
+            self.buffer = bytearray(width * height * self.bytes_per_pixel)
+        else:
+            needed = width * height * self.bytes_per_pixel
+            if len(buffer) < needed:
+                raise ValueError("buffer holds %d bytes, %d needed" % (
+                    len(buffer), needed))
+            self.buffer = buffer
         self._descriptor = lv.image_dsc_t({
             "header": {
                 "magic": lv.IMAGE_HEADER_MAGIC,
                 "w": self.width,
                 "h": self.height,
-                "stride": self.width * 2,
+                "stride": self.stride,
                 "cf": lv.COLOR_FORMAT.RGB565,
             },
-            "data_size": len(self.buffer),
+            "data_size": self.stride * self.height,
             "data": self.buffer,
         })
 
         self.image = lv.image(screen)
         self.image.set_src(self._descriptor)
-        self.image.set_pos(0, 0)
+        self._image_x = (screen_width - width) // 2
+        self._image_y = (screen_height - height) // 2
+        self.image.set_pos(self._image_x, self._image_y)
         self.image.set_size(self.width, self.height)
         self.image.remove_flag(lv.obj.FLAG.CLICKABLE)
         self.image.remove_flag(lv.obj.FLAG.SCROLLABLE)
@@ -120,10 +151,10 @@ class NativeDisplay:
         if y2 >= self.height:
             y2 = self.height - 1
         area = self._area
-        area.x1 = 0
-        area.y1 = y1
-        area.x2 = self.width - 1
-        area.y2 = y2
+        area.x1 = self._image_x
+        area.y1 = self._image_y + y1
+        area.x2 = self._image_x + self.width - 1
+        area.y2 = self._image_y + y2
         self.image.invalidate_area(area)
 
     def invalidate_all(self):
@@ -160,3 +191,43 @@ class NativeDisplay:
     def present_all(self, render, flush=True):
         """Render and flush every band: a full screen redraw."""
         self.present(range(self.band_count), render, flush=flush)
+
+    def present_area(self, x1, y1, x2, y2, render, flush=True):
+        """Render the bands that intersect a rectangle and flush just that.
+
+        The rectangle is in surface coordinates (0..width-1, 0..height-1), not
+        screen coordinates: the caller does not need to know where the image was
+        placed. The renderer still fills whole bands of rows (that is the buffer
+        layout it works in), but only the requested rectangle is invalidated, so
+        the panel is not sent rows the caller knows are unchanged.
+        """
+        if not self._active:
+            return
+        if x1 < 0:
+            x1 = 0
+        if y1 < 0:
+            y1 = 0
+        if x2 > self.width - 1:
+            x2 = self.width - 1
+        if y2 > self.height - 1:
+            y2 = self.height - 1
+        if x1 > x2 or y1 > y2:
+            return
+
+        first = y1 // self.rows_per_band
+        last = y2 // self.rows_per_band
+        if last >= self.band_count:
+            last = self.band_count - 1
+        for band in range(first, last + 1):
+            render(band)
+            self.bands += 1
+        self.frames += 1
+
+        area = self._area
+        area.x1 = self._image_x + x1
+        area.y1 = self._image_y + y1
+        area.x2 = self._image_x + x2
+        area.y2 = self._image_y + y2
+        self.image.invalidate_area(area)
+        if flush:
+            self.flush()

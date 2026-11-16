@@ -42,6 +42,21 @@ SMALL_W = 32
 SMALL_H = 24
 
 
+class _InvalidationRecorder:
+    """Stands in for the image widget and records invalidated areas."""
+
+    def __init__(self, image):
+        self._image = image
+        self.areas = []
+        self.whole = 0
+
+    def invalidate_area(self, area):
+        self.areas.append((area.x1, area.y1, area.x2, area.y2))
+
+    def invalidate(self):
+        self.whole += 1
+
+
 class TestNativeDisplay(unittest.TestCase):
 
     def setUp(self):
@@ -91,6 +106,21 @@ class TestNativeDisplay(unittest.TestCase):
         areas = self._record_invalidations(self.pump)
         self.pump.invalidate_band(1)
         self.assertEqual(areas, [(0, 4, SMALL_W - 1, 7)])
+
+    def test_band_invalidation_follows_a_centred_surface(self):
+        # The image sits at y=4 on this 24-row screen, so band 1 (surface rows
+        # 4..7) is screen rows 8..11: invalidating without the offset would
+        # redraw the letterbox above the game instead of the game.
+        pump = self._make_area(SMALL_W, SMALL_H - 8)
+        areas = self._record_area_invalidations(pump)
+        pump.invalidate_band(1)
+        self.assertEqual(areas, [(0, 8, SMALL_W - 1, 11)])
+
+    def test_area_present_follows_a_centred_surface(self):
+        pump = self._make_area(SMALL_W, SMALL_H - 8)
+        areas = self._record_area_invalidations(pump)
+        pump.present_area(0, 0, SMALL_W - 1, 2, lambda band: None, flush=False)
+        self.assertEqual(areas, [(0, 4, SMALL_W - 1, 6)])
 
     def _record_invalidations(self, pump):
         areas = []
@@ -155,6 +185,120 @@ class TestNativeDisplay(unittest.TestCase):
         self.screen.update_layout()
         self.assertEqual(self.pump.image.get_width(), SMALL_W)
         self.assertEqual(self.pump.image.get_height(), SMALL_H)
+
+    # -- geometry a native renderer computes from -------------------------
+
+    def test_pixel_layout_is_exposed_for_native_callers(self):
+        self.assertEqual(self.pump.bytes_per_pixel, 2)
+        self.assertEqual(self.pump.stride, SMALL_W * 2)
+        self.assertEqual(len(self.pump.buffer), self.pump.stride * SMALL_H)
+
+    # -- a buffer the caller owns -----------------------------------------
+
+    def test_an_external_buffer_is_used_and_not_copied(self):
+        buffer = bytearray(SMALL_W * SMALL_H * 2)
+        pump = NativeDisplay(self.screen, display=self.display, buffer=buffer)
+        self.created.append(pump)
+        self.assertTrue(pump.buffer is buffer)
+        self.assertEqual(pump._descriptor.data_size, len(buffer))
+
+    def test_writing_to_the_external_buffer_writes_the_image(self):
+        buffer = bytearray(SMALL_W * SMALL_H * 2)
+        pump = NativeDisplay(self.screen, display=self.display, buffer=buffer)
+        self.created.append(pump)
+        pump.begin()
+        buffer[0] = 0x12
+        buffer[1] = 0x34
+        self.assertEqual(pump.buffer[0], 0x12)
+        self.assertEqual(pump.buffer[1], 0x34)
+
+    def test_a_buffer_that_is_too_small_is_rejected(self):
+        with self.assertRaises(ValueError):
+            NativeDisplay(self.screen, display=self.display,
+                          buffer=bytearray(SMALL_W * SMALL_H))
+
+    def test_a_buffer_may_be_larger_than_the_surface(self):
+        buffer = bytearray(SMALL_W * SMALL_H * 2 + 16)
+        pump = NativeDisplay(self.screen, display=self.display, buffer=buffer)
+        self.created.append(pump)
+        self.assertTrue(pump.buffer is buffer)
+        self.assertEqual(pump._descriptor.data_size, SMALL_W * SMALL_H * 2)
+
+    # -- a surface smaller than the display -------------------------------
+
+    def test_a_smaller_surface_is_centred(self):
+        # 320x200 on 320x240 is the Doom case: 20 rows of letterbox each side.
+        pump = self._make_area(SMALL_W, SMALL_H - 8)
+        self.screen.update_layout()
+        self.assertEqual(pump.width, SMALL_W)
+        self.assertEqual(pump.height, SMALL_H - 8)
+        self.assertEqual(pump.image.get_x(), 0)
+        self.assertEqual(pump.image.get_y(), 4)
+        self.assertEqual(len(pump.buffer), SMALL_W * (SMALL_H - 8) * 2)
+
+    def test_bands_are_computed_for_the_surface_not_the_screen(self):
+        pump = self._make_area(SMALL_W, SMALL_H - 8)
+        self.assertEqual(pump.rows_per_band, 4)
+        self.assertEqual(pump.band_count, 4)
+
+    def test_a_surface_larger_than_the_display_is_rejected(self):
+        with self.assertRaises(ValueError):
+            NativeDisplay(self.screen, display=self.display,
+                          width=SMALL_W, height=SMALL_H + 1)
+
+    def _make_area(self, width, height, buffer=None):
+        pump = NativeDisplay(self.screen, display=self.display,
+                             buffer=buffer, width=width, height=height)
+        self.created.append(pump)
+        pump.begin()
+        return pump
+
+    # -- presenting an area -----------------------------------------------
+
+    def test_present_area_renders_only_the_bands_it_touches(self):
+        rendered = []
+        self.pump.present_area(0, 5, SMALL_W - 1, 9, rendered.append, flush=False)
+        self.assertEqual(rendered, [1, 2])
+        self.assertEqual(self.pump.bands, 2)
+
+    def test_present_area_invalidates_exactly_the_rectangle(self):
+        areas = self._record_area_invalidations(self.pump)
+        self.pump.present_area(2, 5, 20, 9, lambda band: None, flush=False)
+        self.assertEqual(areas, [(2, 5, 20, 9)])
+
+    def test_present_area_clips_to_the_surface(self):
+        areas = self._record_area_invalidations(self.pump)
+        self.pump.present_area(-3, -4, SMALL_W + 5, SMALL_H + 5,
+                              lambda band: None, flush=False)
+        self.assertEqual(areas, [(0, 0, SMALL_W - 1, SMALL_H - 1)])
+
+    def test_present_area_of_nothing_does_nothing(self):
+        areas = self._record_area_invalidations(self.pump)
+        rendered = []
+        self.pump.present_area(5, 5, 4, 4, rendered.append)
+        self.assertEqual(rendered, [])
+        self.assertEqual(areas, [])
+
+    def test_present_area_flushes_once(self):
+        flushes = []
+        self.pump.flush = lambda: flushes.append(1)
+        self.pump.present_area(0, 0, SMALL_W - 1, SMALL_H - 1, lambda band: None)
+        self.assertEqual(len(flushes), 1)
+
+    def test_a_paused_surface_presents_no_area(self):
+        areas = self._record_area_invalidations(self.pump)
+        rendered = []
+        self.pump.end()
+        self.pump.present_area(0, 0, SMALL_W - 1, SMALL_H - 1, rendered.append)
+        self.assertEqual(rendered, [])
+        self.assertEqual(areas, [])
+
+    def _record_area_invalidations(self, pump):
+        # An LVGL object cannot hold Python attributes, so the widget is wrapped
+        # in a proxy that records the exact area it is asked to invalidate.
+        recorder = _InvalidationRecorder(pump.image)
+        pump.image = recorder
+        return recorder.areas
 
 
 class TestShippedCopy(unittest.TestCase):

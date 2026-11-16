@@ -339,6 +339,14 @@ Read this before writing another one.
 - Mark both the old and the new rectangle of anything that moves before redrawing. One band = one draw-buffer = one blit + one SPI transfer.
 - Pace on the pass grid and present up to ~5 ms **early**; a deadline checked only after it expires slips a whole pass per frame (asked for 30 fps, got 25).
 
+**A legacy framebuffer engine, measured (`c_mpos/framecore_probe/`, app `com.micropythonos.framecoreprobe`)**
+- 320x200 full redraw on the Waveshare 2": 6.5 ms drawing in C + 27.2 ms `present` = **29.5 fps**. Present is 4.7 MB/s over the 80 MHz SPI (5 bands of 45 rows: blit into LVGL's draw buffer, then flush).
+- `NativeDisplay(screen, buffer=engine_buffer, width=320, height=200)` wraps pixels the module allocated (`m_malloc` + `mp_obj_new_bytearray_by_ref`) with no copy, and centres a smaller surface (letterbox). `present_area(x1, y1, x2, y2, render)` flushes only a rectangle. **Invalidation takes screen coordinates**, so the image's own position must be added — a centred 320x200 surface invalidated as rows 0..199 redraws the letterbox instead of the game.
+- Convert per band, not per frame: whole-frame palette→RGB565 + present is 33.1 ms, the same conversion inside the render callback (SPI of band N overlaps conversion of band N+1) is **26.2 ms**. 32-bit RGBX: 37.6 ms whole-frame vs 27.0 ms banded. A prepared 256-entry RGB565 LUT is 6.2 ms/frame; per-pixel RGB888 is 8.6 ms; `expand32` 9.5 ms.
+- Native module import cost is real: a 267 KB `.mpy` (256 KB rodata + 256 KB BSS) imports in **443 ms** and takes **537 KB** of heap. Fine on a fresh boot (~7 MB free) but a visible pause.
+- The filesystem, not the panel, is the asset bottleneck: LittleFS reads **~1.3 MB/s** (16 KB = 12.5 ms, 256 KB = 257 ms); a raw flash partition reads 16 KB in 1.6 ms (~8 MB/s). Never read a game lump per frame — load/cache in RAM.
+- `tests/test_graphical_native_display.py` covers the framework copy of `NativeDisplay`; on a badge whose firmware predates the change it fails (the frozen module is old) until the firmware is reflashed. The app ships its own copy, which is what actually runs from an `.mpk`.
+
 **Sound**
 - A piezo beep is a PWM channel whose frequency/duty are set per event and cleared by a deadline check every frame — never `AudioManager.player()`, which costs milliseconds and allocates.
 - Get the pin from `AudioManager.find_output_by_kind("buzzer")` and no-op when there is none: `get_outputs()` can be empty (the Waveshare boards have no audio at all). Poll the off-deadline **every** frame, not only on events.
