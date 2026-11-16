@@ -1,8 +1,12 @@
 Future release (next version)
 =====
 
+Frameworks:
+- `mpos.ui.native_display.NativeDisplay`: a way to run a native (C) renderer at panel speed. It owns one RGB565 surface shown by a full-screen `lv_image` and presents only the bands of rows a frame changed, so LVGL stays the only writer of the panel; on a 320x240 badge that took Breakout from 7.6 to 56 fps with no flicker. Pausing LVGL's refresh or stealing its display buffers does not work and is documented, with the measurements, in `docs/apps/native-apps.md`.
+
 Testing:
 - screen camera: `cell_ncc_min` skips cells that are one flat colour, so a mostly blank screen such as the About app no longer fails webcam verification with `cell_ncc_min 0`.
+- native rendering: `mpos.ui.native_display` band geometry, invalidation areas and flush contract; Breakout's surface, dirty-band loop, per-band row offsets (a band drawn at the wrong offset still shows bricks but moves the paddle to the top of the screen), the no-import tick budget, pause/resume callback handling and the buzzer tone path.
 
 0.22.0
 ======
