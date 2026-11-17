@@ -42,7 +42,7 @@
 
 #include <stdint.h>
 
-#define MPOS_CORE_ABI_VERSION 4
+#define MPOS_CORE_ABI_VERSION 5
 
 /* Flags for mpos_core_entry_t.flags. */
 #define MPOS_CORE_FLAG_FRAMEBUFFER_PALETTED (1u << 0)  /* 8-bit indices */
@@ -52,15 +52,21 @@
  * rather than in Python. `frame_width`/`frame_height` then describe the
  * surface the host shows, not the engine's own resolution. */
 #define MPOS_CORE_FLAG_BAND_RGB565          (1u << 2)
+/* present_band() hands over RGB565 rows; the core converts its own palette. */
 
 /*
  * Host services, called from core code. `host` is opaque to the core and is
  * passed back unchanged; the loader uses it to find the Python side.
  *
  * present_band(host, band, rows, pixels):
- *     show `rows` rows of the core's 8-bit framebuffer starting at `band`, in
- *     framebuffer row-major order. The host converts and flushes; the core must
- *     not touch the panel.
+ *     show `rows` rows of the surface starting at row `band`. Two modes:
+ *
+ *       - pixels != NULL: the core hands over `rows * frame_width` pixels of
+ *         the format named by the entry flags, and the host copies them;
+ *       - pixels == NULL: the core already drew those rows into `frame` (see
+ *         below) and is only announcing them, so the host can flush the band
+ *         while the core draws the next one. This is what keeps the panel
+ *         transfer and the conversion from adding up.
  *
  * palette(host, out, entries):
  *     copy `entries` RGB565 entries of the current palette into `out`.
@@ -71,7 +77,9 @@
  *     empty. The queue is the host's, so the app decides which buttons map to
  *     what.
  *
- * now_ms(host): monotonic milliseconds. The core never reads a clock itself.
+ * now_ms(host): monotonic milliseconds, the same clock the host passes to
+ *     tick(). A core uses it to pace itself and to measure its own phases; it
+ *     never reads a hardware clock.
  *
  * read_file(host, path, offset, dst, len): returns bytes read, -1 on error.
  *     Hosts may cache the open file; a core must not assume an fd survives.
@@ -101,6 +109,16 @@ typedef struct mpos_core_abi {
     /* Information for the core, set by the loader before init(). */
     int frame_width;
     int frame_height;
+    /*
+     * The surface the host shows, `frame_width * frame_height` RGB565 pixels,
+     * row-major, or NULL. When it is set a core should draw straight into it
+     * (there is no copy and no second buffer) and call present_band with
+     * pixels == NULL for each finished band. `band_rows` is how many rows the
+     * host can display per band: presenting exactly that many lets the transfer
+     * of one band overlap the drawing of the next.
+     */
+    uint16_t *frame;
+    int band_rows;
 } mpos_core_abi_t;
 
 /*

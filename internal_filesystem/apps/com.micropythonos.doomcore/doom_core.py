@@ -8,15 +8,31 @@ an S3: its code never has to fit in executable RAM.
 
 What this activity provides to the core, through the ABI:
 
-* the surface: the core converts and rotates its 320x200 frame into a 200x320
-  RGB565 surface, and this file copies bands into the ``NativeDisplay`` buffer;
+* the surface: the core draws RGB565 straight into the ``NativeDisplay``
+  buffer, one display band at a time, so the panel transfer of one band runs
+  while the next band is being converted;
 * the WAD: file reads go through MicroPython's file objects, so storage stays
   the OS's business (no POSIX layer inside the core);
 * memory for the engine's zone, and log lines;
 * input: key events queued here are drained by the core once per frame.
 
-It is a proof of concept: the engine boots, plays its demo, and takes input from
-the touchscreen.
+Controls - touch (Waveshare 2", fri3d 2026, any touch panel):
+
+    left third      turn left (hold)
+    right third     turn right (hold)
+    middle          walk forward (hold)
+    tap middle      fire
+    tap top edge    menu / back
+
+Controls - buttons (fri3d 2024 and 2026; both send the same key events):
+
+    joystick / arrows   turn and walk
+    A (ENTER)           use / open (and menu select)
+    B                   fire
+    Y                   use / open
+    X (ESC)             menu / back
+
+A single-button board can only fire; the IMU could steer some day, not now.
 """
 
 import time
@@ -43,6 +59,9 @@ SURFACE_HEIGHT = 320
 TARGET_FPS = 35
 FRAME_SLACK_MS = 5
 TAP_MS = 220
+HOLD_MS = 180
+HINT_MS = 6000
+MENU_STRIP_PX = 24
 
 # Doom's own key codes (doomkeys.h), not ASCII.
 KEY_RIGHTARROW = 0xAE
@@ -91,6 +110,7 @@ def find_wad(intent=None):
 class DoomCore(Activity):
 
     screen = None
+    hint = None
     _surface = None
     _started = False
     _paused = True
@@ -103,10 +123,9 @@ class DoomCore(Activity):
     _wad = None
     _error = None
     _keys_sent = 0
-    _tick_us = 0
-    _present_us = 0
     _touch_key = 0
     _touch_ms = 0
+    _hint_until = 0
 
     def onCreate(self):
         self.screen = lv.obj()
@@ -116,6 +135,7 @@ class DoomCore(Activity):
         lv.group_get_default().add_obj(self.screen)
 
         self._keys = []
+        self._held = {}
         self._files = {}
         self.setContentView(self.screen)
 
@@ -144,10 +164,12 @@ class DoomCore(Activity):
                 mpos_core.start(
                     CORE_PARTITION, 0, CORE_PARTITION_SIZE,
                     *self._callbacks,
-                    self._wad, SURFACE_WIDTH, SURFACE_HEIGHT)
+                    self._wad, SURFACE_WIDTH, SURFACE_HEIGHT,
+                    self._surface.buffer, self._surface.rows_per_band)
                 if __debug__:
                     print("doom: core at 0x%x, %d bytes of text, wad %s" % (
                         mpos_core.mapped(), mpos_core.mapped_size(), self._wad))
+                self._show_hint()
 
         self._surface.begin()
         self._next_frame_ms = time.ticks_ms()
@@ -160,6 +182,7 @@ class DoomCore(Activity):
         self._paused = True
         mpos.ui.task_handler.remove_event_cb(self._drawframe)
         self._keys = []
+        self._release_all()
         if self._surface is not None:
             self._surface.end()
 
@@ -187,7 +210,6 @@ class DoomCore(Activity):
             return
         self._next_frame_ms = time.ticks_add(now, self._frame_interval_ms)
 
-        tick_us = time.ticks_us()
         try:
             mpos_core.tick(now)
         except Exception as error:
@@ -197,19 +219,14 @@ class DoomCore(Activity):
             print("doom: tick failed: %s" % (error,))
             return
 
-        tick_us = time.ticks_diff(time.ticks_us(), tick_us)
-        present_us = time.ticks_us()
+        # Held keys are released here rather than by the input driver: a keypad
+        # only reports presses (and repeats), and Doom wants both edges.
+        for code, deadline in list(self._held.items()):
+            if time.ticks_diff(now, deadline) >= 0:
+                self._keys.append((code, False))
+                del self._held[code]
 
-        # The core already wrote the pixels; this only invalidates and flushes.
-        surface = self._surface
-        for band in range(surface.band_count):
-            surface.invalidate_band(band)
-        surface.frames += 1
-        surface.flush()
-
-        present_us = time.ticks_diff(time.ticks_us(), present_us)
-        self._tick_us += tick_us
-        self._present_us += present_us
+        self._expire_hint(now)
 
         self._frames += 1
         self._fps_frames += 1
@@ -220,17 +237,24 @@ class DoomCore(Activity):
             self._fps_frames = 0
             self._fps_since = now
             if __debug__ and frames:
-                print("doom: %.1f fps, tick %.1f ms, present %.1f ms" % (
-                    self._fps, self._tick_us / 1000.0 / frames,
-                    self._present_us / 1000.0 / frames))
-            self._tick_us = 0
-            self._present_us = 0
+                print("doom: %.1f fps" % (self._fps,))
 
     # -- ABI callbacks ----------------------------------------------------
 
     def _present_band(self, band, rows, data):
-        start = band * SURFACE_WIDTH * 2
-        self._surface.buffer[start:start + len(data)] = data
+        """A band is ready: copy it (if the core sent pixels) and flush it.
+
+        The core draws straight into ``surface.buffer`` and only announces the
+        band, so this is where the panel transfer is started - before the core
+        converts the next band.
+        """
+        if data is not None:
+            start = band * SURFACE_WIDTH * 2
+            self._surface.buffer[start:start + len(data)] = data
+        if not self._surface._active:
+            return
+        self._surface.invalidate_band(band // self._surface.rows_per_band)
+        self._surface.flush()
 
     def _palette(self, entries):
         # The core converts its own palette; this is here for completeness.
@@ -280,23 +304,52 @@ class DoomCore(Activity):
         else:
             self._keys.append((code, False))
 
+    def _hold(self, code):
+        """Start a held key; it is released after HOLD_MS unless refreshed."""
+        if code not in self._held:
+            self._keys.append((code, True))
+        self._held[code] = time.ticks_add(time.ticks_ms(), HOLD_MS)
+
+    def _release(self, code):
+        if code in self._held:
+            self._keys.append((code, False))
+            del self._held[code]
+
+    def _release_all(self):
+        for code in list(self._held):
+            self._keys.append((code, False))
+        self._held = {}
+
     def _on_key(self, event):
         key = event.get_key()
-        mapping = {
-            lv.KEY.LEFT: KEY_LEFTARROW,
-            lv.KEY.RIGHT: KEY_RIGHTARROW,
-            lv.KEY.UP: KEY_UPARROW,
-            lv.KEY.DOWN: KEY_DOWNARROW,
-            lv.KEY.ENTER: KEY_ENTER,
-            lv.KEY.ESC: KEY_ESCAPE,
-        }
-        code = mapping.get(key)
-        if code is not None:
-            self.key(code)
+        if key == lv.KEY.LEFT:
+            self._hold(KEY_LEFTARROW)
+        elif key == lv.KEY.RIGHT:
+            self._hold(KEY_RIGHTARROW)
+        elif key == lv.KEY.UP:
+            self._hold(KEY_UPARROW)
+        elif key == lv.KEY.DOWN:
+            self._hold(KEY_DOWNARROW)
+        elif key == lv.KEY.NEXT:
+            self._hold(KEY_RIGHTARROW)
+        elif key == lv.KEY.PREV:
+            self._hold(KEY_LEFTARROW)
+        elif key == lv.KEY.ENTER:
+            # A is ENTER: menu select, and "use" while playing (ENTER itself is
+            # not bound in game, so both can be sent).
+            self.key(KEY_ENTER)
+            self.key(KEY_USE)
+        elif key == lv.KEY.ESC:
+            self.key(KEY_ESCAPE)
+        elif key == ord("B"):
+            self._hold(KEY_FIRE)
+        elif key == ord("Y"):
+            self.key(KEY_USE)
+        elif key == lv.KEY.END:
+            self.key(KEY_ESCAPE)
 
     def _touch_code(self, x):
-        # Left third turns left, right third turns right, the middle walks; a
-        # short tap in the middle fires.
+        # Left third turns left, right third turns right, the middle walks.
         width = mpos.ui.main_display.get_horizontal_resolution()
         if x < width // 3:
             return KEY_LEFTARROW
@@ -307,7 +360,13 @@ class DoomCore(Activity):
     def _on_touch(self, event):
         code = event.get_code()
         if code == lv.EVENT.PRESSED:
-            x, _ = InputManager.pointer_xy()
+            x, y = InputManager.pointer_xy()
+            self._expire_hint(time.ticks_ms())
+            if y < MENU_STRIP_PX:
+                # The top edge is the menu, not a movement zone.
+                self._touch_key = 0
+                self.key(KEY_ESCAPE)
+                return
             self._touch_key = self._touch_code(x)
             self._touch_ms = time.ticks_ms()
             self._keys.append((self._touch_key, True))
@@ -316,9 +375,32 @@ class DoomCore(Activity):
                 self._keys.append((self._touch_key, False))
                 if (self._touch_key == KEY_UPARROW
                         and time.ticks_diff(time.ticks_ms(), self._touch_ms) < TAP_MS):
-                    self._keys.append((KEY_FIRE, True))
-                    self._keys.append((KEY_FIRE, False))
+                    self.key(KEY_FIRE)
                 self._touch_key = 0
+
+    # -- hint -------------------------------------------------------------
+
+    def _show_hint(self):
+        text = ("turn: left / right\n"
+                "walk: middle\n"
+                "fire: tap\n"
+                "menu: top edge")
+        label = lv.label(self.screen)
+        label.set_text(text)
+        label.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
+        label.set_style_bg_opa(lv.OPA._70, lv.PART.MAIN)
+        label.set_style_text_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
+        label.set_style_pad_all(6, lv.PART.MAIN)
+        label.set_style_radius(6, lv.PART.MAIN)
+        label.align(lv.ALIGN.CENTER, 0, 0)
+        label.remove_flag(lv.obj.FLAG.CLICKABLE)
+        self.hint = label
+        self._hint_until = time.ticks_add(time.ticks_ms(), HINT_MS)
+
+    def _expire_hint(self, now):
+        if self.hint is not None and time.ticks_diff(now, self._hint_until) >= 0:
+            self.hint.delete()
+            self.hint = None
 
     # -- measurements -----------------------------------------------------
 

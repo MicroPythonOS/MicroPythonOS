@@ -73,6 +73,8 @@ static uint32_t s_data_size;
 static uint32_t s_now_ms;
 static int s_width;
 static int s_height;
+static int s_band_rows;
+static uint16_t *s_frame;
 static uint32_t s_flags;
 static int s_active;
 
@@ -87,6 +89,8 @@ static mp_obj_t s_log_fun;
 // raw pointers for as long as it runs, so the host owns them and releases them
 // when the core stops.
 #define MPOS_CORE_MAX_ALLOCATIONS 64
+// Blocks up to this size are taken from internal RAM when it has room.
+#define MPOS_CORE_SMALL_ALLOC (96u * 1024u)
 static void *s_allocs[MPOS_CORE_MAX_ALLOCATIONS];
 static int s_alloc_count;
 
@@ -192,8 +196,12 @@ static void abi_present_band(void *host, int band, int rows, const uint8_t *pixe
     mp_obj_t args[3];
     args[0] = mp_obj_new_int(band);
     args[1] = mp_obj_new_int(rows);
-    args[2] = mp_obj_new_bytearray_by_ref(
-        (size_t)rows * (size_t)s_width * (rgb565 ? 2u : 1u), (void *)pixels);
+    // pixels == NULL: the core drew the band into the host's own surface, so
+    // there is nothing to copy - the callback just says "this band is ready".
+    args[2] = pixels == NULL ? mp_const_none
+             : mp_obj_new_bytearray_by_ref(
+                   (size_t)rows * (size_t)s_width * (rgb565 ? 2u : 1u),
+                   (void *)pixels);
     mp_call_function_n_kw(s_present_fun, 3, 0, args);
 }
 
@@ -229,7 +237,10 @@ static int abi_poll_key(void *host, int *pressed) {
 
 static uint32_t abi_now_ms(void *host) {
     (void)host;
-    return s_now_ms;
+    // A live clock, not the tick's timestamp: a core measures its own phases
+    // with it, and pacing on a clock that only moves once per tick cannot tell
+    // how long the tick took.
+    return (uint32_t)mp_hal_ticks_ms();
 }
 
 static int abi_read_file(void *host, const char *path, uint32_t offset,
@@ -266,7 +277,16 @@ static void *abi_alloc(void *host, uint32_t bytes) {
     if (s_alloc_count >= MPOS_CORE_MAX_ALLOCATIONS) {
         return NULL;
     }
-    void *ptr = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    // Small blocks first, because they are usually the hot ones (an engine's
+    // framebuffer, lookup tables) and internal RAM is several times faster than
+    // PSRAM; big ones (a zone) only fit in PSRAM. Both fall back to the other.
+    void *ptr = NULL;
+    if (bytes <= MPOS_CORE_SMALL_ALLOC) {
+        ptr = heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    if (ptr == NULL) {
+        ptr = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
     if (ptr == NULL) {
         ptr = heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     }
@@ -306,9 +326,9 @@ static void abi_log(void *host, const char *text) {
 
 static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     // start(label, offset, size, present_band, palette, poll_key, read_file,
-    //       file_size, log, wad_path, width, height)
-    if (n_args != 12) {
-        mp_raise_TypeError(MP_ERROR_TEXT("start() takes 12 arguments"));
+    //       file_size, log, wad_path, width, height, frame, band_rows)
+    if (n_args != 14) {
+        mp_raise_TypeError(MP_ERROR_TEXT("start() takes 14 arguments"));
     }
     if (s_active) {
         mp_raise_ValueError(MP_ERROR_TEXT("a core is already running"));
@@ -498,14 +518,41 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     s_width = (int)mp_obj_get_int(args[10]);
     s_height = (int)mp_obj_get_int(args[11]);
 
+    // The surface the core may draw into: an ordinary Python buffer, so the app
+    // owns it and the core writes straight into what LVGL displays.
+    int band_rows = (int)mp_obj_get_int(args[13]);
+    if (band_rows <= 0) {
+        band_rows = s_height;
+    }
+    if (band_rows > s_height) {
+        band_rows = s_height;
+    }
+    s_band_rows = band_rows;
+    if (args[12] != mp_const_none) {
+        mp_buffer_info_t buf;
+        if (!mp_get_buffer(args[12], &buf, MP_BUFFER_WRITE)
+                || buf.len < (size_t)s_width * (size_t)s_height * 2u) {
+            mp_raise_ValueError(MP_ERROR_TEXT("frame buffer is too small"));
+        }
+        s_frame = (uint16_t *)buf.buf;
+    } else {
+        s_frame = NULL;
+    }
+
     s_present_fun = args[3];
     s_palette_fun = args[4];
     s_poll_fun = args[5];
     s_read_fun = args[6];
     s_size_fun = args[7];
     s_log_fun = args[8];
-    // Root every callback in one tuple: the statics above are not roots.
-    MP_STATE_VM(mpos_core_refs) = mp_obj_new_tuple(6, &args[3]);
+    // Root every callback (and the surface buffer) in one tuple: the statics
+    // above are not roots, so the collector would free them mid-run.
+    mp_obj_t roots[7];
+    for (int i = 0; i < 6; i++) {
+        roots[i] = args[3 + i];
+    }
+    roots[6] = args[12];
+    MP_STATE_VM(mpos_core_refs) = mp_obj_new_tuple(7, roots);
     s_now_ms = mp_hal_ticks_ms();
     s_active = 1;
 
@@ -522,6 +569,8 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     s_abi.log = abi_log;
     s_abi.frame_width = s_width;
     s_abi.frame_height = s_height;
+    s_abi.frame = s_frame;
+    s_abi.band_rows = s_band_rows;
 
     int result = s_entry->init(&s_abi, mp_obj_str_get_str(args[9]));
     if (result != 0) {

@@ -37,7 +37,9 @@ build=build_core
 rm -rf "$build"
 mkdir -p "$build"
 
-CFLAGS="-Os -std=gnu99 -ffreestanding -fno-builtin -fno-common -fno-jump-tables"
+# -O2, not -Os: the engine is a software renderer whose inner loops are the
+# frame time, and the blob has a megabyte of flash around it.
+CFLAGS="-O2 -std=gnu99 -ffreestanding -fno-builtin -fno-common -fno-jump-tables"
 CFLAGS="$CFLAGS -ffunction-sections -fdata-sections -mtext-section-literals"
 CFLAGS="$CFLAGS -DCMAP256 -DNORMALUNIX -DLINUX -D_DEFAULT_SOURCE -DMPOS_CORE"
 CFLAGS="$CFLAGS -Idoomgeneric -Igen -Icore -I."

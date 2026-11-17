@@ -20,6 +20,7 @@
 #include "doomkeys.h"
 #include "i_video.h"
 #include "doomstat.h"
+#include "m_menu.h"
 
 #include "doom_data_init.h"
 
@@ -43,6 +44,7 @@
 static const mpos_core_abi_t *s_abi;
 
 static uint32_t s_now_ms;
+static uint32_t s_profile_frames;
 static uint32_t s_start_ms;
 static int s_have_start;
 static int s_created;
@@ -139,47 +141,35 @@ static uint16_t rgb565(int r, int g, int b) {
     return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
 }
 
-// Rotate the engine's 320x200 frame into the 200x320 surface the panel shows.
-// The device is used lying on its long side, so the portrait panel displays the
-// landscape picture upright; DOOM_CORE_ROTATE_CCW selects the direction.
-static void build_surface(const mpos_core_abi_t *abi) {
+// Rotate the engine's 320x200 frame into the surface the panel shows, one band
+// at a time. dst(dx, dy) = src(dy, src_h - 1 - dx): the engine's x axis runs
+// down the panel and its y axis left to right, which is what puts the picture
+// upright when the device lies on its long side.
+//
+// The transpose is tiled because an output row is a source *column*: pixel by
+// pixel, every read is a 320-byte stride apart and the cache thrashes. A 32x32
+// tile keeps the reads and the writes contiguous.
+static void convert_band(const mpos_core_abi_t *abi, uint16_t *dst,
+                         int dst_y0, int rows) {
     const uint8_t *src = (const uint8_t *)DG_ScreenBuffer;
     const int src_w = DOOMGENERIC_RESX;
     const int src_h = DOOMGENERIC_RESY;
     const int out_w = abi->frame_width;
-    const int out_h = abi->frame_height;
-    if (out_w != src_h || out_h != src_w) {
-        // Not the rotated surface we expect: just letterbox what we can.
-        const int rows = out_h < src_h ? out_h : src_h;
-        const int cols = out_w < src_w ? out_w : src_w;
-        for (int y = 0; y < rows; y++) {
-            for (int x = 0; x < cols; x++) {
-                s_surface[y * out_w + x] = s_palette[src[y * src_w + x]];
-            }
-        }
-        return;
-    }
 
-    // Transpose in tiles, not pixel by pixel: an output row is a source
-    // *column*, so the naive loop reads one byte per 320-byte stride and the
-    // cache thrashes. A 32x32 tile keeps the reads and the writes contiguous.
-    //
-    // dst(dx, dy) = src(dy, src_h - 1 - dx): the engine's x axis runs down the
-    // panel, its y axis runs left to right, which is what puts the picture
-    // upright when the device lies on its long side.
-    for (int dy0 = 0; dy0 < out_h; dy0 += 32) {
-        const int rows = (out_h - dy0) < 32 ? (out_h - dy0) : 32;
+    for (int ty = 0; ty < rows; ty += 32) {
+        const int tile_rows = (rows - ty) < 32 ? (rows - ty) : 32;
+        const int dy0 = dst_y0 + ty;
         for (int dx0 = 0; dx0 < out_w; dx0 += 32) {
             const int cols = (out_w - dx0) < 32 ? (out_w - dx0) : 32;
             for (int c = 0; c < cols; c++) {
                 const int sy = src_h - 1 - (dx0 + c);
                 const uint8_t *src_row = src + sy * src_w + dy0;
-                for (int r = 0; r < rows; r++) {
+                for (int r = 0; r < tile_rows; r++) {
                     s_tile[r][c] = s_palette[src_row[r]];
                 }
             }
-            for (int r = 0; r < rows; r++) {
-                uint16_t *row = &s_surface[(dy0 + r) * out_w + dx0];
+            for (int r = 0; r < tile_rows; r++) {
+                uint16_t *row = dst + (dy0 + r) * out_w + dx0;
                 for (int c = 0; c < cols; c++) {
                     row[c] = s_tile[r][c];
                 }
@@ -187,6 +177,11 @@ static void build_surface(const mpos_core_abi_t *abi) {
         }
     }
 }
+
+static uint32_t s_engine_ms;
+static uint32_t s_convert_ms;
+static uint32_t s_present_ms;
+static uint32_t s_profile_ms;
 
 static void present_frame(const mpos_core_abi_t *abi) {
     if (DG_ScreenBuffer == NULL) {
@@ -197,13 +192,38 @@ static void present_frame(const mpos_core_abi_t *abi) {
                               (int)colors[i].b);
     }
     palette_changed = false;
-    build_surface(abi);
 
     const int height = abi->frame_height;
-    for (int y = 0; y < height; y += PRESENT_BAND_ROWS) {
+    uint16_t *target = abi->frame;
+    if (target != NULL) {
+        int band = abi->band_rows > 0 ? abi->band_rows : height;
+        if (band > height) {
+            band = height;
+        }
+        for (int y = 0; y < height; y += band) {
+            int rows = height - y;
+            if (rows > band) {
+                rows = band;
+            }
+            uint32_t started = abi->now_ms(abi->host);
+            convert_band(abi, target, y, rows);
+            uint32_t converted = abi->now_ms(abi->host);
+            s_convert_ms += converted - started;
+            // The host flushes these rows now, so its panel transfer runs while
+            // the next band is being converted.
+            abi->present_band(abi->host, y, rows, NULL);
+            s_present_ms += abi->now_ms(abi->host) - converted;
+        }
+        return;
+    }
+
+    // No surface from the host: keep our own copy and hand bands over.
+    convert_band(abi, s_surface, 0, height);
+    const int band = abi->band_rows > 0 ? abi->band_rows : height;
+    for (int y = 0; y < height; y += band) {
         int rows = height - y;
-        if (rows > PRESENT_BAND_ROWS) {
-            rows = PRESENT_BAND_ROWS;
+        if (rows > band) {
+            rows = band;
         }
         abi->present_band(abi->host, y, rows,
                           (const uint8_t *)&s_surface[y * abi->frame_width]);
@@ -249,6 +269,31 @@ static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
     return 0;
 }
 
+// A touchscreen or a two-button badge has no keyboard: the keys that steer the
+// game have to steer the menu too. While a menu is up, "forward" (fire) selects
+// and the turn keys move the cursor; menus never want the walk keys.
+static int menu_key(int code) {
+    if (menuactive) {
+        switch (code) {
+        case KEY_FIRE:
+            return KEY_ENTER;
+        case KEY_LEFTARROW:
+            return KEY_UPARROW;
+        case KEY_RIGHTARROW:
+            return KEY_DOWNARROW;
+        case KEY_UPARROW:
+        case KEY_DOWNARROW:
+            return -1;
+        default:
+            return code;
+        }
+    }
+    if (gamestate == GS_INTERMISSION || gamestate == GS_FINALE) {
+        return code == KEY_FIRE ? KEY_ENTER : code;
+    }
+    return code;
+}
+
 static void core_tick(const mpos_core_abi_t *abi, uint32_t now_ms) {
     if (!s_created || s_stopped || mpos_libc_exit_requested()) {
         return;
@@ -262,19 +307,41 @@ static void core_tick(const mpos_core_abi_t *abi, uint32_t now_ms) {
     int pressed = 0;
     int code = abi->poll_key(abi->host, &pressed);
     while (code >= 0) {
+        code = menu_key(code);
         const int next = (s_key_head + 1) % MAX_KEYS;
-        if (next != s_key_tail) {
+        if (code >= 0 && next != s_key_tail) {
             s_keys[s_key_head] = (uint16_t)((pressed ? 0x100 : 0) | (code & 0xFF));
             s_key_head = next;
         }
         code = abi->poll_key(abi->host, &pressed);
     }
 
+    uint32_t started = abi->now_ms(abi->host);
     doomgeneric_Tick();
+    s_engine_ms += abi->now_ms(abi->host) - started;
 
     if (s_frame_ready) {
         s_frame_ready = 0;
         present_frame(abi);
+    }
+
+    // Where the frame time goes, once every two seconds. Cheap enough to keep,
+    // and the only way to tell a slow engine from a slow panel.
+    uint32_t now = abi->now_ms(abi->host);
+    s_profile_frames++;
+    if (now - s_profile_ms >= 2000 && s_profile_frames > 1) {
+        char line[112];
+        snprintf(line, sizeof(line),
+                 "core: engine %.1f ms, convert %.1f ms, present %.1f ms",
+                 (double)s_engine_ms / s_profile_frames,
+                 (double)s_convert_ms / s_profile_frames,
+                 (double)s_present_ms / s_profile_frames);
+        abi->log(abi->host, line);
+        s_engine_ms = 0;
+        s_convert_ms = 0;
+        s_present_ms = 0;
+        s_profile_frames = 0;
+        s_profile_ms = now;
     }
 }
 
