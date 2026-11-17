@@ -16,13 +16,14 @@ What this activity provides to the core, through the ABI:
 * memory for the engine's zone, and log lines;
 * input: key events queued here are drained by the core once per frame.
 
-Controls - touch (Waveshare 2", fri3d 2026, any touch panel):
+Controls - touch (Waveshare 2", fri3d 2026, any touch panel). While playing,
+hold the device sideways so Doom's frame is upright: the left thumb gets a
+joystick and the right thumb three bands.
 
-    left third      turn left (hold)
-    right third     turn right (hold)
-    middle          walk forward (hold)
-    tap middle      fire
-    tap top edge    menu / back
+    left half       joystick: drag left/right to turn, up/down to walk
+    right, bottom   fire (hold to keep shooting)
+    right, middle   use / open
+    right, top      menu / back
 
 Controls - buttons (fri3d 2024 and 2026; both send the same key events):
 
@@ -58,13 +59,15 @@ SURFACE_HEIGHT = 320
 
 TARGET_FPS = 35
 FRAME_SLACK_MS = 5
-# A tap is "short" if it is released within this window. Generous on purpose:
-# the input test helper holds a press for ~100 ms of wall clock, which a busy
-# frame loop stretches to 300 ms, and a real finger is slower than that too.
-TAP_MS = 450
 HOLD_MS = 180
 HINT_MS = 6000
-MENU_STRIP_PX = 24
+
+# Touch layout, in Doom's own frame (320x200): the left thumb gets a joystick
+# and the right thumb three bands. See _on_touch().
+STICK_WIDTH = 160
+MENU_BOTTOM = 60
+USE_BOTTOM = 120
+STICK_DEADZONE = 16
 
 # Doom's own key codes (doomkeys.h), not ASCII.
 KEY_RIGHTARROW = 0xAE
@@ -126,8 +129,10 @@ class DoomCore(Activity):
     _wad = None
     _error = None
     _keys_sent = 0
-    _touch_key = 0
-    _touch_ms = 0
+    _zone = None
+    _stick = None
+    _stick_h = 0
+    _stick_v = 0
     _last_touch = None
     _hint_until = 0
 
@@ -373,15 +378,31 @@ class DoomCore(Activity):
         sy = (SURFACE_WIDTH - 1) - (x - surface._image_x)
         return sx, sy
 
-    def _zone_key(self, sx):
-        # Doom's left third turns left, its right third turns right, the middle
-        # walks. sx is in game space, not panel space.
-        width = SURFACE_HEIGHT
-        if sx < width // 3:
-            return KEY_LEFTARROW
-        if sx > (2 * width) // 3:
-            return KEY_RIGHTARROW
-        return KEY_UPARROW
+    def _stick_direction(self, sx, sy):
+        """Turn/walk keys for a drag away from where the thumb landed."""
+        horizontal = 0
+        if sx < self._stick[0] - STICK_DEADZONE:
+            horizontal = KEY_LEFTARROW
+        elif sx > self._stick[0] + STICK_DEADZONE:
+            horizontal = KEY_RIGHTARROW
+        vertical = 0
+        if sy < self._stick[1] - STICK_DEADZONE:
+            vertical = KEY_UPARROW       # drag towards Doom's top: forward
+        elif sy > self._stick[1] + STICK_DEADZONE:
+            vertical = KEY_DOWNARROW
+        return horizontal, vertical
+
+    def _stick_apply(self, horizontal, vertical):
+        """Hold the selected directions, drop the ones that left the zone."""
+        for code in (self._stick_h, self._stick_v):
+            if code and code != horizontal and code != vertical:
+                self._release(code)
+        if horizontal and horizontal != self._stick_h:
+            self._hold(horizontal)
+        if vertical and vertical != self._stick_v:
+            self._hold(vertical)
+        self._stick_h = horizontal
+        self._stick_v = vertical
 
     def _on_touch(self, event):
         # LVGL also sends PRESSED/RELEASED to the focused object when ENTER is
@@ -394,32 +415,52 @@ class DoomCore(Activity):
             x, y = InputManager.pointer_xy()
             self._expire_hint(time.ticks_ms())
             sx, sy = self._to_game(x, y)
-            if sy < MENU_STRIP_PX:
-                # Doom's own top edge is the menu, not a movement zone.
-                self._touch_key = 0
-                self._last_touch = ("m", x, y, sx, sy)
+            self._last_touch = ("p", x, y, sx, sy)
+            if sx < STICK_WIDTH:
+                # A joystick anchored where the thumb lands, so it does not
+                # have to be hit: any touch on the left half starts a turn.
+                self._zone = "stick"
+                self._stick = (sx, sy)
+                self._stick_apply(0, 0)
+            elif sy < MENU_BOTTOM:
+                self._zone = "menu"
                 self.key(KEY_ESCAPE)
-                return
-            self._touch_key = self._zone_key(sx)
-            self._touch_ms = time.ticks_ms()
-            self._last_touch = ("p", x, y, sx, sy, self._touch_key)
-            self._keys.append((self._touch_key, True))
+            elif sy < USE_BOTTOM:
+                self._zone = "use"
+                self._hold(KEY_USE)
+            else:
+                self._zone = "fire"
+                self._hold(KEY_FIRE)
+        elif code == lv.EVENT.PRESSING:
+            if self._zone == "stick" and self._stick is not None:
+                x, y = InputManager.pointer_xy()
+                sx, sy = self._to_game(x, y)
+                horizontal, vertical = self._stick_direction(sx, sy)
+                self._stick_apply(horizontal, vertical)
+            elif self._zone in ("use", "fire"):
+                # Refresh the hold: a still thumb stops sending PRESSING and
+                # the frame loop would let the key go.
+                self._hold(KEY_USE if self._zone == "use" else KEY_FIRE)
         elif code == lv.EVENT.RELEASED:
-            if self._touch_key:
-                self._keys.append((self._touch_key, False))
-                held = time.ticks_diff(time.ticks_ms(), self._touch_ms)
-                self._last_touch = ("r", self._touch_key, held)
-                if self._touch_key == KEY_UPARROW and held < TAP_MS:
-                    self._hold(KEY_FIRE)
-                self._touch_key = 0
+            x, y = InputManager.pointer_xy()
+            sx, sy = self._to_game(x, y)
+            if self._zone == "stick":
+                self._stick_apply(0, 0)
+                self._stick = None
+            elif self._zone == "use":
+                self._release(KEY_USE)
+            elif self._zone == "fire":
+                self._release(KEY_FIRE)
+            self._last_touch = ("r", self._zone, x, y, sx, sy)
+            self._zone = None
 
     # -- hint -------------------------------------------------------------
 
     def _show_hint(self):
-        text = ("turn: left / right\n"
-                "walk: middle\n"
-                "fire / select: tap\n"
-                "menu: top edge")
+        text = ("left thumb: turn / walk\n"
+                "right thumb, bottom: fire\n"
+                "right thumb, middle: use\n"
+                "right thumb, top: menu")
         label = lv.label(self.screen)
         label.set_text(text)
         label.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)

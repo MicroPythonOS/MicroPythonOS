@@ -237,54 +237,63 @@ class TestDoomCoreActivity(unittest.TestCase):
         x, y = self._panel(sx, sy)
         self._touch(code, x, y)
 
-    def test_the_game_left_third_turns_left(self):
-        self._touch_game(lv.EVENT.PRESSED, SURFACE_HEIGHT // 6, SURFACE_WIDTH // 2)
+    def test_the_joystick_turns_and_walks_with_the_drag(self):
+        self._touch_game(lv.EVENT.PRESSED, 80, 100)
+        # Anchored, not a fixed pad: the press alone asks for no direction.
+        self.assertEqual(self.activity._keys, [])
+
+        self._touch_game(lv.EVENT.PRESSING, 40, 100)
         self.assertEqual(self.activity._keys, [(doom_core.KEY_LEFTARROW, True)])
 
-        self._touch_game(lv.EVENT.RELEASED, SURFACE_HEIGHT // 6, SURFACE_WIDTH // 2)
+        # Dragging towards Doom's top walks forward and drops the turn.
+        self._touch_game(lv.EVENT.PRESSING, 80, 40)
         self.assertEqual(self.activity._keys, [
             (doom_core.KEY_LEFTARROW, True), (doom_core.KEY_LEFTARROW, False),
-        ])
-
-    def test_the_game_right_third_turns_right(self):
-        self._touch_game(lv.EVENT.PRESSED, SURFACE_HEIGHT - 10, SURFACE_WIDTH // 2)
-        self.assertEqual(self.activity._keys, [(doom_core.KEY_RIGHTARROW, True)])
-
-    def test_a_thumb_at_the_panel_bottom_is_doom_right(self):
-        # The bug this guards: the zones used to slice the panel's horizontal
-        # axis, so the panel's left edge meant "turn left". Doom's own axis runs
-        # down the panel, and its left is the panel's top.
-        x = self.activity._surface._image_x + SURFACE_WIDTH // 2
-        self._touch(lv.EVENT.PRESSED, x, SURFACE_HEIGHT - 10)
-        self.assertEqual(self.activity._keys, [(doom_core.KEY_RIGHTARROW, True)])
-
-    def test_middle_tap_walks_and_fires(self):
-        middle = SURFACE_HEIGHT // 2
-        self._touch_game(lv.EVENT.PRESSED, middle, SURFACE_WIDTH // 2)
-        self._touch_game(lv.EVENT.RELEASED, middle, SURFACE_WIDTH // 2)
-
-        self.assertEqual(self.activity._keys, [
             (doom_core.KEY_UPARROW, True),
-            (doom_core.KEY_UPARROW, False),
-            (doom_core.KEY_FIRE, True),
         ])
-        # Fired like a button, not tapped: see test_enter_selects_and_uses.
+
+        self._touch_game(lv.EVENT.RELEASED, 80, 40)
+        self.assertEqual(self.activity._keys[-1], (doom_core.KEY_UPARROW, False))
+        self.assertEqual(self.activity._held, {})
+
+    def test_the_joystick_ignores_a_drag_inside_the_deadzone(self):
+        self._touch_game(lv.EVENT.PRESSED, 80, 100)
+        self._touch_game(lv.EVENT.PRESSING, 90, 108)
+        self.assertEqual(self.activity._keys, [])
+        self.assertEqual(self.activity._held, {})
+
+    def test_the_fire_band_holds_fire_while_pressed(self):
+        self._touch_game(lv.EVENT.PRESSED, 240, 180)
+        self.assertEqual(self.activity._keys, [(doom_core.KEY_FIRE, True)])
         self.assertIn(doom_core.KEY_FIRE, self.activity._held)
 
-    def test_dooms_top_edge_opens_the_menu(self):
-        # The top of Doom's frame is the picture's far edge on the panel, not
-        # the panel's top: the strip is 24 game pixels of Doom's y.
-        self._touch_game(lv.EVENT.PRESSED, SURFACE_HEIGHT // 2, 4)
+        self._touch_game(lv.EVENT.RELEASED, 240, 180)
+        self.assertEqual(self.activity._keys[-1], (doom_core.KEY_FIRE, False))
+        self.assertEqual(self.activity._held, {})
+
+    def test_the_use_band_holds_use(self):
+        self._touch_game(lv.EVENT.PRESSED, 240, 90)
+        self.assertEqual(self.activity._keys, [(doom_core.KEY_USE, True)])
+        self.assertIn(doom_core.KEY_USE, self.activity._held)
+
+    def test_the_menu_band_taps_escape(self):
+        self._touch_game(lv.EVENT.PRESSED, 240, 20)
         self.assertEqual(self.activity._keys, [
             (doom_core.KEY_ESCAPE, True), (doom_core.KEY_ESCAPE, False),
         ])
-        self.assertEqual(self.activity._touch_key, 0)
 
-    def test_the_panel_top_edge_is_not_the_menu(self):
-        x = self.activity._surface._image_x + SURFACE_WIDTH // 2
+    def test_a_thumb_at_the_panel_bottom_is_the_button_side(self):
+        # The rotation guard: the panel's bottom edge is Doom's *right*, so it
+        # must land in a button band, not on the joystick.
+        x = self.activity._surface._image_x + 100
+        self._touch(lv.EVENT.PRESSED, x, SURFACE_HEIGHT - 10)
+        self.assertEqual(self.activity._zone, "use")
+
+    def test_a_thumb_at_the_panel_top_is_the_joystick(self):
+        x = self.activity._surface._image_x + 100
         self._touch(lv.EVENT.PRESSED, x, 10)
-        # Panel (middle, top) is Doom's far left, and a movement zone.
-        self.assertEqual(self.activity._keys, [(doom_core.KEY_LEFTARROW, True)])
+        self.assertEqual(self.activity._zone, "stick")
+        self.assertEqual(self.activity._keys, [])
 
     # -- measurements -----------------------------------------------------
 
