@@ -102,6 +102,7 @@ class DoomCore(Activity):
     _fps_frames = 0
     _wad = None
     _error = None
+    _keys_sent = 0
     _tick_us = 0
     _present_us = 0
     _touch_key = 0
@@ -239,6 +240,7 @@ class DoomCore(Activity):
         if not self._keys:
             return -1
         code, pressed = self._keys.pop(0)
+        self._keys_sent += 1
         return (code & 0xFF) | (0x100 if pressed else 0)
 
     def _read_file(self, path, offset, into):
@@ -326,6 +328,7 @@ class DoomCore(Activity):
             "frames": self._frames,
             "wad": self._wad,
             "error": self._error,
+            "keys": self._keys_sent,
             "bands": self._surface.band_count if self._surface else 0,
             "rows_per_band": self._surface.rows_per_band if self._surface else 0,
         }
