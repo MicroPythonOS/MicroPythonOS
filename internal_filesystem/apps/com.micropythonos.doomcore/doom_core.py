@@ -343,9 +343,11 @@ class DoomCore(Activity):
             self._hold(KEY_LEFTARROW)
         elif key == lv.KEY.ENTER:
             # A is ENTER: menu select, and "use" while playing (ENTER itself is
-            # not bound in game, so both can be sent).
+            # not bound in game, so both can be sent). Use has to stay down for
+            # a tic: the engine drains the whole queue per frame, so a press and
+            # a release queued together cancel out before the tic is built.
             self.key(KEY_ENTER)
-            self.key(KEY_USE)
+            self._hold(KEY_USE)
         elif key == lv.KEY.ESC:
             self.key(KEY_ESCAPE)
         elif key == ord("B"):
@@ -367,6 +369,11 @@ class DoomCore(Activity):
         return KEY_UPARROW
 
     def _on_touch(self, event):
+        # LVGL also sends PRESSED/RELEASED to the focused object when ENTER is
+        # pressed on a keypad, so only a pointer may drive the touch zones.
+        indev = lv.indev_active()
+        if indev is not None and indev.get_type() != lv.INDEV_TYPE.POINTER:
+            return
         code = event.get_code()
         if code == lv.EVENT.PRESSED:
             x, y = InputManager.pointer_xy()
@@ -386,7 +393,7 @@ class DoomCore(Activity):
                 held = time.ticks_diff(time.ticks_ms(), self._touch_ms)
                 self._last_touch = ("r", self._touch_key, held)
                 if self._touch_key == KEY_UPARROW and held < TAP_MS:
-                    self.key(KEY_FIRE)
+                    self._hold(KEY_FIRE)
                 self._touch_key = 0
 
     # -- hint -------------------------------------------------------------

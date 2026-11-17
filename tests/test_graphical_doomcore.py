@@ -166,10 +166,15 @@ class TestDoomCoreActivity(unittest.TestCase):
 
     def test_enter_selects_and_uses(self):
         self.activity._on_key(_Event(key=lv.KEY.ENTER))
+        # ENTER is event-driven (a menu acts on the keydown), so it taps. USE is
+        # state-driven and stays held: the engine drains its whole queue in one
+        # frame, so a release queued straight after the press would cancel it
+        # before the tic is built and the door would never open.
         self.assertEqual(self.activity._keys, [
             (doom_core.KEY_ENTER, True), (doom_core.KEY_ENTER, False),
-            (doom_core.KEY_USE, True), (doom_core.KEY_USE, False),
+            (doom_core.KEY_USE, True),
         ])
+        self.assertIn(doom_core.KEY_USE, self.activity._held)
 
     def test_fire_button_is_held_and_then_released(self):
         self.activity._on_key(_Event(key=ord("B")))
@@ -236,8 +241,10 @@ class TestDoomCoreActivity(unittest.TestCase):
         self.assertEqual(self.activity._keys, [
             (doom_core.KEY_UPARROW, True),
             (doom_core.KEY_UPARROW, False),
-            (doom_core.KEY_FIRE, True), (doom_core.KEY_FIRE, False),
+            (doom_core.KEY_FIRE, True),
         ])
+        # Fired like a button, not tapped: see test_enter_selects_and_uses.
+        self.assertIn(doom_core.KEY_FIRE, self.activity._held)
 
     def test_touch_on_the_top_edge_opens_the_menu(self):
         self._touch(lv.EVENT.PRESSED, self._width() // 2, 4)

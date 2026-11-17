@@ -17,7 +17,7 @@ import unittest
 import lvgl as lv
 
 import mpos.ui
-from mpos import AppManager
+from mpos import AppManager, InputManager
 from mpos.ui.view import remove_and_stop_current_activity, screen_stack
 
 _APP_DIR = "apps/com.micropythonos.doom"
@@ -71,6 +71,19 @@ class TestDoomModule(unittest.TestCase):
         self.assertEqual(doom.KEY_ENTER, 13)
 
 
+class _Event:
+    def __init__(self, code=None, key=None):
+        self._code = code
+        self._key = key
+
+    def get_code(self):
+        return self._code
+
+    def get_key(self):
+        return self._key
+
+
+
 class TestDoomActivity(unittest.TestCase):
 
     def setUp(self):
@@ -120,6 +133,69 @@ class TestDoomActivity(unittest.TestCase):
         frames = self.activity.get_stats()["frames"]
         _wait_ms(300)
         self.assertEqual(self.activity.get_stats()["frames"], frames)
+
+    # -- input ------------------------------------------------------------
+
+    def _touch(self, code, x, y):
+        InputManager.pointer_xy = staticmethod(lambda: (x, y))
+        self.activity._on_touch(_Event(code=code))
+
+    def _width(self):
+        return mpos.ui.main_display.get_horizontal_resolution()
+
+    def test_arrow_keys_turn_and_are_released_after_the_hold(self):
+        self.activity.onPause(None)
+        self.activity._on_key(_Event(key=lv.KEY.LEFT))
+        self.assertEqual(self.activity.get_stats()["keys"], 1)
+        self.assertIn(doom.KEY_LEFT, self.activity._held)
+
+        # The frame loop drops a hold nobody refreshed: the SDL keyboard and a
+        # badge keypad report presses, not releases.
+        later = time.ticks_add(time.ticks_ms(), 1000)
+        self.activity._release_held(later)
+        self.assertEqual(self.activity.get_stats()["keys"], 2)
+        self.assertEqual(self.activity._held, {})
+
+    def test_y_opens_the_doom_menu(self):
+        # Esc is the OS "back" key on the desktop and on the 2026 badge, so Y
+        # is Doom's own menu.
+        self.activity.onPause(None)
+        self.activity._on_key(_Event(key=ord("y")))
+        self.assertEqual(self.activity.get_stats()["keys"], 2)
+        self.assertEqual(self.activity._held, {})
+
+    def test_enter_selects_in_a_menu_and_holds_use(self):
+        self.activity.onPause(None)
+        self.activity._on_key(_Event(key=lv.KEY.ENTER))
+        # A menu acts on the keydown, so ENTER taps; USE has to stay down for a
+        # tic or the release cancels it before the tic that opens the door.
+        self.assertEqual(self.activity.get_stats()["keys"], 3)
+        self.assertIn(doom.KEY_USE, self.activity._held)
+
+    def test_middle_tap_walks_and_fires(self):
+        self.activity.onPause(None)
+        x = self._width() // 2
+        self._touch(lv.EVENT.PRESSED, x, HEIGHT // 2)
+        self.assertEqual(self.activity._touch_key, doom.KEY_UP)
+        self._touch(lv.EVENT.RELEASED, x, HEIGHT // 2)
+        self.assertEqual(self.activity._touch_key, 0)
+        self.assertEqual(self.activity.get_stats()["keys"], 3)
+        # The tap fires: fire is held for a tic, like a button press.
+        self.assertIn(doom.KEY_FIRE, self.activity._held)
+
+    def test_the_top_edge_opens_the_menu(self):
+        self.activity.onPause(None)
+        self._touch(lv.EVENT.PRESSED, self._width() // 2, 4)
+        self.assertEqual(self.activity.get_stats()["keys"], 2)
+        self.assertEqual(self.activity._touch_key, 0)
+
+    def test_pausing_releases_held_keys(self):
+        self.activity.onPause(None)
+        self.activity._on_key(_Event(key=lv.KEY.RIGHT))
+        self.assertIn(doom.KEY_RIGHT, self.activity._held)
+        self.activity.onPause(None)
+        self.assertEqual(self.activity.get_stats()["keys"], 2)
+        self.assertEqual(self.activity._held, {})
 
 
 class TestDoomOnTheRealDisplay(unittest.TestCase):
