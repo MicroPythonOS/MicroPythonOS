@@ -397,6 +397,9 @@ class DoomCore(Activity):
         label.set_style_text_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
         label.set_style_pad_all(6, lv.PART.MAIN)
         label.set_style_radius(6, lv.PART.MAIN)
+        # The surface is rotated by the core, so an overlay has to be rotated
+        # too: drawn as-is it would read sideways on the panel.
+        label.set_style_transform_rotation(900, lv.PART.MAIN)
         label.align(lv.ALIGN.CENTER, 0, 0)
         label.remove_flag(lv.obj.FLAG.CLICKABLE)
         self.hint = label
