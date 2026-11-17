@@ -180,6 +180,9 @@ class AviReader:
         size = self._file.seek(0, 2)
         head = self._read_at(0, 12)
         if len(head) < 12 or head[0:4] != b"RIFF" or head[8:12] != b"AVI ":
+            if len(head) >= 12 and head[0:4] == b"RIFF" and head[8:12] == b"AMV ":
+                raise UnsupportedFormat(
+                    "AMV files are not supported (convert to MJPEG AVI first)")
             raise UnsupportedFormat(
                 "not an AVI file (only AVI with MJPEG video is supported)")
         pos = 12

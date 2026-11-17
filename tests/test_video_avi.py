@@ -170,6 +170,17 @@ class TestAviReader(unittest.TestCase):
             video_avi.AviReader(self._write(b"\xff\xd8not riff\xff\xd9" * 4))
         self.assertIn("not an AVI", caught.exception.message)
 
+    def test_rejects_an_amv_file_by_name(self):
+        # AMV (cheap MP5/MP4-player rips) is MJPEG + IMA ADPCM in a RIFF with
+        # a zero size, form type "AMV " and a stub header. Name it instead of
+        # reporting a generic "not an AVI".
+        data = (b"RIFF" + bytes(4) + b"AMV " + b"LIST" + bytes(4) + b"hdrl"
+                + b"amvh" + (0x38).to_bytes(4, "little") + bytes(0x38))
+        with self.assertRaises(video_avi.UnsupportedFormat) as caught:
+            video_avi.AviReader(self._write(data))
+        self.assertIn("AMV", caught.exception.message)
+        self.assertIn("MJPEG AVI", caught.exception.message)
+
     def test_rejects_a_video_codec_it_cannot_play(self):
         frames = [jpeg(b"a")]
         with self.assertRaises(video_avi.UnsupportedFormat) as caught:
