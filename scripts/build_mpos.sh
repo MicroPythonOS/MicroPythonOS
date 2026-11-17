@@ -219,7 +219,7 @@ if ! grep "$rellvglmani" "$camani"; then
 	echo "Resulting file:"
 	cat "$camani"
 else
-	echo "No need to add include(\"$abslvglmani\") to $camani"
+	echo "No need to add include(\"$rellvglmani\") to $camani"
 fi
 
 echo "Check need to add asyncio..."
