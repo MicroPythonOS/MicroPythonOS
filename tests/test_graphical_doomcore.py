@@ -68,6 +68,10 @@ class _FakeSurface:
     rows_per_band = 72
     band_count = 5
 
+    # A 240x320 panel letterboxes the 200-wide surface by 20 px a side.
+    _image_x = 20
+    _image_y = 0
+
     def __init__(self, screen=None, width=None, height=None, buffer=None):
         self.buffer = bytearray(SURFACE_WIDTH * SURFACE_HEIGHT * 2)
         self._active = True
@@ -224,19 +228,40 @@ class TestDoomCoreActivity(unittest.TestCase):
     def _width(self):
         return mpos.ui.main_display.get_horizontal_resolution()
 
-    def test_left_third_turns_left(self):
-        self._touch(lv.EVENT.PRESSED, self._width() // 6, SURFACE_HEIGHT // 2)
+    def _panel(self, sx, sy):
+        """Game point -> panel point: the inverse of the core's rotation."""
+        return (self.activity._surface._image_x + (SURFACE_WIDTH - 1 - sy),
+                self.activity._surface._image_y + sx)
+
+    def _touch_game(self, code, sx, sy):
+        x, y = self._panel(sx, sy)
+        self._touch(code, x, y)
+
+    def test_the_game_left_third_turns_left(self):
+        self._touch_game(lv.EVENT.PRESSED, SURFACE_HEIGHT // 6, SURFACE_WIDTH // 2)
         self.assertEqual(self.activity._keys, [(doom_core.KEY_LEFTARROW, True)])
 
-        self._touch(lv.EVENT.RELEASED, self._width() // 6, SURFACE_HEIGHT // 2)
+        self._touch_game(lv.EVENT.RELEASED, SURFACE_HEIGHT // 6, SURFACE_WIDTH // 2)
         self.assertEqual(self.activity._keys, [
             (doom_core.KEY_LEFTARROW, True), (doom_core.KEY_LEFTARROW, False),
         ])
 
+    def test_the_game_right_third_turns_right(self):
+        self._touch_game(lv.EVENT.PRESSED, SURFACE_HEIGHT - 10, SURFACE_WIDTH // 2)
+        self.assertEqual(self.activity._keys, [(doom_core.KEY_RIGHTARROW, True)])
+
+    def test_a_thumb_at_the_panel_bottom_is_doom_right(self):
+        # The bug this guards: the zones used to slice the panel's horizontal
+        # axis, so the panel's left edge meant "turn left". Doom's own axis runs
+        # down the panel, and its left is the panel's top.
+        x = self.activity._surface._image_x + SURFACE_WIDTH // 2
+        self._touch(lv.EVENT.PRESSED, x, SURFACE_HEIGHT - 10)
+        self.assertEqual(self.activity._keys, [(doom_core.KEY_RIGHTARROW, True)])
+
     def test_middle_tap_walks_and_fires(self):
-        middle = self._width() // 2
-        self._touch(lv.EVENT.PRESSED, middle, SURFACE_HEIGHT // 2)
-        self._touch(lv.EVENT.RELEASED, middle, SURFACE_HEIGHT // 2)
+        middle = SURFACE_HEIGHT // 2
+        self._touch_game(lv.EVENT.PRESSED, middle, SURFACE_WIDTH // 2)
+        self._touch_game(lv.EVENT.RELEASED, middle, SURFACE_WIDTH // 2)
 
         self.assertEqual(self.activity._keys, [
             (doom_core.KEY_UPARROW, True),
@@ -246,12 +271,20 @@ class TestDoomCoreActivity(unittest.TestCase):
         # Fired like a button, not tapped: see test_enter_selects_and_uses.
         self.assertIn(doom_core.KEY_FIRE, self.activity._held)
 
-    def test_touch_on_the_top_edge_opens_the_menu(self):
-        self._touch(lv.EVENT.PRESSED, self._width() // 2, 4)
+    def test_dooms_top_edge_opens_the_menu(self):
+        # The top of Doom's frame is the picture's far edge on the panel, not
+        # the panel's top: the strip is 24 game pixels of Doom's y.
+        self._touch_game(lv.EVENT.PRESSED, SURFACE_HEIGHT // 2, 4)
         self.assertEqual(self.activity._keys, [
             (doom_core.KEY_ESCAPE, True), (doom_core.KEY_ESCAPE, False),
         ])
         self.assertEqual(self.activity._touch_key, 0)
+
+    def test_the_panel_top_edge_is_not_the_menu(self):
+        x = self.activity._surface._image_x + SURFACE_WIDTH // 2
+        self._touch(lv.EVENT.PRESSED, x, 10)
+        # Panel (middle, top) is Doom's far left, and a movement zone.
+        self.assertEqual(self.activity._keys, [(doom_core.KEY_LEFTARROW, True)])
 
     # -- measurements -----------------------------------------------------
 

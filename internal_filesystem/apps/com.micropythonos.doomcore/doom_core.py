@@ -359,12 +359,27 @@ class DoomCore(Activity):
         elif key == lv.KEY.END:
             self.key(KEY_ESCAPE)
 
-    def _touch_code(self, x):
-        # Left third turns left, right third turns right, the middle walks.
-        width = mpos.ui.main_display.get_horizontal_resolution()
-        if x < width // 3:
+    def _to_game(self, x, y):
+        """Panel point -> Doom's own frame.
+
+        The core turns Doom's 320x200 landscape frame into this portrait
+        surface: a source pixel (sx, sy) lands at surface (199 - sy, sx), so
+        the game's left-to-right axis runs down the panel and its forward axis
+        runs across it. Touch coordinates arrive in panel space; until they are
+        turned back, a thumb at the panel's left edge means Doom's *top*.
+        """
+        surface = self._surface
+        sx = y - surface._image_y
+        sy = (SURFACE_WIDTH - 1) - (x - surface._image_x)
+        return sx, sy
+
+    def _zone_key(self, sx):
+        # Doom's left third turns left, its right third turns right, the middle
+        # walks. sx is in game space, not panel space.
+        width = SURFACE_HEIGHT
+        if sx < width // 3:
             return KEY_LEFTARROW
-        if x > (2 * width) // 3:
+        if sx > (2 * width) // 3:
             return KEY_RIGHTARROW
         return KEY_UPARROW
 
@@ -378,14 +393,16 @@ class DoomCore(Activity):
         if code == lv.EVENT.PRESSED:
             x, y = InputManager.pointer_xy()
             self._expire_hint(time.ticks_ms())
-            if y < MENU_STRIP_PX:
-                # The top edge is the menu, not a movement zone.
+            sx, sy = self._to_game(x, y)
+            if sy < MENU_STRIP_PX:
+                # Doom's own top edge is the menu, not a movement zone.
                 self._touch_key = 0
+                self._last_touch = ("m", x, y, sx, sy)
                 self.key(KEY_ESCAPE)
                 return
-            self._touch_key = self._touch_code(x)
+            self._touch_key = self._zone_key(sx)
             self._touch_ms = time.ticks_ms()
-            self._last_touch = ("p", x, y, self._touch_key)
+            self._last_touch = ("p", x, y, sx, sy, self._touch_key)
             self._keys.append((self._touch_key, True))
         elif code == lv.EVENT.RELEASED:
             if self._touch_key:
