@@ -162,13 +162,20 @@ static esp_err_t map_arena(uint32_t vaddr, void *buf, uint32_t size) {
 }
 
 static void unmap_arena(uint32_t vaddr, uint32_t size, void *buf) {
-    mmu_hal_unmap_region(0, vaddr, size);
+    (void)vaddr;
+    (void)size;
     heap_caps_free(buf);
 }
 
 static void unmap_fixed(uint32_t vaddr, uint32_t size, void *alias) {
-    size_t map_size = (size + CONFIG_MMU_PAGE_SIZE - 1) & ~(size_t)(CONFIG_MMU_PAGE_SIZE - 1);
-    mmu_hal_unmap_region(0, vaddr, map_size);
+    (void)vaddr;
+    (void)size;
+    // The entries we programmed by hand stay in the MMU for the rest of the
+    // boot. Invalidating them with mmu_hal_unmap_region() while the caches are
+    // live panics the chip ("Cache error", both cores) as soon as the freed
+    // pages are reused - the aliases are never read after stop(), and the next
+    // start re-maps the same addresses, so leaving them costs nothing. Only the
+    // block esp_mmu_map() booked is released, through IDF's own API.
     if (alias != NULL) {
         esp_mmu_unmap(alias);
     }

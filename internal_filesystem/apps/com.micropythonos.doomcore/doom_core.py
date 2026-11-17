@@ -129,6 +129,12 @@ class DoomCore(Activity):
                 if __debug__:
                     print("doom: no WAD found, looked at %s" % (WAD_CANDIDATES,))
             else:
+                # An earlier session may have left the core mapped (an activity
+                # that was torn down by an exception never reaches onStop).
+                try:
+                    mpos_core.stop()
+                except Exception:
+                    pass
                 # MicroPython does not trace C statics, so the callbacks live
                 # here for as long as the core does.
                 self._callbacks = (
