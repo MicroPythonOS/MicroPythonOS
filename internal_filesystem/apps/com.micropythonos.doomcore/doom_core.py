@@ -193,6 +193,12 @@ class DoomCore(Activity):
             self._surface.end()
 
     def onStop(self, screen):
+        # Leave the shared focus group clean: the framework also does this, but
+        # an activity that is torn down without it leaves a widget behind.
+        try:
+            lv.group_get_default().remove_obj(self.screen)
+        except Exception:
+            pass
         if self._started:
             try:
                 mpos_core.stop()
