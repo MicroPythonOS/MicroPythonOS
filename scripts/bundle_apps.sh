@@ -135,7 +135,10 @@ for apprepo in internal_filesystem/apps; do
             find -L "$appfullpath" -exec touch -t 202501010000.00 {} \;
             rm -f "$mpkname"
             echo "Creating $mpkname with deterministic file order..."
-            (cd "$apprepo" && (find -L "$appdir" -type d; find -L "$appdir" -type f) | grep -v ".git/" | grep -v "__pycache__" | sort | TZ=CET zip -X -r0 "$mpkname" -@)
+            # -x is what actually keeps __pycache__ out: zip -r re-walks the
+            # directory entries handed to it, so filtering the file list alone
+            # still lets zip pack the whole tree it recurses into.
+            (cd "$apprepo" && (find -L "$appdir" -type d; find -L "$appdir" -type f) | grep -v ".git/" | sort | TZ=CET zip -X -r0 "$mpkname" -@ -x "*/__pycache__/*" -x "*/__pycache__")
             if [ -f "$appfullpath/icon_64x64.png" ]; then
                 icon_src="$appfullpath/icon_64x64.png"
             else
