@@ -22,6 +22,8 @@
 #include "doomstat.h"
 #include "m_menu.h"
 
+
+
 #include "doom_data_init.h"
 
 #include "../../core_abi.h"
@@ -332,10 +334,11 @@ static void core_tick(const mpos_core_abi_t *abi, uint32_t now_ms) {
     if (now - s_profile_ms >= 2000 && s_profile_frames > 1) {
         char line[112];
         snprintf(line, sizeof(line),
-                 "core: engine %.1f ms, convert %.1f ms, present %.1f ms",
+                 "core: engine %.1f ms, convert %.1f ms, present %.1f ms (gs %d menu %d)",
                  (double)s_engine_ms / s_profile_frames,
                  (double)s_convert_ms / s_profile_frames,
-                 (double)s_present_ms / s_profile_frames);
+                 (double)s_present_ms / s_profile_frames,
+                 (int)gamestate, menuactive ? 1 : 0);
         abi->log(abi->host, line);
         s_engine_ms = 0;
         s_convert_ms = 0;

@@ -27,10 +27,10 @@ Controls - touch (Waveshare 2", fri3d 2026, any touch panel):
 Controls - buttons (fri3d 2024 and 2026; both send the same key events):
 
     joystick / arrows   turn and walk
-    A (ENTER)           use / open (and menu select)
+    A (ENTER)           use / open, and select in menus
     B                   fire
-    Y                   use / open
-    X (ESC)             menu / back
+    Y                   Doom's menu / back
+    X (ESC)             leaves the app (the OS treats ESC as "back")
 
 A single-button board can only fire; the IMU could steer some day, not now.
 """
@@ -58,7 +58,10 @@ SURFACE_HEIGHT = 320
 
 TARGET_FPS = 35
 FRAME_SLACK_MS = 5
-TAP_MS = 220
+# A tap is "short" if it is released within this window. Generous on purpose:
+# the input test helper holds a press for ~100 ms of wall clock, which a busy
+# frame loop stretches to 300 ms, and a real finger is slower than that too.
+TAP_MS = 450
 HOLD_MS = 180
 HINT_MS = 6000
 MENU_STRIP_PX = 24
@@ -125,6 +128,7 @@ class DoomCore(Activity):
     _keys_sent = 0
     _touch_key = 0
     _touch_ms = 0
+    _last_touch = None
     _hint_until = 0
 
     def onCreate(self):
@@ -181,8 +185,10 @@ class DoomCore(Activity):
     def onPause(self, screen):
         self._paused = True
         mpos.ui.task_handler.remove_event_cb(self._drawframe)
+        # Nothing ticks the core while paused, so queued events and held keys
+        # are dropped rather than replayed on resume.
         self._keys = []
-        self._release_all()
+        self._held = {}
         if self._surface is not None:
             self._surface.end()
 
@@ -315,11 +321,6 @@ class DoomCore(Activity):
             self._keys.append((code, False))
             del self._held[code]
 
-    def _release_all(self):
-        for code in list(self._held):
-            self._keys.append((code, False))
-        self._held = {}
-
     def _on_key(self, event):
         key = event.get_key()
         if key == lv.KEY.LEFT:
@@ -344,7 +345,9 @@ class DoomCore(Activity):
         elif key == ord("B"):
             self._hold(KEY_FIRE)
         elif key == ord("Y"):
-            self.key(KEY_USE)
+            # Not ESC: fri3d 2026 hands ESC to the OS (back to the launcher),
+            # so the Doom menu needs a key of its own.
+            self.key(KEY_ESCAPE)
         elif key == lv.KEY.END:
             self.key(KEY_ESCAPE)
 
@@ -369,12 +372,14 @@ class DoomCore(Activity):
                 return
             self._touch_key = self._touch_code(x)
             self._touch_ms = time.ticks_ms()
+            self._last_touch = ("p", x, y, self._touch_key)
             self._keys.append((self._touch_key, True))
         elif code == lv.EVENT.RELEASED:
             if self._touch_key:
                 self._keys.append((self._touch_key, False))
-                if (self._touch_key == KEY_UPARROW
-                        and time.ticks_diff(time.ticks_ms(), self._touch_ms) < TAP_MS):
+                held = time.ticks_diff(time.ticks_ms(), self._touch_ms)
+                self._last_touch = ("r", self._touch_key, held)
+                if self._touch_key == KEY_UPARROW and held < TAP_MS:
                     self.key(KEY_FIRE)
                 self._touch_key = 0
 
@@ -383,7 +388,7 @@ class DoomCore(Activity):
     def _show_hint(self):
         text = ("turn: left / right\n"
                 "walk: middle\n"
-                "fire: tap\n"
+                "fire / select: tap\n"
                 "menu: top edge")
         label = lv.label(self.screen)
         label.set_text(text)
@@ -411,6 +416,7 @@ class DoomCore(Activity):
             "wad": self._wad,
             "error": self._error,
             "keys": self._keys_sent,
+            "touch": self._last_touch,
             "bands": self._surface.band_count if self._surface else 0,
             "rows_per_band": self._surface.rows_per_band if self._surface else 0,
         }

@@ -592,7 +592,7 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     }
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mpos_core_start_obj, 12, 12, mpos_core_start);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mpos_core_start_obj, 14, 14, mpos_core_start);
 
 static mp_obj_t mpos_core_tick(mp_obj_t now_obj) {
     if (!s_active || s_entry == NULL) {

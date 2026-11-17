@@ -194,6 +194,13 @@ class TestDoomCoreActivity(unittest.TestCase):
             (doom_core.KEY_ESCAPE, True), (doom_core.KEY_ESCAPE, False),
         ])
 
+    def test_y_opens_the_doom_menu(self):
+        # X is the OS back key on the 2026 badge, so Y is Doom's own menu.
+        self.activity._on_key(_Event(key=ord("Y")))
+        self.assertEqual(self.activity._keys, [
+            (doom_core.KEY_ESCAPE, True), (doom_core.KEY_ESCAPE, False),
+        ])
+
     def test_held_key_is_released_on_the_next_frame(self):
         self.activity._on_key(_Event(key=lv.KEY.LEFT))
         self.activity._held[doom_core.KEY_LEFTARROW] = time.ticks_add(time.ticks_ms(), -1)
