@@ -102,6 +102,8 @@ class DoomCore(Activity):
     _fps_frames = 0
     _wad = None
     _error = None
+    _tick_us = 0
+    _present_us = 0
     _touch_key = 0
     _touch_ms = 0
 
@@ -178,6 +180,7 @@ class DoomCore(Activity):
             return
         self._next_frame_ms = time.ticks_add(now, self._frame_interval_ms)
 
+        tick_us = time.ticks_us()
         try:
             mpos_core.tick(now)
         except Exception as error:
@@ -187,6 +190,9 @@ class DoomCore(Activity):
             print("doom: tick failed: %s" % (error,))
             return
 
+        tick_us = time.ticks_diff(time.ticks_us(), tick_us)
+        present_us = time.ticks_us()
+
         # The core already wrote the pixels; this only invalidates and flushes.
         surface = self._surface
         for band in range(surface.band_count):
@@ -194,15 +200,24 @@ class DoomCore(Activity):
         surface.frames += 1
         surface.flush()
 
+        present_us = time.ticks_diff(time.ticks_us(), present_us)
+        self._tick_us += tick_us
+        self._present_us += present_us
+
         self._frames += 1
         self._fps_frames += 1
         elapsed = time.ticks_diff(now, self._fps_since)
         if elapsed >= 1000:
-            self._fps = self._fps_frames * 1000.0 / elapsed
+            frames = self._fps_frames
+            self._fps = frames * 1000.0 / elapsed
             self._fps_frames = 0
             self._fps_since = now
-            if __debug__:
-                print("doom: %.1f fps" % self._fps)
+            if __debug__ and frames:
+                print("doom: %.1f fps, tick %.1f ms, present %.1f ms" % (
+                    self._fps, self._tick_us / 1000.0 / frames,
+                    self._present_us / 1000.0 / frames))
+            self._tick_us = 0
+            self._present_us = 0
 
     # -- ABI callbacks ----------------------------------------------------
 

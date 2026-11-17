@@ -162,23 +162,26 @@ static void build_surface(const mpos_core_abi_t *abi) {
 
     // Transpose in tiles, not pixel by pixel: an output row is a source
     // *column*, so the naive loop reads one byte per 320-byte stride and the
-    // cache thrashes (measured: the whole frame took ~40ms that way). A 32x32
-    // tile keeps both the reads and the writes contiguous.
+    // cache thrashes. A 32x32 tile keeps the reads and the writes contiguous.
+    //
+    // dst(dx, dy) = src(dy, src_h - 1 - dx): the engine's x axis runs down the
+    // panel, its y axis runs left to right, which is what puts the picture
+    // upright when the device lies on its long side.
     for (int dy0 = 0; dy0 < out_h; dy0 += 32) {
         const int rows = (out_h - dy0) < 32 ? (out_h - dy0) : 32;
         for (int dx0 = 0; dx0 < out_w; dx0 += 32) {
             const int cols = (out_w - dx0) < 32 ? (out_w - dx0) : 32;
-            for (int sy = 0; sy < cols; sy++) {
-                const int sx = src_w - 1 - (dy0 + rows - 1);
-                const uint8_t *src_row = src + (dx0 + sy) * src_w + sx;
-                for (int ry = 0; ry < rows; ry++) {
-                    s_tile[ry][sy] = s_palette[src_row[rows - 1 - ry]];
+            for (int c = 0; c < cols; c++) {
+                const int sy = src_h - 1 - (dx0 + c);
+                const uint8_t *src_row = src + sy * src_w + dy0;
+                for (int r = 0; r < rows; r++) {
+                    s_tile[r][c] = s_palette[src_row[r]];
                 }
             }
-            for (int ry = 0; ry < rows; ry++) {
-                uint16_t *row = &s_surface[(dy0 + ry) * out_w + dx0];
-                for (int sy = 0; sy < cols; sy++) {
-                    row[sy] = s_tile[ry][sy];
+            for (int r = 0; r < rows; r++) {
+                uint16_t *row = &s_surface[(dy0 + r) * out_w + dx0];
+                for (int c = 0; c < cols; c++) {
+                    row[c] = s_tile[r][c];
                 }
             }
         }
