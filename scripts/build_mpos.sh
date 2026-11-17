@@ -204,12 +204,18 @@ cat "$idfile"
 
 echo "Check need to add lvgl_micropython manifest to micropython-camera-API's manifest..."
 camani="$codebasedir"/micropython-camera-API/src/manifest.py
-rellvglmani=lvgl_micropython/build/manifest.py
-abslvglmani="$codebasedir"/"$rellvglmani"
+rellvglmani=../../lvgl_micropython/build/manifest.py
+if grep -q '^include("/' "$camani"; then
+	# Earlier builds appended an absolute include, which baked this checkout's
+	# path into a tracked file. Drop it; manifest includes resolve relative to
+	# the manifest doing the including.
+	echo "Removing absolute manifest include from $camani"
+	sed -i.bak '/^include("\//d' "$camani" && rm -f "$camani".bak
+fi
 if ! grep "$rellvglmani" "$camani"; then
-	echo "Adding include(\"$abslvglmani\") to $camani"
+	echo "Adding include(\"$rellvglmani\") to $camani"
 	echo >> "$camani" # needs newline because file doesn't have newline at the end
-	echo "include(\"$abslvglmani\") # workaround to prevent micropython-camera-API from overriding the lvgl_micropython manifest..." >> "$camani"
+	echo "include(\"$rellvglmani\") # workaround to prevent micropython-camera-API from overriding the lvgl_micropython manifest..." >> "$camani"
 	echo "Resulting file:"
 	cat "$camani"
 else
