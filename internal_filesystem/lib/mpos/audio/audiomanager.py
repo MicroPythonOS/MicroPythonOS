@@ -190,7 +190,12 @@ class AudioManager:
 
     @classmethod
     def get(cls):
-        if cls._instance is None:
+        # __new__ caches the singleton before __init__ runs, so a constructor
+        # call that raises (a wrong keyword argument, a preferences read that
+        # fails at boot) would leave a half-built instance behind every later
+        # caller. Rebuild one that never finished initialising.
+        if cls._instance is None or not getattr(cls._instance, "_initialized", False):
+            cls._instance = None
             cls._instance = cls()
         return cls._instance
 

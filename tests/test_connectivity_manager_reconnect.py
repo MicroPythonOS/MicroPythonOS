@@ -12,12 +12,11 @@ sys.path.insert(0, "../tests")
 from mpos.testing.mocks import make_machine_timer_module, make_usocket_module
 from network_test_helper import MockNetwork, MockTimer, MockTime, MockRequests, MockSocket
 
-# Inject machine/socket mocks
-sys.modules["machine"] = make_machine_timer_module(MockTimer)
-sys.modules["usocket"] = make_usocket_module(MockSocket)
-sys.modules['requests'] = MockRequests()
-
-# Mock _thread to run spawned threads synchronously
+# Mocks for machine/socket/threads/WifiService. Installed for this module's
+# tests only: on a device the whole suite runs in one interpreter, and a
+# module-level `sys.modules["_thread"] = MockThreadModule` would leave every
+# later test without the real _thread (About and AppStore then fail with
+# "'MockThreadModule' object has no attribute 'get_ident'").
 _thread_calls = []
 
 class MockThreadModule:
@@ -30,9 +29,6 @@ class MockThreadModule:
     def stack_size(s=0):
         return 0
 
-sys.modules['_thread'] = MockThreadModule
-
-# Mock WifiService
 _auto_connect_calls = []
 
 class MockWifiService:
@@ -42,7 +38,32 @@ class MockWifiService:
     def auto_connect(network_module=None, time_module=None):
         _auto_connect_calls.append(True)
 
-sys.modules['mpos.net.wifi_service'] = type('module', (), {'WifiService': MockWifiService})()
+_MOCKED_MODULES = ("machine", "usocket", "requests", "_thread",
+                   "mpos.net.wifi_service")
+_saved_modules = {}
+
+
+def _install_mocks():
+    for name in _MOCKED_MODULES:
+        _saved_modules[name] = sys.modules.get(name)
+    sys.modules["machine"] = make_machine_timer_module(MockTimer)
+    sys.modules["usocket"] = make_usocket_module(MockSocket)
+    sys.modules["requests"] = MockRequests()
+    sys.modules["_thread"] = MockThreadModule
+    sys.modules["mpos.net.wifi_service"] = type(
+        "module", (), {"WifiService": MockWifiService})()
+
+
+def _restore_mocks():
+    for name in _MOCKED_MODULES:
+        original = _saved_modules.get(name)
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+    # fresh_cm_import() caches a ConnectivityManager built against the mock
+    # WifiService; drop it so the next test imports the real one.
+    sys.modules.pop("mpos.net.connectivity_manager", None)
 
 
 def fresh_cm_import(mock_network):
@@ -63,6 +84,7 @@ class TestReconnectOfflineCounter(unittest.TestCase):
     """Test that offline checks are counted correctly."""
 
     def setUp(self):
+        _install_mocks()
         self.mock_network = MockNetwork(connected=False)
         MockTimer.reset_all()
         _auto_connect_calls.clear()
@@ -71,6 +93,7 @@ class TestReconnectOfflineCounter(unittest.TestCase):
         self.ConnectivityManager = fresh_cm_import(self.mock_network)
 
     def tearDown(self):
+        _restore_mocks()
         self.ConnectivityManager._instance = None
         MockTimer.reset_all()
 
@@ -116,6 +139,7 @@ class TestReconnectTrigger(unittest.TestCase):
     """Test that reconnection is triggered at the right time."""
 
     def setUp(self):
+        _install_mocks()
         self.mock_network = MockNetwork(connected=False)
         MockTimer.reset_all()
         _auto_connect_calls.clear()
@@ -124,6 +148,7 @@ class TestReconnectTrigger(unittest.TestCase):
         self.ConnectivityManager = fresh_cm_import(self.mock_network)
 
     def tearDown(self):
+        _restore_mocks()
         self.ConnectivityManager._instance = None
         MockTimer.reset_all()
 
@@ -206,6 +231,7 @@ class TestReconnectDesktopMode(unittest.TestCase):
     """Test that reconnection is not attempted on desktop."""
 
     def setUp(self):
+        _install_mocks()
         if 'network' in sys.modules:
             del sys.modules['network']
         if 'mpos.net.connectivity_manager' in sys.modules:
@@ -218,6 +244,7 @@ class TestReconnectDesktopMode(unittest.TestCase):
         _auto_connect_calls.clear()
 
     def tearDown(self):
+        _restore_mocks()
         self.ConnectivityManager._instance = None
         MockTimer.reset_all()
 
@@ -237,6 +264,7 @@ class TestReconnectRouterScenario(unittest.TestCase):
     """Integration test: router off overnight, back on in the morning."""
 
     def setUp(self):
+        _install_mocks()
         self.mock_network = MockNetwork(connected=False)
         MockTimer.reset_all()
         _auto_connect_calls.clear()
@@ -245,6 +273,7 @@ class TestReconnectRouterScenario(unittest.TestCase):
         self.ConnectivityManager = fresh_cm_import(self.mock_network)
 
     def tearDown(self):
+        _restore_mocks()
         self.ConnectivityManager._instance = None
         MockTimer.reset_all()
 
