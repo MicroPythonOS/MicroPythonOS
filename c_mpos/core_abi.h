@@ -1,5 +1,5 @@
 /*
- * mpos_core ABI v2 — the contract between MicroPythonOS and a loadable native
+ * mpos_core ABI — the contract between MicroPythonOS and a loadable native
  * core (Doom first, other engines later).
  *
  * Why this exists
