@@ -39,11 +39,16 @@ class PcmSink:
         self._i2s = None
         self._mck = None
         self._buzzer = None
+        self._hosted = None
         self._open()
 
     # -- opening ----------------------------------------------------------
 
     def _open_i2s(self, output):
+        if not hasattr(machine, "I2S"):
+            # A desktop or a browser declares an i2s output for the settings UI
+            # but has no machine.I2S: its speakers are the host's.
+            return self._open_hosted()
         pins = output.i2s_pins
         if not pins:
             return False
@@ -67,6 +72,17 @@ class PcmSink:
         )
         # Silence for the I2S DMA ring, so the codec starts on a valid clock.
         self._i2s.write(bytearray(1024))
+        return True
+
+    def _open_hosted(self):
+        """The host's own speakers: c_mpos/hosted_audio (ALSA, or WebAudio)."""
+        try:
+            import hosted_audio
+            hosted_audio.open(rate=self.rate, channels=self.channels)
+        except Exception as error:
+            logger.warning("pcm: no hosted audio: %s", error)
+            return False
+        self._hosted = hosted_audio
         return True
 
     def _open_output(self, output):
@@ -100,17 +116,26 @@ class PcmSink:
 
     @property
     def active(self):
-        return self._i2s is not None or self._buzzer is not None
+        return (self._i2s is not None or self._buzzer is not None
+                or self._hosted is not None)
 
     def write(self, buffer):
         """Queue int16 samples; returns the number of bytes accepted."""
         if self._i2s is not None:
             return self._i2s.write(buffer)
+        if self._hosted is not None:
+            return self._hosted.write(buffer)
         if self._buzzer is not None:
             return self._buzzer.write(buffer)
         return 0
 
     def close(self):
+        if self._hosted is not None:
+            try:
+                self._hosted.close()
+            except Exception:
+                pass
+            self._hosted = None
         for name in ("_i2s", "_mck", "_buzzer"):
             device = getattr(self, name, None)
             if device is not None:
