@@ -37,7 +37,11 @@
 
 // -- SDL audio (web: WebAudio through Emscripten's SDL2 port) ----------------
 
-#include "SDL2/SDL.h"
+// The include paths end in SDL2/ (the same flags the SDL display bus uses), so
+// the header is "SDL.h" rather than "SDL2/SDL.h": the latter only worked on a
+// machine that also had libsdl2-dev installed system-wide, which is why the
+// arm64 runner (building against the bundled SDL) could not compile it.
+#include "SDL.h"
 
 static SDL_AudioDeviceID s_device;
 static unsigned int s_rate;
