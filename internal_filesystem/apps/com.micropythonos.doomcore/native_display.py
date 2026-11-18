@@ -130,7 +130,6 @@ class NativeDisplay:
         self._active = False
         self.frames = 0
         self.bands = 0
-        self._direct_cmd = None
 
     # -- lifecycle --------------------------------------------------------
 
@@ -141,57 +140,9 @@ class NativeDisplay:
         self.bands = 0
         self.invalidate_all()
 
-    # -- direct presenting ------------------------------------------------
-
-    def direct_start(self):
-        """Stop feeding LVGL and hand bands to the panel bus itself.
-
-        LVGL copies a changed band into its own draw buffer and then DMAs
-        that, so its ``flush()`` adds a 128 KB copy per frame and waits for the
-        panel before returning. A renderer that redraws the whole frame every
-        time can skip both: each band goes to the bus as it is finished, and the
-        transfer of one band runs while the next is converted.
-
-        The window is set *once*, for the whole surface: the controller's write
-        pointer walks through it, so the bands must be sent in order and cover
-        it completely (they do). Setting the window per band costs ~6 ms,
-        because a parameter transfer waits for the queued colour transfer.
-
-        The band is the surface itself rather than a copy. The bus swaps RGB565
-        in place, which leaves the surface byte-swapped, so LVGL must not redraw
-        the image until ``direct_stop()``; the renderer rewrites every band on
-        the next frame.
-
-        No completion callback is involved - that belongs to the display driver
-        and taking it over is how a native renderer hangs LVGL.
-        """
-        if self._direct_cmd is not None:
-            return
-        x1 = self._image_x
-        y1 = self._image_y
-        self._direct_cmd = self.display._set_memory_location(
-            x1, y1, x1 + self.width - 1, y1 + self.height - 1)
-
-    def direct_stop(self):
-        """Hand the panel back to LVGL (call before anything invalidates)."""
-        self._direct_cmd = None
-
-    @property
-    def direct_active(self):
-        return self._direct_cmd is not None
-
-    def present_band_direct(self, y, rows):
-        """Send the rows ``y``..``y+rows`` of the surface, in order."""
-        if y + rows > self.height:
-            rows = self.height - y
-        start = y * self.stride
-        self.display._data_bus.tx_color(
-            self._direct_cmd,
-            memoryview(self.buffer)[start:start + rows * self.stride],
-            self._image_x, self._image_y + y,
-            self._image_x + self.width - 1, self._image_y + y + rows - 1,
-            self.display._rotation, False)
-        self.bands += 1
+    def end(self):
+        """Stop presenting: the panel belongs to someone else from now on."""
+        self._active = False
 
     # -- presenting -------------------------------------------------------
 

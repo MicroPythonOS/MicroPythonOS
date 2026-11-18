@@ -250,6 +250,23 @@ class AudioManager:
         return cls.get()._resolve_default_input()
 
     @classmethod
+    def open_pcm(cls, rate, channels=1, output=None):
+        """A ``write(buf)`` sink for audio the app synthesises itself.
+
+        The app says "here are samples"; the device is the user's choice in
+        Settings -> Audio unless the app names one (an ``Output`` or its name),
+        because an app should not have to know whether this board has a DAC, a
+        piezo, or both.
+        """
+        from mpos.audio.pcm_stream import PcmSink
+
+        if isinstance(output, str):
+            output = cls.find_output_by_name(output)
+        if output is None:
+            output = cls.get_default_output()
+        return PcmSink(rate, channels=channels, output=output)
+
+    @classmethod
     def set_default_output(cls, output):
         cls.get()._default_output = output
         if output is not None:

@@ -39,11 +39,9 @@ A single-button board can only fire; the IMU could steer some day, not now.
 import time
 
 import lvgl as lv
-import machine
 
 import mpos.ui
 from mpos import Activity, AudioManager, InputManager
-from mpos.audio.stream_buzzer import open_sink as open_buzzer_sink
 
 import mpos_core
 
@@ -141,7 +139,6 @@ class DoomCore(Activity):
     _last_touch = None
     _hint_until = 0
     _sink = None
-    _mck = None
     _audio_buffer = None
     _audio_ms = 0
     _rotated = True
@@ -212,57 +209,37 @@ class DoomCore(Activity):
     # -- audio ------------------------------------------------------------
 
     def _open_audio(self):
-        """Open a sink for the core's mixed samples: the DAC, else the buzzer.
+        """Ask the OS for somewhere to put the core's mixed samples.
 
-        The DAC path mirrors the WAV stream: MCLK is a PWM carrier at 256x the
-        sample rate and the I2S peripheral runs in MONO, so the codec duplicates
-        the single channel itself. A board with no i2s output (a fri3d 2024, an
-        odroid_go) gets the piezo buzzer instead, through the same native driver
-        the audio player uses for files - it rewrites an LEDC duty from a timer
-        interrupt at the sample rate, which makes a piezo a quiet, low-fidelity
-        speaker. Both present ``write(buf)``, so the pump does not care which.
+        Which device that is - an i2s DAC, the piezo buzzer, whatever a board
+        has - is not this app's business: the user picks it in Settings -> Audio
+        and ``AudioManager.open_pcm`` resolves it, the same rule every other app
+        follows. The sink takes int16 mono samples at SAMPLE_RATE.
         """
         try:
-            output = AudioManager.find_output_by_kind("i2s")
-            if output is not None and output.i2s_pins:
-                pins = output.i2s_pins
-                if "mck" in pins:
-                    self._mck = machine.PWM(
-                        machine.Pin(pins["mck"], machine.Pin.OUT))
-                    self._mck.freq(SAMPLE_RATE * 256)
-                    self._mck.duty_u16(32768)
-                self._sink = machine.I2S(
-                    0,
-                    sck=machine.Pin(pins["sck"], machine.Pin.OUT),
-                    ws=machine.Pin(pins["ws"], machine.Pin.OUT),
-                    sd=machine.Pin(pins["sd"], machine.Pin.OUT),
-                    mode=machine.I2S.TX,
-                    bits=16,
-                    format=machine.I2S.MONO,
-                    rate=SAMPLE_RATE,
-                    ibuf=8192,
-                )
-            else:
-                self._sink = open_buzzer_sink(
-                    AudioManager.find_output_by_kind("buzzer"), SAMPLE_RATE)
-            if self._sink is None:
-                return
-            self._audio_buffer = bytearray(2048 * 2)
-            self._audio_ms = time.ticks_ms()
-            self._sink.write(bytearray(1024))
+            # Firmware older than the PCM sink API has no open_pcm: the game
+            # still runs, silently, which is better than refusing to start.
+            self._sink = AudioManager.open_pcm(SAMPLE_RATE)
+        except AttributeError:
+            self._sink = None
+            return
         except Exception as error:
             print("doom: audio init failed: %s" % (error,))
-            self._close_audio()
+            self._sink = None
+            return
+        if self._sink is None or not self._sink.active:
+            self._sink = None
+            return
+        self._audio_buffer = bytearray(2048 * 2)
+        self._audio_ms = time.ticks_ms()
 
     def _close_audio(self):
-        for name in ("_sink", "_mck"):
-            device = getattr(self, name, None)
-            if device is not None:
-                try:
-                    device.deinit()
-                except Exception:
-                    pass
-                setattr(self, name, None)
+        if self._sink is not None:
+            try:
+                self._sink.close()
+            except Exception:
+                pass
+            self._sink = None
         self._audio_buffer = None
 
     def _pump_audio(self, now):
@@ -290,9 +267,6 @@ class DoomCore(Activity):
         self._paused = True
         mpos.ui.task_handler.remove_event_cb(self._drawframe)
         self._close_audio()
-        if self._surface is not None:
-            # Hand the panel back before anything else draws on it.
-            self._surface.direct_stop()
         # Nothing ticks the core while paused, so queued events and held keys
         # are dropped rather than replayed on resume.
         self._keys = []
@@ -331,10 +305,6 @@ class DoomCore(Activity):
             return
         self._next_frame_ms = time.ticks_add(now, self._frame_interval_ms)
 
-        if self.hint is None and not self._surface.direct_active:
-            # The hint is an LVGL widget over the surface, and direct mode
-            # leaves the surface byte-swapped, so it starts once that is gone.
-            self._surface.direct_start()
         try:
             mpos_core.tick(now)
         except Exception as error:
@@ -379,11 +349,6 @@ class DoomCore(Activity):
             start = band * self._surface.width * 2
             self._surface.buffer[start:start + len(data)] = data
         if not self._surface._active:
-            return
-        if self._surface.direct_active:
-            # The transfer starts here and the core converts the next band
-            # while the panel is fed.
-            self._surface.present_band_direct(band, rows)
             return
         self._surface.invalidate_band(band // self._surface.rows_per_band)
         self._surface.flush()
@@ -525,6 +490,7 @@ class DoomCore(Activity):
         # LVGL also sends PRESSED/RELEASED to the focused object when ENTER is
         # pressed on a keypad, so only a pointer may drive the touch zones.
         indev = lv.indev_active()
+
         if indev is not None and indev.get_type() != lv.INDEV_TYPE.POINTER:
             return
         code = event.get_code()
@@ -609,7 +575,6 @@ class DoomCore(Activity):
             "error": self._error,
             "keys": self._keys_sent,
             "touch": self._last_touch,
-            "direct": self._surface.direct_active if self._surface else False,
             "bands": self._surface.band_count if self._surface else 0,
             "rows_per_band": self._surface.rows_per_band if self._surface else 0,
         }

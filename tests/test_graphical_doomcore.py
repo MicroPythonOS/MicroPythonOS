@@ -104,26 +104,7 @@ class _FakeSurface:
         self.flushed = 0
         self.bands = 0
         self.frames = 0
-        self._direct_cmd = None
-        self.direct_bands = []
 
-    def direct_start(self):
-        self._direct_cmd = 0x2C
-
-    def direct_stop(self):
-        self._direct_cmd = None
-
-    @property
-    def direct_active(self):
-        return self._direct_cmd is not None
-
-    def present_band_direct(self, y, rows):
-        self.direct_bands.append((y, rows))
-        self.bands += 1
-
-    def present_band_direct(self, y, rows):
-        self.direct_bands.append((y, rows))
-        self.bands += 1
 
     def begin(self):
         self._active = True
@@ -246,25 +227,6 @@ class TestDoomCoreActivity(unittest.TestCase):
         self.assertEqual(bytes(surface.buffer[0:4]), before)
         self.assertEqual(surface.invalidated, [0])
         self.assertEqual(surface.flushed, 1)
-
-    def test_bands_go_straight_to_the_bus_once_the_hint_is_gone(self):
-        # While the hint is up the image goes through LVGL; after it, the band
-        # is handed to the panel bus and nothing is flushed.
-        self.activity.hint = None
-        self.activity._drawframe()
-        self.assertTrue(self.activity.get_stats()["direct"])
-
-        self.activity._present_band(72, 72, None)
-        self.assertEqual(self.activity._surface.direct_bands, [(72, 72)])
-        self.assertEqual(self.activity._surface.flushed, 0)
-
-    def test_pausing_hands_the_panel_back_to_lvgl(self):
-        self.activity.hint = None
-        self.activity._drawframe()
-        self.assertTrue(self.activity._surface.direct_active)
-        self.activity._paused = False
-        self.activity.onPause(None)
-        self.assertFalse(self.activity._surface.direct_active)
 
     # -- buttons ----------------------------------------------------------
 
@@ -395,47 +357,74 @@ class TestDoomCoreActivity(unittest.TestCase):
         self.assertEqual(self.activity._zone, "stick")
         self.assertEqual(self.activity._keys, [])
 
-    def test_a_board_without_a_dac_plays_on_the_buzzer(self):
-        # The same sink the audio player uses for files: a piezo driven by an
-        # LEDC duty rewritten from a timer interrupt.
+    def _patch_pcm(self):
+        """Stand in for AudioManager.open_pcm; returns (sink, restore)."""
         class _Sink:
             def __init__(self):
                 self.writes = []
+                self.closes = 0
+                self.active = True
 
             def write(self, buffer):
                 self.writes.append(bytes(buffer))
                 return len(buffer)
 
-            def deinit(self):
-                pass
+            def close(self):
+                self.closes += 1
+                self.active = False
 
-        class _Output:
-            buzzer_pin = 38
+        sink = _Sink()
+        real = doom_core.AudioManager
 
         class _Audio:
             @staticmethod
-            def find_output_by_kind(kind):
-                return _Output() if kind == "buzzer" else None
+            def open_pcm(rate, channels=1, output=None):
+                sink.rate = rate
+                return sink
 
-        sink = _Sink()
-        real_audio = doom_core.AudioManager
-        real_open = doom_core.open_buzzer_sink
         doom_core.AudioManager = _Audio
-        doom_core.open_buzzer_sink = lambda output, rate: sink
+
+        def restore():
+            doom_core.AudioManager = real
+            self.activity._close_audio()
+
+        return sink, restore
+
+    def test_the_app_asks_the_os_for_a_sink_and_feeds_it(self):
+        # Which device that sink is (DAC, piezo) belongs to the framework: the
+        # app only says "here are samples".
+        sink, restore = self._patch_pcm()
         try:
             self.activity._open_audio()
             self.assertIs(self.activity._sink, sink)
-            self.assertEqual(len(sink.writes), 1)  # primed with silence
+            self.assertEqual(sink.rate, doom_core.SAMPLE_RATE)
 
             self.activity._audio_ms = time.ticks_ms() - 60
             self.activity._pump_audio(time.ticks_ms())
-            self.assertTrue(len(sink.writes) > 1, "nothing was written")
-            self.assertTrue(any(any(chunk) for chunk in sink.writes[1:]),
-                            "the buzzer got silence")
+            self.assertTrue(any(any(chunk) for chunk in sink.writes),
+                            "the sink got silence")
+
+            self.activity._paused = False
+            self.activity.onPause(None)
+            self.assertTrue(sink.closes > 0, "the sink was not closed")
         finally:
-            doom_core.AudioManager = real_audio
-            doom_core.open_buzzer_sink = real_open
-            self.activity._close_audio()
+            restore()
+
+    def test_no_sink_means_no_audio_and_no_crash(self):
+        real = doom_core.AudioManager
+
+        class _Audio:
+            @staticmethod
+            def open_pcm(rate, channels=1, output=None):
+                return None
+
+        doom_core.AudioManager = _Audio
+        try:
+            self.activity._open_audio()
+            self.assertIsNone(self.activity._sink)
+            self.activity._pump_audio(time.ticks_ms())
+        finally:
+            doom_core.AudioManager = real
 
     # -- measurements -----------------------------------------------------
 

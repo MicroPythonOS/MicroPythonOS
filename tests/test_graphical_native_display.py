@@ -30,6 +30,18 @@ class _FakeDisplay:
         self._height = height
         self._frame_buffer1 = bytearray(draw_buffer_bytes)
         self._frame_buffer2 = None
+        self._rotation = 0
+        self.windows = []
+        self.transfers = []
+        self._data_bus = self
+
+    # the two driver calls the direct path makes
+    def _set_memory_location(self, x1, y1, x2, y2):
+        self.windows.append((x1, y1, x2, y2))
+        return 0x2C
+
+    def tx_color(self, cmd, view, x1, y1, x2, y2, rotation, last):
+        self.transfers.append(len(view))
 
     def get_horizontal_resolution(self):
         return self._width
