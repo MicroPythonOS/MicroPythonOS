@@ -156,7 +156,7 @@ Hardware facts that cost time to rediscover:
 - **Implement missing functionality** rather than working around it.
 - **USB host:** DisplayLink display + HID support lives in `c_mpos/usb/` — read its `README.md` before touching USB, display, touch, or topmenu code; build with `./scripts/build_mpos.sh esp32s3 --usb`.
 - **Observe before fixing, not after.** When a bug involves UI state or runtime data, use `mpos-controller` (`exec`, `get_widget_tree`, `eval`) to inspect the actual running system before coding a fix. Do NOT spend more than 2 rounds of static code analysis without validating assumptions against the live process.
-- **Never put an app on autostart just so it is playing when someone looks at the screen.** `auto_start_app_early` turns the badge into a demo and a hostile test target: a running app starves the aiorepl, so `mpremote` cannot enter the raw REPL and `machine.reset()` cannot get back in either — the next file copy or flash costs a power cycle first. Start the app from the REPL (`AppManager.start_app(...)`) and leave it running if the screen should show something, or tell the user to start it themselves.
+- **Never put an app on autostart just so it is playing when someone looks at the screen.** `auto_start_app_early` turns the badge into a demo and a hostile test target: the app's start-up (a Doom-class engine allocates its zone) holds the loop for seconds at a time, so a copy, a flash or `machine.reset()` attempted then reports "could not enter raw repl" and costs a relay cycle first. Start the app from the REPL (`AppManager.start_app(...)`) and leave it running if the screen should show something, or tell the user to start it themselves.
 - **If the hardware looks broken or misconfigured, stop and ask.** When a measurement or a fix points at a fault in the physical setup — a microphone that records nothing, a capture device that is silent or saturated, a board that does not enumerate, a sensor that returns constant or impossible values — say so and ask the user to fix it instead of building on it or working around it. A workaround built on a broken rig produces confident, wrong numbers, which is worse than no measurement. Continue past a suspected hardware fault only when the user explicitly overrides it, and say in the report that the override is what the result rests on.
 
 ### Debugging shared-object / identity bugs
@@ -383,7 +383,7 @@ Read this before writing another one.
 **Testing**
 - Graphical tests run both on desktop and on the device (`MPOSController.run_test_file`).
 - Never delete the screen that is still loaded in `tearDown` (`lv.screen_load(lv.obj())` instead) — the device hangs.
-- An app pumping 50 fps starves the REPL: keep device `exec` snippets short, and pause the activity between measurement steps instead of issuing long execs against a running game.
+- A running app is a slow neighbour for the REPL, not a dead one: on the fri3d 2026 with Doom at 17 fps, single-line `mpremote exec` and `mpremote run` of a small file both got through (the app yields in the task-handler callback), while the engine's start-up - the zone allocation - holds the loop long enough for an attach in that window to fail. Keep device `exec` snippets short, and pause the activity between measurement steps instead of issuing long execs against a running game.
 - Assert drawn **rows**, not just "some pixels": the band-offset bug passes a naive check.
 
 **Packaging**
