@@ -165,6 +165,48 @@ class TestNativeDisplay(unittest.TestCase):
         self.pump.present(dirty(), rendered.append, flush=False)
         self.assertEqual(rendered, [2, 4])
 
+    def test_flush_runs_lvgl_now_when_the_stack_has_room(self):
+        calls = []
+
+        class _Lv:
+            @staticmethod
+            def refr_now(arg):
+                calls.append(arg)
+
+        real_lv = native_display.lv
+        real_headroom = native_display.has_render_headroom
+        native_display.lv = _Lv
+        native_display.has_render_headroom = lambda: True
+        try:
+            self.pump.flush()
+        finally:
+            native_display.lv = real_lv
+            native_display.has_render_headroom = real_headroom
+        self.assertEqual(calls, [None])
+
+    def test_flush_leaves_the_work_to_lvgl_on_a_full_stack(self):
+        # A native engine presents from inside its own tick, so the flush runs
+        # on top of the engine's C frames. When the stack is nearly full, draw
+        # later from LVGL's refresh timer instead of overflowing here (an
+        # overflow does not raise, it resets or hangs the board).
+        calls = []
+
+        class _Lv:
+            @staticmethod
+            def refr_now(arg):
+                calls.append(arg)
+
+        real_lv = native_display.lv
+        real_headroom = native_display.has_render_headroom
+        native_display.lv = _Lv
+        native_display.has_render_headroom = lambda: False
+        try:
+            self.pump.flush()
+        finally:
+            native_display.lv = real_lv
+            native_display.has_render_headroom = real_headroom
+        self.assertEqual(calls, [])
+
     def test_present_flushes_once_per_frame(self):
         flushes = []
         self.pump.flush = lambda: flushes.append(1)

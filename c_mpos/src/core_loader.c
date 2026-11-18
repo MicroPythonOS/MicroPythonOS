@@ -628,6 +628,17 @@ static mp_obj_t mpos_core_stop(void) {
     s_mapped_size = 0;
     s_data_addr = 0;
     s_data_size = 0;
+    // The engine can be started again after stop() (a game that quits to the
+    // launcher and is started again), so leave nothing of this session behind
+    // for the next one to read: the surface pointer especially, which points
+    // into an activity that is about to be destroyed.
+    s_frame = NULL;
+    s_width = 0;
+    s_height = 0;
+    s_band_rows = 0;
+    s_flags = 0;
+    s_now_ms = 0;
+    s_partition = NULL;
     s_entry = NULL;
     s_present_fun = MP_OBJ_NULL;
     s_palette_fun = MP_OBJ_NULL;

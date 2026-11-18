@@ -2,6 +2,8 @@ Future release (next version)
 =====
 
 Frameworks:
+- `mpos.ui.native_display.NativeDisplay.flush()` checks the render headroom before drawing. A native engine presents from inside its own tick, where a full LVGL pass runs on top of the engine's C frames; when the stack is nearly full the invalidation is left to LVGL's refresh timer instead, because an overflow there resets or hangs the board without a traceback.
+- `mpos.ui.native_activity.NativeActivity` closes the audio sink before stopping the engine, so a device is not left writing into a buffer whose owner is gone.
 - `mpos.ui.native_display.NativeDisplay`: a way to run a native (C) renderer at panel speed. It owns one RGB565 surface shown by a full-screen `lv_image` and presents only the bands of rows a frame changed, so LVGL stays the only writer of the panel; on a 320x240 badge that took Breakout from 7.6 to 56 fps with no flicker. Pausing LVGL's refresh or stealing its display buffers does not work and is documented, with the measurements, in `docs/apps/native-apps.md`.
 
 Testing:

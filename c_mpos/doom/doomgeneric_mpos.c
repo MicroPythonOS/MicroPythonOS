@@ -121,6 +121,22 @@ uint32_t DG_GetTicksMs(void) {
     return g_now_ms - g_start_ms;
 }
 
+// A touchscreen or a two-button badge has no keyboard, and the button a player
+// calls "fire" should also mean "select": while a menu is up, fire confirms.
+// Everything else passes through - the four arrow keys already steer a Doom
+// menu (up/down move the cursor, left/right adjust a slider), and dropping or
+// remapping them is how up/down ended up doing nothing in menus. The core build
+// maps the same way (c_mpos/doom/core/doom_core.c) - keep the two in step.
+static int menu_key(int code) {
+    if (menuactive) {
+        return code == KEY_FIRE ? KEY_ENTER : code;
+    }
+    if (gamestate == GS_INTERMISSION || gamestate == GS_FINALE) {
+        return code == KEY_FIRE ? KEY_ENTER : code;
+    }
+    return code;
+}
+
 int DG_GetKey(int *pressed, unsigned char *key) {
     if (g_key_tail == g_key_head) {
         return 0;
@@ -128,7 +144,7 @@ int DG_GetKey(int *pressed, unsigned char *key) {
     const uint16_t event = g_keys[g_key_tail];
     g_key_tail = (g_key_tail + 1) % MAX_KEYS;
     *pressed = event >> 8;
-    *key = (unsigned char)(event & 0xFF);
+    *key = (unsigned char)menu_key((int)(event & 0xFF));
     return 1;
 }
 
@@ -351,10 +367,14 @@ static mp_obj_t key(mp_obj_t code_obj, mp_obj_t pressed_obj) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(key_obj, key);
 
+extern short itemOn;
+
 static mp_obj_t debug_state(void) {
-    mp_printf(&mp_plat_print, "[dbg] draws=%u gamestate=%d gametic=%d wipe=%d ticks=%u\n",
-              (unsigned)g_draw_frames, (int)gamestate, (int)gametic,
-              (int)wipegamestate, (unsigned)DG_GetTicksMs());
+    mp_printf(&mp_plat_print,
+              "[dbg] draws=%u gamestate=%d menu=%d item=%d gametic=%d wipe=%d ticks=%u\n",
+              (unsigned)g_draw_frames, (int)gamestate, menuactive ? 1 : 0,
+              (int)itemOn, (int)gametic, (int)wipegamestate,
+              (unsigned)DG_GetTicksMs());
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(debug_state_obj, debug_state);

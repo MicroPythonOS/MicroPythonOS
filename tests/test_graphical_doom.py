@@ -597,6 +597,38 @@ class TestDoomActivity(unittest.TestCase):
             (doom.KEY_LEFT, True), (doom.KEY_RIGHT, True),
         ])
 
+    def test_the_badges_fire_letter_does_not_also_turn(self):
+        # The fri3d 2026 expander reports B as NEXT *and* as the letter "B",
+        # the letter first and in the same input read (LVGL takes NEXT for
+        # focus tabbing, so the letter is how the app hears it). One button,
+        # one action: firing must not turn as well.
+        self.activity.on_key_event(ord("B"))
+        self.activity.on_key_event(lv.KEY.NEXT)
+        self.assertEqual(self.engine.keys, [(doom.KEY_FIRE, True)])
+        self.assertFalse(self.activity.holds.is_held(doom.KEY_RIGHT))
+
+    def test_the_badges_menu_letter_does_not_also_turn(self):
+        # Same for Y, which is PREV plus the letter and would otherwise step
+        # the menu cursor as well as open it.
+        self.activity.on_key_event(ord("Y"))
+        self.activity.on_key_event(lv.KEY.PREV)
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_ESCAPE, True), (doom.KEY_ESCAPE, False),
+        ])
+        self.assertFalse(self.activity.holds.is_held(doom.KEY_LEFT))
+
+    def test_a_bare_next_still_turns(self):
+        # Keypads whose buttons only send NEXT/PREV keep turning with them.
+        self.activity.on_key_event(lv.KEY.NEXT)
+        self.assertEqual(self.engine.keys, [(doom.KEY_RIGHT, True)])
+
+    def test_a_letter_only_suppresses_the_read_it_came_in(self):
+        # The flag lives for one frame: a later, unrelated NEXT must still turn.
+        self.activity.on_key_event(ord("B"))
+        self.activity.on_frame(time.ticks_ms())
+        self.activity.on_key_event(lv.KEY.NEXT)
+        self.assertTrue(self.activity.holds.is_held(doom.KEY_RIGHT))
+
     def test_escape_opens_the_menu(self):
         self.activity.on_key_event(lv.KEY.ESC)
         self.assertEqual(self.engine.keys, [

@@ -142,9 +142,12 @@ class NativeActivity(Activity):
             lv.group_get_default().remove_obj(self.screen)
         except Exception:
             pass
+        # The sink goes first: an engine that is stopped while its samples are
+        # still in the hardware's ring is a device writing into memory that no
+        # longer belongs to it.
+        self._close_audio()
         if self.engine is not None:
             self.engine.stop()
-        self._close_audio()
         # A resumed activity starts a fresh engine; see _begin_session().
         self.engine = None
         self._started = False

@@ -48,6 +48,13 @@ import lvgl as lv
 
 import mpos.ui
 
+try:
+    from mpos.ui.render_guard import has_render_headroom
+except ImportError:
+    # A firmware from before the render guard: nothing to check against.
+    def has_render_headroom():
+        return True
+
 
 class NativeDisplay:
     """An RGB565 framebuffer shown by an image widget.
@@ -164,7 +171,19 @@ class NativeDisplay:
 
         Waiting for LVGL's refresh period would quantize the frame rate to
         30fps, so an app that needs its frame out immediately calls this.
+
+        A flush is a whole LVGL pass (layout, drawing, font composition) run
+        on top of the caller's stack, and this is the one place such a pass
+        starts *inside* a native engine: an engine that presents from its own
+        tick calls back into Python from deep C frames. The render guard
+        cannot skip that pass from where it sits, so check the headroom here.
+        When the stack is too full, leave the invalidation pending: LVGL's
+        refresh timer draws it from a shallow point. A skipped flush costs one
+        frame of latency, not the frame itself - and an overflow here does not
+        raise, it resets or hangs the board.
         """
+        if not has_render_headroom():
+            return
         lv.refr_now(None)
 
     def present(self, bands, render, flush=True):

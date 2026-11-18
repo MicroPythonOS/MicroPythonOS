@@ -346,6 +346,9 @@ class Doom(NativeActivity):
 
     _wad = None
     _last_touch = None
+    # The letter a button sent, when the board sends both the letter and the
+    # NEXT/PREV it rides on (see on_key_event).
+    _letter_key = None
 
     # -- engine -----------------------------------------------------------
 
@@ -372,6 +375,12 @@ class Doom(NativeActivity):
             "menu": KEY_ESCAPE, "use": KEY_USE, "fire": KEY_FIRE,
         }, self.holds)
 
+    def on_frame(self, now):
+        # A letter and the NEXT/PREV it rides on arrive in one input read, so
+        # the flag only has to survive until the frame that read belongs to.
+        self._letter_key = None
+        self.engine.tick(now)
+
     def on_key_event(self, key):
         if key == lv.KEY.LEFT:
             self.holds.hold(KEY_LEFT)
@@ -382,9 +391,20 @@ class Doom(NativeActivity):
         elif key == lv.KEY.DOWN:
             self.holds.hold(KEY_DOWN)
         elif key == lv.KEY.NEXT:
-            self.holds.hold(KEY_RIGHT)
+            # The fri3d 2026 expander reports B as NEXT *and* as the letter
+            # "B", because LVGL takes NEXT for focus tabbing and the app would
+            # otherwise never hear it. The letter arrives first, in the same
+            # input read: when it did, this is the B button, not a bare NEXT.
+            # Firing is already handled there, and turning as well would make
+            # one button do two things (in a menu, NEXT also means "down", so
+            # B would move and select at once - this is why confirm felt
+            # different from fire).
+            if self._letter_key is None:
+                self.holds.hold(KEY_RIGHT)
         elif key == lv.KEY.PREV:
-            self.holds.hold(KEY_LEFT)
+            # Same for Y: the letter opens the menu, PREV would also turn left.
+            if self._letter_key is None:
+                self.holds.hold(KEY_LEFT)
         elif key == lv.KEY.ENTER:
             # Enter selects in a menu (the engine acts on the event itself) and
             # opens doors in game, where the key has to stay down for at least
@@ -393,8 +413,11 @@ class Doom(NativeActivity):
             self.holds.tap(KEY_ENTER)
             self.holds.hold(KEY_USE)
         elif key == ord("B") or key == ord("b") or key == 0x20:
+            self._letter_key = key
             self.holds.hold(KEY_FIRE)
         elif key in (lv.KEY.ESC, ord("Y"), ord("y"), lv.KEY.END):
+            if key in (ord("Y"), ord("y")):
+                self._letter_key = key
             # Esc would be the natural Doom menu key, but the OS claims it as
             # "back" on the desktop (board/linux.py) and on the 2026 badge, so
             # it never arrives here. Y is the menu, as on the badge.

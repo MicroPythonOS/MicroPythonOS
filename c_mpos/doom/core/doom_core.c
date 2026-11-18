@@ -320,24 +320,16 @@ static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
     return 0;
 }
 
-// A touchscreen or a two-button badge has no keyboard: the keys that steer the
-// game have to steer the menu too. While a menu is up, "forward" (fire) selects
-// and the turn keys move the cursor; menus never want the walk keys.
+// A touchscreen or a two-button badge has no keyboard, and the button a player
+// calls "fire" should also mean "select": while a menu is up, fire confirms.
+// Everything else passes through - the four arrow keys already steer a Doom
+// menu (up/down move the cursor, left/right adjust a slider), and dropping or
+// remapping them is how up/down ended up doing nothing in menus. The native
+// module maps the same way (c_mpos/doom/doomgeneric_mpos.c) - keep the two in
+// step.
 static int menu_key(int code) {
     if (menuactive) {
-        switch (code) {
-        case KEY_FIRE:
-            return KEY_ENTER;
-        case KEY_LEFTARROW:
-            return KEY_UPARROW;
-        case KEY_RIGHTARROW:
-            return KEY_DOWNARROW;
-        case KEY_UPARROW:
-        case KEY_DOWNARROW:
-            return -1;
-        default:
-            return code;
-        }
+        return code == KEY_FIRE ? KEY_ENTER : code;
     }
     if (gamestate == GS_INTERMISSION || gamestate == GS_FINALE) {
         return code == KEY_FIRE ? KEY_ENTER : code;
