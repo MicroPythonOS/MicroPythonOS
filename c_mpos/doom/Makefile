@@ -24,7 +24,10 @@ ENGINE = \
 
 ENGINE_STEMS = $(patsubst gen/%.c,%,$(ENGINE))
 
-SRC = doomgeneric_mpos.c mpos_libc.c mpos_printf.c $(ENGINE)
+# core_sound.c is the engine's own mixer, shared with the flash-resident core:
+# the host pulls mixed samples with audio_mix() instead of the engine pushing
+# them from a thread it does not have.
+SRC = doomgeneric_mpos.c mpos_libc.c mpos_printf.c core/core_sound.c $(ENGINE)
 
 LINK_RUNTIME = 1
 
@@ -36,7 +39,10 @@ ARCHES = x64 xtensawin
 # The engine is 1990s C; its warnings are not our build gate, but ours are.
 # -fno-builtin: the compiler otherwise rewrites printf/puts into glibc calls
 # (fputs(s, stdout)) that our shim's dummy stdout pointer cannot satisfy.
-CFLAGS_EXTRA += -fno-builtin -Idoomgeneric -Igen -DCMAP256 -DNORMALUNIX -DLINUX -D_DEFAULT_SOURCE
+CFLAGS_EXTRA += -fno-builtin -Idoomgeneric -Igen -Icore -Icore/stub -DCMAP256 -DNORMALUNIX -DLINUX -D_DEFAULT_SOURCE
+# The engine's sound module (core/core_sound.c) is part of the dataless tree's
+# module list; without this the list is empty and S_Init finds no device.
+CFLAGS_EXTRA += -DFEATURE_SOUND
 CFLAGS_EXTRA += -Wno-error -Wno-unused-but-set-variable -Wno-unused-variable
 CFLAGS_EXTRA += -Wno-sign-compare -Wno-missing-braces -Wno-implicit-fallthrough
 CFLAGS_EXTRA += -Wno-pointer-sign -Wno-stringop-truncation -Wno-array-bounds

@@ -42,7 +42,7 @@
 
 #include <stdint.h>
 
-#define MPOS_CORE_ABI_VERSION 6
+#define MPOS_CORE_ABI_VERSION 7
 
 /* Flags for mpos_core_entry_t.flags. */
 #define MPOS_CORE_FLAG_FRAMEBUFFER_PALETTED (1u << 0)  /* 8-bit indices */
@@ -137,6 +137,11 @@ typedef struct mpos_core_abi {
  *     state. The host pulls this at its output rate and writes the result to
  *     the codec, so the engine never blocks on audio and the host decides when
  *     to feed the DAC. May be NULL for a core with no sound.
+ * quit_requested(): non-zero when the engine wants the host to close the
+ *     activity - the player chose "quit", or the engine hit a state it cannot
+ *     continue from. A core cannot close an app itself, and freezing on the
+ *     last frame is worse than leaving: the host decides when (and how) to go.
+ *     May be NULL. Cleared by init().
  */
 typedef struct mpos_core_entry {
     uint32_t abi_version;
@@ -175,6 +180,7 @@ typedef struct mpos_core_entry {
     void (*tick)(const mpos_core_abi_t *abi, uint32_t now_ms);
     void (*stop)(const mpos_core_abi_t *abi);
     void (*audio_mix)(int16_t *dst, int frames);
+    int (*quit_requested)(void);
 } mpos_core_entry_t;
 
 #endif  /* MPOS_CORE_ABI_H */

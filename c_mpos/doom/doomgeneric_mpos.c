@@ -40,6 +40,12 @@
 #include "doom_data_init.h"
 #include "mpos_engine.h"
 
+/* core/core_sound.c: the engine's own mixer, also used by the core build. */
+void mpos_sound_mix(int16_t *dst, int frames);
+void mpos_sound_module_init(void);
+void mpos_sound_report(void);
+void mpos_music_module_init(void);
+
 #define MAX_KEYS 64
 
 // Global BSS only: a native module has no data section and no static BSS.
@@ -134,6 +140,8 @@ static mp_obj_t create(mp_obj_t wad_obj, mp_obj_t mb_obj) {
         return mp_const_none;
     }
     mpos_quit_requested = 0;
+    mpos_sound_module_init();
+    mpos_music_module_init();
     // Doom keeps the argv pointers for the whole session, so the string has to
     // stay alive: hold a reference to the Python object.
     g_wad_obj = wad_obj;
@@ -143,8 +151,7 @@ static mp_obj_t create(mp_obj_t wad_obj, mp_obj_t mb_obj) {
     g_argv[3] = "-mb";
     snprintf(g_mb_buf, sizeof(g_mb_buf), "%d", (int)mp_obj_get_int(mb_obj));
     g_argv[4] = g_mb_buf;
-    g_argv[5] = "-nosound";
-    g_argv[6] = NULL;
+    g_argv[5] = NULL;
 
     g_now_ms = 0;
     g_start_ms = 0;
@@ -158,7 +165,8 @@ static mp_obj_t create(mp_obj_t wad_obj, mp_obj_t mb_obj) {
     // engine reads anything.
     mpos_libc_init();
     doom_init_all_data();
-    doomgeneric_Create(6, g_argv);
+    doomgeneric_Create(5, g_argv);
+    mpos_sound_report();
     return mp_const_none;
 }static MP_DEFINE_CONST_FUN_OBJ_2(create_obj, create);
 
@@ -280,6 +288,15 @@ static mp_obj_t height(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(height_obj, height);
 
+static mp_obj_t audio_mix(mp_obj_t buf_obj) {
+    mp_buffer_info_t view;
+    mp_get_buffer_raise(buf_obj, &view, MP_BUFFER_WRITE);
+    const int frames = (int)(view.len / 2);
+    mpos_sound_mix((int16_t *)view.buf, frames);
+    return mp_obj_new_int(frames);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(audio_mix_obj, audio_mix);
+
 static mp_obj_t quit_requested(void) {
     return mpos_quit_requested ? mp_const_true : mp_const_false;
 }
@@ -298,6 +315,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     mp_store_global(MP_QSTR_debug_state, MP_OBJ_FROM_PTR(&debug_state_obj));
     mp_store_global(MP_QSTR_height, MP_OBJ_FROM_PTR(&height_obj));
     mp_store_global(MP_QSTR_quit_requested, MP_OBJ_FROM_PTR(&quit_requested_obj));
+    mp_store_global(MP_QSTR_audio_mix, MP_OBJ_FROM_PTR(&audio_mix_obj));
 
     mp_store_global(MP_QSTR_KEY_LEFT, MP_OBJ_NEW_SMALL_INT(KEY_LEFTARROW));
     mp_store_global(MP_QSTR_KEY_RIGHT, MP_OBJ_NEW_SMALL_INT(KEY_RIGHTARROW));

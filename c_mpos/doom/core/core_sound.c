@@ -36,11 +36,14 @@ typedef struct {
     int gain;              /* 0..256, applied as gain/256 */
 } mpos_voice_t;
 
-static mpos_voice_t s_voices[MPOS_SOUND_VOICES];
-static int s_volume = 15;  /* s_sfx_volume, 0..15 */
-static int s_ready;
-static const mpos_core_abi_t *s_abi;
-static int s_starts;
+/* BSS only, and never `static`: a native module cannot have static BSS, and a
+ * core's arena is zeroed on start, so anything with a value is set in
+ * mpos_sound_module_init(). */
+mpos_voice_t s_voices[MPOS_SOUND_VOICES];
+int s_volume;  /* s_sfx_volume, 0..15 */
+int s_ready;
+const mpos_core_abi_t *s_abi;
+int s_starts;
 
 void mpos_sound_set_abi(const mpos_core_abi_t *abi) {
     s_abi = abi;
@@ -55,13 +58,15 @@ int mpos_sound_starts(void) {
 void mpos_sound_report(void) {
     extern int snd_sfxdevice;
     extern sound_module_t *sound_module__i_sound;
-    if (s_abi == NULL) {
-        return;
-    }
     char line[72];
     snprintf(line, sizeof(line), "sound: %d Hz, device %d, %s",
              MPOS_SOUND_RATE, snd_sfxdevice,
              sound_module__i_sound != NULL ? "active" : "inactive");
+    // A native module has no ABI host to log through; the console will do.
+    if (s_abi == NULL) {
+        printf("%s\n", line);
+        return;
+    }
     s_abi->log(s_abi->host, line);
 }
 
@@ -74,8 +79,8 @@ typedef struct {
     int rate;
 } mpos_sfx_cache_t;
 
-static mpos_sfx_cache_t s_cache[MPOS_SFX_CACHE];
-static int s_cache_count;
+mpos_sfx_cache_t s_cache[MPOS_SFX_CACHE];
+int s_cache_count;
 
 /* A DMX lump is 8 header bytes and 32 samples of tail padding; both are
  * dropped, as chocolate-doom's SDL module does: the first two bytes are the
@@ -246,6 +251,7 @@ int use_libsamplerate;
 float libsamplerate_scale;
 
 void mpos_sound_module_init(void) {
+    s_volume = 15;
     DG_sound_module.sound_devices = (snddevice_t *)snd_devices;
     DG_sound_module.num_sound_devices =
         (int)(sizeof(snd_devices) / sizeof(snd_devices[0]));

@@ -137,13 +137,13 @@ class _CoreEngine:
     """
 
     name = "core"
-    # The core reports quit itself (it returns to its title screen): the ABI
-    # cannot ask the host to close the activity yet.
     quit = False
 
     def __init__(self):
         import mpos_core
         self._core = mpos_core
+        # ABI 7 added the request; an older core cannot make one.
+        self._quit_query = getattr(mpos_core, "quit_requested", None)
         self._surface = None
         self._keys = []
         self._files = {}
@@ -193,6 +193,8 @@ class _CoreEngine:
 
     def tick(self, now):
         self._core.tick(now)
+        if self._quit_query is not None and self._quit_query():
+            self.quit = True
         self._pump_audio(now)
 
     def key(self, code, pressed):

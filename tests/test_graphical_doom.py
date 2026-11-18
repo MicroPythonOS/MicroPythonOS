@@ -175,6 +175,7 @@ class _FakeCore:
         self.started = None
         self.ticks = 0
         self.stops = 0
+        self.quit = False
 
     def start(self, *args):
         self.started = args
@@ -197,6 +198,9 @@ class _FakeCore:
     def audio_mix(self, buffer):
         for index in range(len(buffer)):
             buffer[index] = 1
+
+    def quit_requested(self):
+        return self.quit
 
 
 class TestTheEngineSpeaksDoomsProtocol(unittest.TestCase):
@@ -323,6 +327,13 @@ class TestCoreEngine(unittest.TestCase):
         self.assertTrue(self.core.stops > 0)
         self.assertEqual(self.engine._files, {})
         self.assertEqual(self.engine._keys, [])
+
+    def test_the_core_can_ask_the_app_to_close(self):
+        # ABI 7: the engine cannot close the activity itself, so it asks.
+        self.engine.start("doom1.wad", self.surface)
+        self.core.quit = True
+        self.engine.tick(1234)
+        self.assertTrue(self.engine.quit)
 
     def test_pausing_drops_the_events_that_were_still_queued(self):
         # Nothing ticks a core while the activity is paused: an event left in

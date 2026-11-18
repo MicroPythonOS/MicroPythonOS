@@ -275,6 +275,10 @@ void mpos_sound_report(void);
 void mpos_sound_set_abi(const mpos_core_abi_t *abi);
 void mpos_music_module_init(void);
 
+static int core_quit_requested(void) {
+    return mpos_quit_requested;
+}
+
 static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
     mpos_libc_init(abi);
     mpos_sound_set_abi(abi);
@@ -346,12 +350,15 @@ static void core_tick(const mpos_core_abi_t *abi, uint32_t now_ms) {
         return;
     }
     if (mpos_quit_requested) {
-        // The player picked "quit" in the menu. The host owns the panel, and
-        // this ABI cannot ask it to close the activity yet, so the engine goes
-        // back to its title screen and the player leaves with the OS back key.
-        mpos_quit_requested = 0;
-        M_ClearMenus();
-        D_StartTitle();
+        // The player picked "quit" in the menu. A host on ABI 7 or later reads
+        // quit_requested() and closes the activity; an older one has no way to
+        // hear it, so the engine goes back to its title screen instead of
+        // sitting on a frozen frame.
+        if (abi->version < 7) {
+            mpos_quit_requested = 0;
+            M_ClearMenus();
+            D_StartTitle();
+        }
         return;
     }
     if (!s_have_start) {
@@ -422,4 +429,5 @@ const mpos_core_entry_t mpos_core_entry = {
     .tick = core_tick,
     .stop = core_stop,
     .audio_mix = mpos_sound_mix,
+    .quit_requested = core_quit_requested,
 };
