@@ -1,15 +1,21 @@
-"""Tests for the native Doom activity.
+"""Tests for the Doom app: one activity, one engine per host.
 
-The engine itself is a port; these tests cover the seam with MicroPythonOS:
-the module's API, the band blit that converts the paletted frame for the
-``NativeDisplay`` surface, and the activity's frame loop.
+The engine exists twice - a flash-resident core on a badge and a MicroPython
+native module on a desktop - so these tests pin down the seam the app owns and
+run both paths through it:
 
-Starting the engine needs a WAD, which is not part of the repository, so the
-tests that boot it skip when none is installed. Put one at
-``internal_filesystem/doom1.wad`` (or /doom1.wad on the device) to run them.
+* ``_CoreEngine`` against a fake ``mpos_core``: the surface and band handshake,
+  the key queue, the file callbacks and the audio sink;
+* ``_NatmodEngine`` against the real module where there is one;
+* ``Doom`` itself against a fake engine: the key/touch mapping, the held-key
+  rules (a keypad reports presses, a pointer reports both edges), pause/resume
+  and the messages for a host that cannot run Doom.
+
+Booting the real engine needs a WAD, which is not part of the repository, so
+those tests skip when none is installed. Put one at ``internal_filesystem/doom1.wad``
+(or /doom1.wad on the device) to run them.
 """
 
-import os
 import sys
 import time
 import unittest
@@ -20,17 +26,20 @@ import mpos.ui
 from mpos import AppManager, InputManager
 from mpos.ui.view import remove_and_stop_current_activity, screen_stack
 
-_APP_DIR = "apps/com.micropythonos.doom"
-if _APP_DIR not in sys.path:
-    sys.path.insert(0, _APP_DIR)
+APP_DIR = "apps/com.micropythonos.doom"
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
 
-if sys.platform == "esp32":
-    import doom_xtensawin as doom
-else:
-    import doom_x64 as doom
+import doom  # noqa: E402
 
-WIDTH = 320
-HEIGHT = 200
+try:
+    import doom_x64 as natmod
+except Exception:  # noqa: BLE001 - no native module for this host
+    natmod = None
+
+SURFACE_WIDTH = 200
+SURFACE_HEIGHT = 320
+DRAW_BUFFER_BYTES = 28800
 
 WAD_PATHS = ("doom1.wad", "/doom1.wad", "/sdcard/doom1.wad")
 
@@ -52,25 +61,6 @@ def _wait_ms(ms):
         time.sleep_ms(5)
 
 
-class TestDoomModule(unittest.TestCase):
-
-    def test_the_module_exposes_the_engine_api(self):
-        for name in ("create", "tick", "frame", "palette", "blit_band",
-                     "key", "width", "height"):
-            self.assertTrue(hasattr(doom, name), "missing %s" % name)
-
-    def test_the_engine_frame_is_paletted_320x200(self):
-        self.assertEqual(doom.width(), WIDTH)
-        self.assertEqual(doom.height(), HEIGHT)
-
-    def test_key_codes_are_doom_keys(self):
-        # Doom's internal key codes, not ASCII (KEY_UPARROW is 0xad).
-        self.assertEqual(doom.KEY_UP, 0xad)
-        self.assertEqual(doom.KEY_LEFT, 0xac)
-        self.assertEqual(doom.KEY_ESCAPE, 27)
-        self.assertEqual(doom.KEY_ENTER, 13)
-
-
 class _Event:
     def __init__(self, code=None, key=None):
         self._code = code
@@ -83,8 +73,679 @@ class _Event:
         return self._key
 
 
+class _FakeDisplay:
+    """Just the two calls an engine makes when it picks a surface."""
+
+    def __init__(self, width, height):
+        self._w = width
+        self._h = height
+
+    def get_horizontal_resolution(self):
+        return self._w
+
+    def get_vertical_resolution(self):
+        return self._h
+
+
+class _FakeSurface:
+    """A display surface that records invalidations instead of drawing."""
+
+    panel_width = 240
+    panel_height = 320
+
+    def __init__(self, screen=None, width=None, height=None, buffer=None):
+        self.width = width or SURFACE_WIDTH
+        self.height = height or SURFACE_HEIGHT
+        # Same rule as NativeDisplay: a band is one draw buffer of rows.
+        self.rows_per_band = DRAW_BUFFER_BYTES // (self.width * 2)
+        self.band_count = ((self.height + self.rows_per_band - 1)
+                           // self.rows_per_band)
+        self.stride = self.width * 2
+        self.buffer = bytearray(self.width * self.height * 2)
+        self._image_x = (self.panel_width - self.width) // 2
+        self._image_y = (self.panel_height - self.height) // 2
+        self._active = True
+        self.invalidated = []
+        self.flushed = 0
+        self.bands = 0
+        self.frames = 0
+
+    def begin(self):
+        self._active = True
+
+    def end(self):
+        self._active = False
+
+    def invalidate_band(self, band):
+        self.invalidated.append(band)
+
+    def invalidate_all(self):
+        pass
+
+    def flush(self):
+        self.flushed += 1
+
+    def present_all(self, render, flush=True):
+        for band in range(self.band_count):
+            render(band)
+        self.frames += 1
+
+
+class _FakeEngine:
+    """Records what the activity asks of an engine."""
+
+    name = "fake"
+
+    def __init__(self, size=(SURFACE_WIDTH, SURFACE_HEIGHT)):
+        self.size = size
+        self.started = []
+        self.ticks = 0
+        self.keys = []
+        self.resumes = 0
+        self.pauses = 0
+        self.stops = 0
+
+    def surface_size(self, display):
+        return self.size
+
+    def start(self, wad, surface):
+        self.started.append((wad, surface))
+
+    def resume(self):
+        self.resumes += 1
+
+    def pause(self):
+        self.pauses += 1
+
+    def tick(self, now):
+        self.ticks += 1
+
+    def key(self, code, pressed):
+        self.keys.append((code, pressed))
+
+    def stop(self):
+        self.stops += 1
+
+
+class _FakeCore:
+    """Records what the core engine asks of mpos_core."""
+
+    def __init__(self):
+        self.started = None
+        self.ticks = 0
+        self.stops = 0
+
+    def start(self, *args):
+        self.started = args
+
+    def tick(self, now):
+        self.ticks += 1
+
+    def stop(self):
+        self.stops += 1
+
+    def mapped(self):
+        return 0x43000000
+
+    def mapped_size(self):
+        return 0x20000
+
+    def abi_version(self):
+        return 6
+
+    def audio_mix(self, buffer):
+        for index in range(len(buffer)):
+            buffer[index] = 1
+
+
+class TestTheEngineSpeaksDoomsProtocol(unittest.TestCase):
+
+    def test_the_native_module_exposes_the_engine_api(self):
+        if natmod is None:
+            self.skipTest("no native module for this host")
+        for name in ("create", "tick", "frame", "palette", "blit_band",
+                     "key", "width", "height"):
+            self.assertTrue(hasattr(natmod, name), "missing %s" % name)
+
+    def test_the_native_module_frame_is_paletted_320x200(self):
+        if natmod is None:
+            self.skipTest("no native module for this host")
+        self.assertEqual(natmod.width(), doom.GAME_WIDTH)
+        self.assertEqual(natmod.height(), doom.GAME_HEIGHT)
+
+    def test_both_engines_take_dooms_own_key_codes(self):
+        # The app sends one set of codes; a module that renumbered them would
+        # silently misbind every control.
+        if natmod is None:
+            self.skipTest("no native module for this host")
+        for attribute, code in (
+                ("KEY_LEFT", doom.KEY_LEFT), ("KEY_RIGHT", doom.KEY_RIGHT),
+                ("KEY_UP", doom.KEY_UP), ("KEY_DOWN", doom.KEY_DOWN),
+                ("KEY_USE", doom.KEY_USE), ("KEY_FIRE", doom.KEY_FIRE),
+                ("KEY_ENTER", doom.KEY_ENTER),
+                ("KEY_ESCAPE", doom.KEY_ESCAPE)):
+            self.assertEqual(getattr(natmod, attribute), code, attribute)
+
+
+class TestCoreEngine(unittest.TestCase):
+    """The badge path, against a fake mpos_core."""
+
+    def setUp(self):
+        self.core = _FakeCore()
+        self._real_core = sys.modules.get("mpos_core")
+        sys.modules["mpos_core"] = self.core
+        self.engine = doom._CoreEngine()
+        self.surface = _FakeSurface()
+        self._real_audio = doom.AudioManager
+        self._real_pointer_xy = InputManager.pointer_xy
+
+    def tearDown(self):
+        if self._real_core is not None:
+            sys.modules["mpos_core"] = self._real_core
+        else:
+            sys.modules.pop("mpos_core", None)
+        doom.AudioManager = self._real_audio
+        self.engine._close_audio()
+
+    def test_start_passes_the_surface_and_the_band_height(self):
+        self.engine.start("doom1.wad", self.surface)
+
+        self.assertIsNotNone(self.core.started, "the core was not started")
+        args = self.core.started
+        self.assertEqual(args[0], doom.CORE_PARTITION)
+        self.assertEqual(args[9], "doom1.wad")
+        self.assertEqual(args[10], SURFACE_WIDTH)
+        self.assertEqual(args[11], SURFACE_HEIGHT)
+        # The core draws straight into the surface buffer, one display band at a
+        # time: that is what overlaps the transfer with the next conversion.
+        self.assertIs(args[12], self.surface.buffer)
+        self.assertEqual(args[13], self.surface.rows_per_band)
+
+    def test_a_portrait_panel_gets_the_frame_rotated(self):
+        width, height = self.engine.surface_size(_FakeDisplay(240, 320))
+        self.assertEqual((width, height), (doom.GAME_HEIGHT, doom.GAME_WIDTH))
+
+    def test_a_landscape_panel_gets_the_frame_unrotated(self):
+        # The fri3d 2026 ends up 320x240 after its rotation, so the core must
+        # not transpose: a 320x200 surface is the request.
+        width, height = self.engine.surface_size(_FakeDisplay(320, 240))
+        self.assertEqual((width, height), (doom.GAME_WIDTH, doom.GAME_HEIGHT))
+
+    def test_a_band_with_pixels_is_copied_and_flushed(self):
+        self.engine.start("doom1.wad", self.surface)
+        self.engine._present_band(72, 2, b"\x01\x02\x03\x04")
+
+        start = 72 * SURFACE_WIDTH * 2
+        self.assertEqual(bytes(self.surface.buffer[start:start + 4]),
+                         b"\x01\x02\x03\x04")
+        self.assertEqual(self.surface.invalidated, [1])  # row 72 is in band 1
+        self.assertEqual(self.surface.flushed, 1)
+
+    def test_a_band_without_pixels_is_only_flushed(self):
+        self.engine.start("doom1.wad", self.surface)
+        before = bytes(self.surface.buffer[0:4])
+        self.engine._present_band(0, 72, None)
+
+        self.assertEqual(bytes(self.surface.buffer[0:4]), before)
+        self.assertEqual(self.surface.invalidated, [0])
+        self.assertEqual(self.surface.flushed, 1)
+
+    def test_a_paused_surface_is_not_flushed(self):
+        self.engine.start("doom1.wad", self.surface)
+        self.surface.end()
+        self.engine._present_band(0, 72, None)
+        self.assertEqual(self.surface.invalidated, [])
+        self.assertEqual(self.surface.flushed, 0)
+
+    def test_the_key_queue_encodes_the_press_bit(self):
+        self.engine.key(doom.KEY_ESCAPE, True)
+        self.engine.key(doom.KEY_ESCAPE, False)
+        self.assertEqual(self.engine._poll_key(), doom.KEY_ESCAPE | 0x100)
+        self.assertEqual(self.engine._poll_key(), doom.KEY_ESCAPE)
+        self.assertEqual(self.engine._poll_key(), -1)
+
+    def test_the_wad_is_read_through_micropython_files(self):
+        import os
+        path = "doom1.wad"
+        if not os.path.exists(path):
+            self.skipTest("no WAD installed")
+        buffer = bytearray(16)
+        read = self.engine._read_file(path, 0, buffer)
+        self.assertEqual(read, 16)
+        self.assertEqual(self.engine._file_size(path), os.stat(path)[6])
+        self.assertEqual(self.engine._file_size("not-a-wad"), -1)
+        self.assertEqual(self.engine._read_file("not-a-wad", 0, buffer), -1)
+
+    def test_stop_releases_the_core_and_the_files(self):
+        self.engine.start("doom1.wad", self.surface)
+        self.engine.stop()
+        self.assertTrue(self.core.stops > 0)
+        self.assertEqual(self.engine._files, {})
+        self.assertEqual(self.engine._keys, [])
+
+    def test_pausing_drops_the_events_that_were_still_queued(self):
+        # Nothing ticks a core while the activity is paused: an event left in
+        # the queue would be replayed, a minute later, on resume.
+        self.engine.start("doom1.wad", self.surface)
+        self.engine.key(doom.KEY_LEFT, True)
+        self.engine.pause()
+        self.assertEqual(self.engine._keys, [])
+
+    # -- audio ------------------------------------------------------------
+
+    def _patch_pcm(self, chosen=None, outputs=()):
+        """Stand in for AudioManager's PCM sink API."""
+        class _Output:
+            def __init__(self, name, kind):
+                self.name = name
+                self.kind = kind
+
+        class _Sink:
+            def __init__(self):
+                self.writes = []
+                self.closes = 0
+                self.active = True
+                self.output = None
+
+            def write(self, buffer):
+                self.writes.append(bytes(buffer))
+                return len(buffer)
+
+            def close(self):
+                self.closes += 1
+                self.active = False
+
+        sink = _Sink()
+
+        class _Audio:
+            @staticmethod
+            def get_default_output():
+                return chosen
+
+            @staticmethod
+            def find_output_by_kind(kind):
+                for output in outputs:
+                    if output.kind == kind:
+                        return output
+                return None
+
+            @staticmethod
+            def open_pcm(rate, channels=1, output=None):
+                sink.rate = rate
+                sink.output = output
+                sink.active = True
+                return sink
+
+        doom.AudioManager = _Audio
+        return sink
+
+    def test_the_app_asks_for_a_speaker_and_feeds_it(self):
+        dac = type("O", (), {"name": "Headset Output", "kind": "i2s"})()
+        sink = self._patch_pcm(chosen=dac, outputs=(dac,))
+        self.engine.start("doom1.wad", self.surface)
+        self.assertIs(self.engine._sink, sink)
+        self.assertIs(sink.output, dac)
+        self.assertEqual(sink.rate, doom.SAMPLE_RATE)
+
+        self.engine._audio_ms = time.ticks_ms() - 60
+        self.engine._pump_audio(time.ticks_ms())
+        self.assertTrue(any(any(chunk) for chunk in sink.writes),
+                        "the sink got silence")
+
+        self.engine.pause()
+        self.assertTrue(sink.closes > 0, "the sink was not closed")
+
+    def test_a_selected_buzzer_is_not_offered_dooms_audio(self):
+        # 11 kHz broadband PCM through a piezo is a screech; the app asks for a
+        # speaker instead rather than obeying a buzzer selection.
+        class _Output:
+            def __init__(self, name, kind):
+                self.name = name
+                self.kind = kind
+
+        buzzer = _Output("Badge Buzzer", "buzzer")
+        dac = _Output("Headset Output", "i2s")
+        sink = self._patch_pcm(chosen=buzzer, outputs=(buzzer, dac))
+        self.engine.start("doom1.wad", self.surface)
+        self.assertIs(sink.output, dac)
+
+    def test_a_board_with_only_a_piezo_stays_silent(self):
+        class _Output:
+            name = "Badge Buzzer"
+            kind = "buzzer"
+
+        buzzer = _Output()
+        self._patch_pcm(chosen=buzzer, outputs=(buzzer,))
+        self.engine.start("doom1.wad", self.surface)
+        self.assertIsNone(self.engine._sink)
+        self.engine._pump_audio(time.ticks_ms())
+
+    def test_resuming_reopens_the_sink_that_pausing_closed(self):
+        dac = type("O", (), {"name": "Headset Output", "kind": "i2s"})()
+        sink = self._patch_pcm(chosen=dac, outputs=(dac,))
+        self.engine.start("doom1.wad", self.surface)
+        self.engine.pause()
+        self.assertIsNone(self.engine._sink)
+        self.engine.resume()
+        self.assertIs(self.engine._sink, sink)
+        self.assertTrue(sink.active)
+
+
+class TestNatmodEngine(unittest.TestCase):
+    """The desktop path: the real module's frame, and the band loop."""
+
+    def test_the_surface_is_dooms_own_frame(self):
+        if natmod is None:
+            self.skipTest("no native module for this host")
+        engine = doom._NatmodEngine()
+        self.assertEqual(engine.surface_size(_FakeDisplay(240, 320)),
+                         (doom.GAME_WIDTH, doom.GAME_HEIGHT))
+
+    def test_a_tick_blits_every_band_and_lets_the_surface_present_it(self):
+        if natmod is None:
+            self.skipTest("no native module for this host")
+
+        class _Engine:
+            def __init__(self):
+                self.ticks = 0
+                self.blits = []
+
+            def tick(self, now):
+                self.ticks += 1
+
+            def blit_band(self, buffer, band, rows):
+                self.blits.append((band, rows))
+
+        engine = doom._NatmodEngine()
+        module = _Engine()
+        engine._doom = module
+        surface = _FakeSurface(width=doom.GAME_WIDTH, height=doom.GAME_HEIGHT)
+        surface.panel_width = 320
+        surface.panel_height = 240
+        engine._surface = surface
+
+        engine.tick(time.ticks_ms())
+        self.assertEqual(module.ticks, 1)
+        self.assertEqual(module.blits,
+                         [(band, surface.rows_per_band)
+                          for band in range(surface.band_count)])
+
+
+class TestDoomOnAHostWithoutAnEngine(unittest.TestCase):
+
+    def setUp(self):
+        self._real_display = mpos.ui.main_display
+        self._real_make = doom._make_engine
+        self._real_native_display = doom.NativeDisplay
+        mpos.ui.main_display = _FakeDisplay(240, 320)
+        doom.NativeDisplay = _FakeSurface
+        self.activity = doom.Doom()
+        # setContentView resumes the activity, which would boot the real engine;
+        # these tests decide when the engine is picked.
+        self.activity._started = True
+        self.activity.onCreate()
+
+    def tearDown(self):
+        doom._make_engine = self._real_make
+        doom.NativeDisplay = self._real_native_display
+        mpos.ui.main_display = self._real_display
+        self.activity._clear_hint()
+
+    def _start_with(self):
+        self.activity._started = False
+
+    def test_the_engine_is_chosen_per_host(self):
+        fake = _FakeEngine()
+        doom._make_engine = lambda: fake
+        real_find_wad = doom.find_wad
+        doom.find_wad = lambda intent=None: "doom1.wad"
+        self._start_with()
+        try:
+            self.activity.onResume(None)
+        finally:
+            doom.find_wad = real_find_wad
+        self.assertIs(self.activity.get_stats()["engine"], "fake")
+        self.assertEqual(fake.started[0][0], "doom1.wad")
+        self.activity.onPause(None)
+
+    def test_a_firmware_without_the_core_says_so(self):
+        def unavailable():
+            raise RuntimeError("no Doom engine in this firmware (no mpos_core)")
+
+        doom._make_engine = unavailable
+        self._start_with()
+        self.activity.onResume(None)
+        self.assertIsNotNone(self.activity._error)
+        self.assertIn("no Doom engine", self.activity.hint.get_text())
+        # A message stays on screen; it is not the six-second hint.
+        self.assertEqual(self.activity._hint_until, 0)
+        self.activity._expire_hint(time.ticks_add(time.ticks_ms(), 60000))
+        self.assertIsNotNone(self.activity.hint)
+
+    def test_a_missing_wad_says_so(self):
+        doom._make_engine = lambda: _FakeEngine()
+        self._real_find_wad = doom.find_wad
+        doom.find_wad = lambda intent=None: None
+        self._start_with()
+        try:
+            self.activity.onResume(None)
+        finally:
+            doom.find_wad = self._real_find_wad
+        self.assertIsNone(self.activity._error)
+        self.assertIn("WAD", self.activity.hint.get_text())
+        # Nothing to tick: the frame loop must not touch a missing engine.
+        self.activity._drawframe()
+
 
 class TestDoomActivity(unittest.TestCase):
+    """The shared half: keys, touch, pause/resume. The engine is faked."""
+
+    def setUp(self):
+        self._real_display = mpos.ui.main_display
+        self._real_native_display = doom.NativeDisplay
+        self._real_pointer_xy = InputManager.pointer_xy
+        mpos.ui.main_display = _FakeDisplay(240, 320)
+        doom.NativeDisplay = _FakeSurface
+        self.activity = doom.Doom()
+        # onCreate ends in setContentView, which resumes the activity; these
+        # tests supply an engine of their own instead of booting one.
+        self.activity._started = True
+        self.activity.onCreate()
+        self.engine = _FakeEngine()
+        self.activity._engine = self.engine
+        self.activity._surface = _FakeSurface()
+        self.activity._rotated = True
+        self.activity._started = True
+        self.activity._paused = False
+        self.activity._wad = "doom1.wad"
+
+    def tearDown(self):
+        mpos.ui.task_handler.remove_event_cb(self.activity._drawframe)
+        self.activity._clear_hint()
+        doom.NativeDisplay = self._real_native_display
+        mpos.ui.main_display = self._real_display
+        InputManager.pointer_xy = self._real_pointer_xy
+
+    # -- buttons ----------------------------------------------------------
+
+    def test_enter_selects_and_uses(self):
+        self.activity._on_key(_Event(key=lv.KEY.ENTER))
+        # ENTER is event-driven (a menu acts on the keydown), so it taps. USE is
+        # state-driven and stays held: the engine drains its whole queue in one
+        # frame, so a release straight after the press would cancel it before
+        # the tic is built and the door would never open.
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_ENTER, True), (doom.KEY_ENTER, False),
+            (doom.KEY_USE, True),
+        ])
+        self.assertIn(doom.KEY_USE, self.activity._held)
+
+    def test_fire_button_is_held_and_then_released(self):
+        self.activity._on_key(_Event(key=ord("B")))
+        self.assertEqual(self.engine.keys, [(doom.KEY_FIRE, True)])
+        self.assertIn(doom.KEY_FIRE, self.activity._held)
+
+        # A repeat within the hold window must not send a second press.
+        self.activity._on_key(_Event(key=ord("B")))
+        self.assertEqual(self.engine.keys, [(doom.KEY_FIRE, True)])
+
+    def test_arrow_keys_turn_into_doom_arrows(self):
+        self.activity._on_key(_Event(key=lv.KEY.LEFT))
+        self.activity._on_key(_Event(key=lv.KEY.RIGHT))
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_LEFT, True), (doom.KEY_RIGHT, True),
+        ])
+
+    def test_escape_opens_the_menu(self):
+        self.activity._on_key(_Event(key=lv.KEY.ESC))
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_ESCAPE, True), (doom.KEY_ESCAPE, False),
+        ])
+
+    def test_y_opens_the_doom_menu(self):
+        # Esc is the OS "back" key on the desktop and on the 2026 badge, so Y is
+        # Doom's own menu.
+        self.activity._on_key(_Event(key=ord("y")))
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_ESCAPE, True), (doom.KEY_ESCAPE, False),
+        ])
+
+    def test_a_keypad_press_is_released_on_the_next_frame(self):
+        # A keypad reports presses and no releases, so the frame loop lets a
+        # direction go when nobody refreshed it.
+        self.activity._on_key(_Event(key=lv.KEY.LEFT))
+        self.activity._held[doom.KEY_LEFT] = time.ticks_add(time.ticks_ms(), -1)
+        self.activity._next_frame_ms = 0
+        self.activity._drawframe()
+
+        self.assertIn((doom.KEY_LEFT, False), self.engine.keys)
+        self.assertEqual(doom.KEY_LEFT in self.activity._held, False)
+
+    def test_a_pointer_holds_a_key_until_it_is_released(self):
+        # A finger or mouse button that does not move sends no PRESSING, so a
+        # held direction must not expire while the pointer is still down.
+        x, y = self._panel(240, 180)
+        self._touch(lv.EVENT.PRESSED, x, y)          # fire band
+        self.activity._release_held(time.ticks_add(time.ticks_ms(), 10000))
+        self.assertIn(doom.KEY_FIRE, self.activity._held)
+        self.assertEqual(self.engine.keys, [(doom.KEY_FIRE, True)])
+
+        self._touch(lv.EVENT.RELEASED, x, y)
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_FIRE, True), (doom.KEY_FIRE, False)])
+
+    # -- touch ------------------------------------------------------------
+
+    def _touch(self, code, x, y):
+        InputManager.pointer_xy = staticmethod(lambda: (x, y))
+        self.activity._on_touch(_Event(code=code))
+
+    def _panel(self, sx, sy):
+        """Game point -> panel point: the inverse of the core's rotation."""
+        return (self.activity._surface._image_x + (SURFACE_WIDTH - 1 - sy),
+                self.activity._surface._image_y + sx)
+
+    def _touch_game(self, code, sx, sy):
+        x, y = self._panel(sx, sy)
+        self._touch(code, x, y)
+
+    def test_the_joystick_turns_and_walks_with_the_drag(self):
+        self._touch_game(lv.EVENT.PRESSED, 80, 100)
+        # Anchored, not a fixed pad: the press alone asks for no direction.
+        self.assertEqual(self.engine.keys, [])
+
+        self._touch_game(lv.EVENT.PRESSING, 40, 100)
+        self.assertEqual(self.engine.keys, [(doom.KEY_LEFT, True)])
+
+        # Dragging towards Doom's top walks forward and drops the turn.
+        self._touch_game(lv.EVENT.PRESSING, 80, 40)
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_LEFT, True), (doom.KEY_LEFT, False),
+            (doom.KEY_UP, True),
+        ])
+
+        self._touch_game(lv.EVENT.RELEASED, 80, 40)
+        self.assertEqual(self.engine.keys[-1], (doom.KEY_UP, False))
+        self.assertEqual(self.activity._held, {})
+
+    def test_the_joystick_ignores_a_drag_inside_the_deadzone(self):
+        self._touch_game(lv.EVENT.PRESSED, 80, 100)
+        self._touch_game(lv.EVENT.PRESSING, 90, 108)
+        self.assertEqual(self.engine.keys, [])
+        self.assertEqual(self.activity._held, {})
+
+    def test_the_fire_band_holds_fire_while_pressed(self):
+        self._touch_game(lv.EVENT.PRESSED, 240, 180)
+        self.assertEqual(self.engine.keys, [(doom.KEY_FIRE, True)])
+        self.assertIn(doom.KEY_FIRE, self.activity._held)
+
+        self._touch_game(lv.EVENT.RELEASED, 240, 180)
+        self.assertEqual(self.engine.keys[-1], (doom.KEY_FIRE, False))
+        self.assertEqual(self.activity._held, {})
+
+    def test_the_use_band_holds_use(self):
+        self._touch_game(lv.EVENT.PRESSED, 240, 90)
+        self.assertEqual(self.engine.keys, [(doom.KEY_USE, True)])
+        self.assertIn(doom.KEY_USE, self.activity._held)
+
+    def test_the_menu_band_taps_escape(self):
+        self._touch_game(lv.EVENT.PRESSED, 240, 20)
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_ESCAPE, True), (doom.KEY_ESCAPE, False),
+        ])
+
+    def test_a_thumb_at_the_panel_bottom_is_the_button_side(self):
+        # The rotation guard: the panel's bottom edge is Doom's *right*, so it
+        # must land in a button band, not on the joystick.
+        x = self.activity._surface._image_x + 100
+        self._touch(lv.EVENT.PRESSED, x, SURFACE_HEIGHT - 10)
+        self.assertEqual(self.activity._zone, "use")
+
+    def test_a_thumb_at_the_panel_top_is_the_joystick(self):
+        x = self.activity._surface._image_x + 100
+        self._touch(lv.EVENT.PRESSED, x, 10)
+        self.assertEqual(self.activity._zone, "stick")
+        self.assertEqual(self.engine.keys, [])
+
+    # -- lifecycle --------------------------------------------------------
+
+    def test_pausing_releases_held_keys_and_ends_the_surface(self):
+        self._on_key_press()
+        self.activity.onPause(None)
+
+        self.assertEqual(self.engine.keys[-1], (doom.KEY_RIGHT, False))
+        self.assertEqual(self.activity._held, {})
+        self.assertEqual(self.engine.pauses, 1)
+        self.assertFalse(self.activity._surface._active)
+
+    def test_resuming_starts_the_engine_again_but_not_the_core(self):
+        self.activity.onPause(None)
+        self.activity.onResume(None)
+        self.assertEqual(self.engine.resumes, 1)
+        self.assertEqual(len(self.engine.started), 0, "the engine restarted")
+        self.assertTrue(self.activity._surface._active)
+
+    def test_stopping_hands_the_engine_back(self):
+        self.activity.onStop(None)
+        self.assertEqual(self.engine.stops, 1)
+        self.assertIsNone(self.activity._engine)
+        self.assertFalse(self.activity._started)
+
+    def _on_key_press(self):
+        self.activity._on_key(_Event(key=lv.KEY.RIGHT))
+        self.assertIn(doom.KEY_RIGHT, self.activity._held)
+
+    # -- stats ------------------------------------------------------------
+
+    def test_stats_count_the_keys_the_engine_took(self):
+        self.activity.tap(doom.KEY_ESCAPE)
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_ESCAPE, True), (doom.KEY_ESCAPE, False)])
+        self.assertEqual(self.activity.get_stats()["keys"], 2)
+        self.assertEqual(self.activity.get_stats()["engine"], "fake")
+
+
+class TestDoomOnTheRealApp(unittest.TestCase):
 
     def setUp(self):
         self.wad = _find_wad()
@@ -105,6 +766,7 @@ class TestDoomActivity(unittest.TestCase):
     def test_the_demo_renders_into_the_surface(self):
         stats = self.activity.get_stats()
         self.assertEqual(stats["wad"], self.wad)
+        self.assertEqual(stats["engine"], "natmod")
         self.assertTrue(stats["frames"] > 0, "no frames were presented")
         surface = self.activity._surface
         # Doom's demo draws a level: the surface must not be one flat colour.
@@ -115,87 +777,28 @@ class TestDoomActivity(unittest.TestCase):
                 break
         self.assertTrue(len(colours) > 4, "the surface looks blank")
 
-    def test_a_band_blit_writes_that_band_only(self):
-        surface = self.activity._surface
-        surface.buffer[:] = bytes(len(surface.buffer))
-        doom.blit_band(surface.buffer, 1, surface.rows_per_band)
-        rows = surface.rows_per_band
-        band_start = rows * WIDTH * 2
-        band_end = band_start + rows * WIDTH * 2
-        self.assertEqual(surface.buffer[:band_start], bytes(band_start),
-                         "rows above the band were written")
-        self.assertNotEqual(surface.buffer[band_start:band_end],
-                            bytes(band_end - band_start),
-                            "the band was not drawn")
-
     def test_pausing_stops_the_frame_loop(self):
         self.activity.onPause(None)
         frames = self.activity.get_stats()["frames"]
         _wait_ms(300)
         self.assertEqual(self.activity.get_stats()["frames"], frames)
+        self.activity.onResume(None)
+        _wait_ms(300)
+        self.assertTrue(self.activity.get_stats()["frames"] > frames,
+                        "resuming did not restart the loop")
 
-    # -- input ------------------------------------------------------------
-
-    def _touch(self, code, x, y):
-        InputManager.pointer_xy = staticmethod(lambda: (x, y))
-        self.activity._on_touch(_Event(code=code))
-
-    def _width(self):
-        return mpos.ui.main_display.get_horizontal_resolution()
-
-    def test_arrow_keys_turn_and_are_released_after_the_hold(self):
-        self.activity.onPause(None)
-        self.activity._on_key(_Event(key=lv.KEY.LEFT))
-        self.assertEqual(self.activity.get_stats()["keys"], 1)
-        self.assertIn(doom.KEY_LEFT, self.activity._held)
-
-        # The frame loop drops a hold nobody refreshed: the SDL keyboard and a
-        # badge keypad report presses, not releases.
-        later = time.ticks_add(time.ticks_ms(), 1000)
-        self.activity._release_held(later)
-        self.assertEqual(self.activity.get_stats()["keys"], 2)
-        self.assertEqual(self.activity._held, {})
-
-    def test_y_opens_the_doom_menu(self):
-        # Esc is the OS "back" key on the desktop and on the 2026 badge, so Y
-        # is Doom's own menu.
-        self.activity.onPause(None)
-        self.activity._on_key(_Event(key=ord("y")))
-        self.assertEqual(self.activity.get_stats()["keys"], 2)
-        self.assertEqual(self.activity._held, {})
-
-    def test_enter_selects_in_a_menu_and_holds_use(self):
-        self.activity.onPause(None)
-        self.activity._on_key(_Event(key=lv.KEY.ENTER))
-        # A menu acts on the keydown, so ENTER taps; USE has to stay down for a
-        # tic or the release cancels it before the tic that opens the door.
-        self.assertEqual(self.activity.get_stats()["keys"], 3)
-        self.assertIn(doom.KEY_USE, self.activity._held)
-
-    def test_middle_tap_walks_and_fires(self):
-        self.activity.onPause(None)
-        x = self._width() // 2
-        self._touch(lv.EVENT.PRESSED, x, HEIGHT // 2)
-        self.assertEqual(self.activity._touch_key, doom.KEY_UP)
-        self._touch(lv.EVENT.RELEASED, x, HEIGHT // 2)
-        self.assertEqual(self.activity._touch_key, 0)
-        self.assertEqual(self.activity.get_stats()["keys"], 3)
-        # The tap fires: fire is held for a tic, like a button press.
-        self.assertIn(doom.KEY_FIRE, self.activity._held)
-
-    def test_the_top_edge_opens_the_menu(self):
-        self.activity.onPause(None)
-        self._touch(lv.EVENT.PRESSED, self._width() // 2, 4)
-        self.assertEqual(self.activity.get_stats()["keys"], 2)
-        self.assertEqual(self.activity._touch_key, 0)
-
-    def test_pausing_releases_held_keys(self):
-        self.activity.onPause(None)
-        self.activity._on_key(_Event(key=lv.KEY.RIGHT))
-        self.assertIn(doom.KEY_RIGHT, self.activity._held)
-        self.activity.onPause(None)
-        self.assertEqual(self.activity.get_stats()["keys"], 2)
-        self.assertEqual(self.activity._held, {})
+    def test_a_band_blit_writes_that_band_only(self):
+        surface = self.activity._surface
+        surface.buffer[:] = bytes(len(surface.buffer))
+        natmod.blit_band(surface.buffer, 1, surface.rows_per_band)
+        rows = surface.rows_per_band
+        band_start = rows * surface.width * 2
+        band_end = band_start + rows * surface.width * 2
+        self.assertEqual(surface.buffer[:band_start], bytes(band_start),
+                         "rows above the band were written")
+        self.assertNotEqual(surface.buffer[band_start:band_end],
+                            bytes(band_end - band_start),
+                            "the band was not drawn")
 
 
 class TestDoomOnTheRealDisplay(unittest.TestCase):
@@ -207,10 +810,15 @@ class TestDoomOnTheRealDisplay(unittest.TestCase):
         lv.screen_load(screen)
         try:
             from mpos.ui.native_display import NativeDisplay
-            surface = NativeDisplay(screen, width=WIDTH, height=HEIGHT)
+            surface = NativeDisplay(screen, width=doom.GAME_WIDTH,
+                                    height=doom.GAME_HEIGHT)
         finally:
             lv.screen_load(lv.obj())
-        self.assertEqual(surface.width, WIDTH)
-        self.assertEqual(surface.height, HEIGHT)
-        if surface.display.get_vertical_resolution() > HEIGHT:
+        self.assertEqual(surface.width, doom.GAME_WIDTH)
+        self.assertEqual(surface.height, doom.GAME_HEIGHT)
+        if surface.display.get_vertical_resolution() > doom.GAME_HEIGHT:
             self.assertTrue(surface._image_y > 0, "the surface is not centred")
+
+
+if __name__ == "__main__":
+    unittest.main()

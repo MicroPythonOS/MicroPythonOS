@@ -318,10 +318,11 @@ class TestShippedCopy(unittest.TestCase):
 
     def test_the_app_copy_is_identical_to_the_framework_one(self):
         framework = open("lib/mpos/ui/native_display.py", "rb").read()
-        bundled = open(
-            "apps/com.micropythonos.breakout/native_display.py", "rb").read()
-        self.assertEqual(framework, bundled,
-                         "keep the app copy and the framework copy identical")
+        for path in ("apps/com.micropythonos.breakout/native_display.py",
+                     "apps/com.micropythonos.doom/native_display.py"):
+            bundled = open(path, "rb").read()
+            self.assertEqual(framework, bundled,
+                             "keep %s identical to the framework copy" % path)
 
 
 class TestNativeDisplayOnTheRealDisplay(unittest.TestCase):

@@ -141,6 +141,7 @@ class NativeDisplay:
         self.invalidate_all()
 
     def end(self):
+        """Stop presenting: the panel belongs to someone else from now on."""
         self._active = False
 
     # -- presenting -------------------------------------------------------
