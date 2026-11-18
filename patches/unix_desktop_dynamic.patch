@@ -1,0 +1,26 @@
+Subject: [PATCH] unix: link the desktop build dynamically
+
+The desktop binary used to be linked with -static ("all libraries included").
+That cannot host ALSA: distros ship only libasound.so, and a statically linked
+alsa-lib was measured to be unusable (its config parser spins inside a static
+glibc binary, and without the plugin layer it can only take the sound card
+exclusively, which fails next to PulseAudio/PipeWire). The desktop build is
+linked normally now: libc and libasound come from the host, everything else
+(SDL, LVGL, MicroPython, the engines) is still in the binary.
+
+As a side effect this also fixes modffi's dlopen, which had the same
+static-binary problem (a shared library ending up with a second copy of libc's
+state).
+
+--- a/builder/unix.py
++++ b/builder/unix.py
+@@ -101,9 +101,6 @@
+         ]
+     )
+ 
+-    if REAL_PORT == 'unix':
+-        unix_cmd.append('LDFLAGS_EXTRA=-static')  # static binary (all libraries included) so it's more portable
+-
+     # unix_cmd.extend(extra_args)
+ 
+     clean_cmd.extend(unix_cmd[:])

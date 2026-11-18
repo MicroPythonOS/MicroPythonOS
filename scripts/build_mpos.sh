@@ -756,6 +756,12 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 		sed -i.backup 's/^CWARN = -Wall -Werror$/CWARN = -Wall -Werror -Wno-unknown-warning-option -Wno-error=gnu-folding-constant -Wno-error=missing-field-initializers -Wno-error=unterminated-string-initialization/' "$unix_makefile"
 	fi
 
+	# The desktop build is linked dynamically so the bundled SDL can carry its
+	# ALSA backend (a static binary cannot link libasound, and a static alsa-lib
+	# was measured unusable: config-parser spin, exclusive card access).
+	echo "Applying lvgl_micropython unix dynamic-link patch..."
+	apply_patch "$codebasedir"/lvgl_micropython "$codebasedir"/patches/unix_desktop_dynamic.patch
+
 	# If it's still running, kill it, otherwise "text file busy"
 	pkill -9 -f /lvgl_micropy_unix
 	# LV_CFLAGS are passed to USER_C_MODULES (compiler flags only, no linker flags)
@@ -783,7 +789,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 		STRIP= \
 		DISPLAY=sdl_display \
 		INDEV=sdl_pointer \
-		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_SNDIO=OFF -DSDL_LIBSAMPLERATE=OFF" \
+		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_ALSA=ON -DSDL_PULSEAUDIO=OFF -DSDL_SNDIO=OFF -DSDL_LIBSAMPLERATE=OFF" \
 		MPY_CROSS_FLAGS="\"$mpy_cross_flags\"" \
 		"$frozenmanifest"
 	build_status=$?

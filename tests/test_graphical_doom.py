@@ -242,7 +242,6 @@ class TestCoreEngine(unittest.TestCase):
         sys.modules["mpos_core"] = self.core
         self.engine = doom._CoreEngine()
         self.surface = _FakeSurface()
-        self._real_audio = doom.AudioManager
         self._real_pointer_xy = InputManager.pointer_xy
 
     def tearDown(self):
@@ -250,8 +249,6 @@ class TestCoreEngine(unittest.TestCase):
             sys.modules["mpos_core"] = self._real_core
         else:
             sys.modules.pop("mpos_core", None)
-        doom.AudioManager = self._real_audio
-        self.engine._close_audio()
 
     def test_start_passes_the_surface_and_the_band_height(self):
         self.engine.start("doom1.wad", self.surface)
@@ -346,102 +343,13 @@ class TestCoreEngine(unittest.TestCase):
 
     # -- audio ------------------------------------------------------------
 
-    def _patch_pcm(self, chosen=None, outputs=()):
-        """Stand in for AudioManager's PCM sink API."""
-        class _Output:
-            def __init__(self, name, kind):
-                self.name = name
-                self.kind = kind
-
-        class _Sink:
-            def __init__(self):
-                self.writes = []
-                self.closes = 0
-                self.active = True
-                self.output = None
-
-            def write(self, buffer):
-                self.writes.append(bytes(buffer))
-                return len(buffer)
-
-            def close(self):
-                self.closes += 1
-                self.active = False
-
-        sink = _Sink()
-
-        class _Audio:
-            @staticmethod
-            def get_default_output():
-                return chosen
-
-            @staticmethod
-            def find_output_by_kind(kind):
-                for output in outputs:
-                    if output.kind == kind:
-                        return output
-                return None
-
-            @staticmethod
-            def open_pcm(rate, channels=1, output=None):
-                sink.rate = rate
-                sink.output = output
-                sink.active = True
-                return sink
-
-        doom.AudioManager = _Audio
-        return sink
-
-    def test_the_app_asks_for_a_speaker_and_feeds_it(self):
-        dac = type("O", (), {"name": "Headset Output", "kind": "i2s"})()
-        sink = self._patch_pcm(chosen=dac, outputs=(dac,))
+    def test_the_core_mixes_into_the_hosts_buffer(self):
+        # The sink itself belongs to NativeActivity; the engine only fills the
+        # buffer with its mixer (core_sound.c through the ABI).
         self.engine.start("doom1.wad", self.surface)
-        self.assertIs(self.engine._sink, sink)
-        self.assertIs(sink.output, dac)
-        self.assertEqual(sink.rate, doom.SAMPLE_RATE)
-
-        self.engine._audio_ms = time.ticks_ms() - 60
-        self.engine._pump_audio(time.ticks_ms())
-        self.assertTrue(any(any(chunk) for chunk in sink.writes),
-                        "the sink got silence")
-
-        self.engine.pause()
-        self.assertTrue(sink.closes > 0, "the sink was not closed")
-
-    def test_a_selected_buzzer_is_not_offered_dooms_audio(self):
-        # 11 kHz broadband PCM through a piezo is a screech; the app asks for a
-        # speaker instead rather than obeying a buzzer selection.
-        class _Output:
-            def __init__(self, name, kind):
-                self.name = name
-                self.kind = kind
-
-        buzzer = _Output("Badge Buzzer", "buzzer")
-        dac = _Output("Headset Output", "i2s")
-        sink = self._patch_pcm(chosen=buzzer, outputs=(buzzer, dac))
-        self.engine.start("doom1.wad", self.surface)
-        self.assertIs(sink.output, dac)
-
-    def test_a_board_with_only_a_piezo_stays_silent(self):
-        class _Output:
-            name = "Badge Buzzer"
-            kind = "buzzer"
-
-        buzzer = _Output()
-        self._patch_pcm(chosen=buzzer, outputs=(buzzer,))
-        self.engine.start("doom1.wad", self.surface)
-        self.assertIsNone(self.engine._sink)
-        self.engine._pump_audio(time.ticks_ms())
-
-    def test_resuming_reopens_the_sink_that_pausing_closed(self):
-        dac = type("O", (), {"name": "Headset Output", "kind": "i2s"})()
-        sink = self._patch_pcm(chosen=dac, outputs=(dac,))
-        self.engine.start("doom1.wad", self.surface)
-        self.engine.pause()
-        self.assertIsNone(self.engine._sink)
-        self.engine.resume()
-        self.assertIs(self.engine._sink, sink)
-        self.assertTrue(sink.active)
+        buffer = bytearray(2048)
+        self.engine.audio_mix(buffer)
+        self.assertTrue(any(buffer), "the mixer returned silence")
 
 
 class TestNatmodEngine(unittest.TestCase):
@@ -514,6 +422,27 @@ class TestNatmodEngine(unittest.TestCase):
             (surface.buffer, doom.GAME_WIDTH, doom.GAME_HEIGHT,
              surface.rows_per_band, engine._present))
         self.assertTrue(callable(module.surface_args[4]))
+
+    def test_the_module_mixes_into_the_hosts_buffer(self):
+        if natmod is None:
+            self.skipTest("no native module for this host")
+
+        class _Engine:
+            def __init__(self):
+                self.mixed = 0
+
+            def audio_mix(self, buffer):
+                self.mixed += 1
+                for index in range(len(buffer)):
+                    buffer[index] = 7
+                return len(buffer) // 2
+
+        engine = doom._NatmodEngine()
+        engine._doom = _Engine()
+        buffer = bytearray(64)
+        engine.audio_mix(buffer)
+        self.assertEqual(engine._doom.mixed, 1)
+        self.assertTrue(all(value == 7 for value in buffer))
 
     def test_a_presented_band_is_invalidated_and_flushed(self):
         engine = doom._NatmodEngine()

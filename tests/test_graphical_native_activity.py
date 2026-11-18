@@ -99,6 +99,12 @@ class _FakeEngine:
     def key(self, code, pressed):
         self.keys.append((code, pressed))
 
+    def audio_mix(self, buffer):
+        # A recognisable non-silent sample, like an engine's mixer.
+        for index in range(len(buffer)):
+            buffer[index] = 3
+        return len(buffer) // 2
+
     def stop(self):
         self.stops += 1
 
@@ -106,6 +112,10 @@ class _FakeEngine:
 class _Game(NativeActivity):
     target_fps = 50
     hint_text = "arrow keys"
+    audio_rate = None
+
+    def make_engine(self):
+        return self.engine
 
     def __init__(self):
         self.frames = 0
@@ -297,6 +307,137 @@ class TestNativeActivity(unittest.TestCase):
         self.assertEqual(
             self.game.to_game(100, 60),
             (100 - surface._image_x, 60 - surface._image_y))
+
+    # -- audio ------------------------------------------------------------
+
+    def _patch_pcm(self, chosen=None, outputs=()):
+        """Stand in for AudioManager's PCM sink API."""
+        class _Output:
+            def __init__(self, name, kind):
+                self.name = name
+                self.kind = kind
+
+        class _Sink:
+            def __init__(self):
+                self.writes = []
+                self.closes = 0
+                self.active = True
+                self.output = None
+
+            def write(self, buffer):
+                self.writes.append(bytes(buffer))
+                return len(buffer)
+
+            def close(self):
+                self.closes += 1
+                self.active = False
+
+        sink = _Sink()
+
+        class _Audio:
+            @staticmethod
+            def get_default_output():
+                return chosen
+
+            @staticmethod
+            def find_output_by_kind(kind):
+                for output in outputs:
+                    if output.kind == kind:
+                        return output
+                return None
+
+            @staticmethod
+            def open_pcm(rate, channels=1, output=None):
+                sink.rate = rate
+                sink.output = output
+                sink.active = True
+                return sink
+
+        self._real_audio = mpos.AudioManager
+        mpos.AudioManager = _Audio
+        return sink
+
+    def _restore_audio(self):
+        mpos.AudioManager = self._real_audio
+
+    def test_the_engine_feeds_the_sink_every_frame(self):
+        dac = type("O", (), {"name": "Headset Output", "kind": "i2s"})()
+        sink = self._patch_pcm(chosen=dac, outputs=(dac,))
+        try:
+            self.game.audio_rate = 11025
+            self.game._open_audio()
+            self.assertIs(self.game._sink, sink)
+            self.assertIs(sink.output, dac)
+            self.assertEqual(sink.rate, 11025)
+
+            self.game._audio_ms = time.ticks_ms() - 60
+            self.game._pump_audio(time.ticks_ms())
+            self.assertTrue(any(any(chunk) for chunk in sink.writes),
+                            "the sink got silence")
+        finally:
+            self.game._close_audio()
+            self._restore_audio()
+
+    def test_a_paused_activity_closes_the_sink_and_resume_reopens_it(self):
+        dac = type("O", (), {"name": "Headset Output", "kind": "i2s"})()
+        sink = self._patch_pcm(chosen=dac, outputs=(dac,))
+        try:
+            self.game.audio_rate = 11025
+            self.game._open_audio()
+            self.game.onPause(None)
+            self.assertIsNone(self.game._sink)
+            self.assertTrue(sink.closes > 0)
+
+            self.game.onResume(None)
+            self.assertIs(self.game._sink, sink)
+        finally:
+            self.game._close_audio()
+            self._restore_audio()
+
+    def test_an_app_that_wants_a_speaker_does_not_get_the_piezo(self):
+        class _Output:
+            def __init__(self, name, kind):
+                self.name = name
+                self.kind = kind
+
+        buzzer = _Output("Badge Buzzer", "buzzer")
+        dac = _Output("Headset Output", "i2s")
+        sink = self._patch_pcm(chosen=buzzer, outputs=(buzzer, dac))
+        try:
+            self.game.audio_rate = 11025
+            self.game.audio_output_kind = "i2s"
+            self.game._open_audio()
+            self.assertIs(sink.output, dac)
+        finally:
+            self.game._close_audio()
+            self._restore_audio()
+
+    def test_a_piezo_only_host_stays_silent(self):
+        class _Output:
+            name = "Badge Buzzer"
+            kind = "buzzer"
+
+        buzzer = _Output()
+        self._patch_pcm(chosen=buzzer, outputs=(buzzer,))
+        try:
+            self.game.audio_rate = 11025
+            self.game.audio_output_kind = "i2s"
+            self.game._open_audio()
+            self.assertIsNone(self.game._sink)
+            self.game._pump_audio(time.ticks_ms())
+        finally:
+            self.game._close_audio()
+            self._restore_audio()
+
+    def test_an_app_without_a_mixer_opens_no_sink(self):
+        dac = type("O", (), {"name": "Headset Output", "kind": "i2s"})()
+        self._patch_pcm(chosen=dac, outputs=(dac,))
+        try:
+            self.game.audio_rate = None
+            self.game._open_audio()
+            self.assertIsNone(self.game._sink)
+        finally:
+            self._restore_audio()
 
     # -- labels -----------------------------------------------------------
 

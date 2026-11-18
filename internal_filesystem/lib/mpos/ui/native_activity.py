@@ -61,6 +61,10 @@ class NativeActivity(Activity):
     hint_ms = HINT_MS
     surface_width = None
     surface_height = None
+    # Set audio_rate when the engine has a mixer: the base then opens a PCM sink
+    # and pulls `engine.audio_mix(buffer)` at that rate, every frame.
+    audio_rate = None
+    audio_output_kind = "i2s"
 
     screen = None
     error = None
@@ -78,6 +82,9 @@ class NativeActivity(Activity):
     _hint_until = 0
     _rotated = False
     _keys_sent = 0
+    _sink = None
+    _audio_buffer = None
+    _audio_ms = 0
 
     # -- lifecycle --------------------------------------------------------
 
@@ -105,6 +112,7 @@ class NativeActivity(Activity):
             return
         if self.engine is not None:
             self.engine.resume()
+        self._open_audio()
         self._surface.begin()
         self._next_frame_ms = time.ticks_ms()
         self._fps_since = self._next_frame_ms
@@ -123,6 +131,7 @@ class NativeActivity(Activity):
             self.holds.release_all()
         if self.engine is not None:
             self.engine.pause()
+        self._close_audio()
         if self._surface is not None:
             self._surface.end()
 
@@ -135,6 +144,7 @@ class NativeActivity(Activity):
             pass
         if self.engine is not None:
             self.engine.stop()
+        self._close_audio()
         # A resumed activity starts a fresh engine; see _begin_session().
         self.engine = None
         self._started = False
@@ -225,6 +235,7 @@ class NativeActivity(Activity):
             self._leave()
             return
 
+        self._pump_audio(now)
         self._frames += 1
         self._fps_frames += 1
         elapsed = time.ticks_diff(now, self._fps_since)
@@ -248,6 +259,74 @@ class NativeActivity(Activity):
         self._paused = True
         mpos.ui.task_handler.remove_event_cb(self._drawframe)
         self.finish()
+
+    # -- audio ------------------------------------------------------------
+
+    def _open_audio(self):
+        """Open the PCM sink the engine's mixer writes into.
+
+        Which device that is comes from the user's choice in Settings -> Audio,
+        with one exception an app can make: Doom's effects are 11 kHz broadband
+        PCM, and a piezo resonator with no output below 2 kHz turns that into a
+        screech, so it asks for `i2s` only and a buzzer-only board stays silent.
+        A host with no PCM sink at all (an old firmware, a build without
+        `machine.I2S` and without hosted_audio) also stays silent; the game is
+        still playable.
+        """
+        if self.audio_rate is None or self._sink is not None:
+            return
+        from mpos import AudioManager
+        output = AudioManager.get_default_output()
+        if self.audio_output_kind is not None and (
+            output is None or output.kind != self.audio_output_kind
+        ):
+            output = AudioManager.find_output_by_kind(self.audio_output_kind)
+        if output is None:
+            return
+        try:
+            self._sink = AudioManager.open_pcm(self.audio_rate, output=output)
+        except AttributeError:
+            self._sink = None
+            return
+        except Exception as error:
+            print("%s: audio init failed: %s" % (self.who(), error))
+            self._sink = None
+            return
+        if self._sink is None or not self._sink.active:
+            self._sink = None
+            return
+        self._audio_buffer = bytearray(2048 * 2)
+        self._audio_ms = time.ticks_ms()
+
+    def _close_audio(self):
+        if self._sink is not None:
+            try:
+                self._sink.close()
+            except Exception:
+                pass
+            self._sink = None
+        self._audio_buffer = None
+
+    def _pump_audio(self, now):
+        """Give the sink the samples the frame loop's elapsed time needs."""
+        if self._sink is None:
+            return
+        elapsed = time.ticks_diff(now, self._audio_ms)
+        if elapsed <= 0:
+            return
+        samples = (elapsed * self.audio_rate) // 1000
+        if samples > 2048:
+            samples = 2048
+        elif samples < 64:
+            return
+        self._audio_ms = now
+        view = memoryview(self._audio_buffer)[:samples * 2]
+        self.engine.audio_mix(view)
+        try:
+            self._sink.write(view)
+        except Exception:
+            # A short write means the ring is full; the next frame catches up.
+            pass
 
     # -- input ------------------------------------------------------------
 

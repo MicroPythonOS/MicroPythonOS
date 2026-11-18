@@ -34,11 +34,9 @@ Controls - keyboard, mouse and badge buttons:
 """
 
 import sys
-import time
 
 import lvgl as lv
 
-from mpos import AudioManager
 from mpos.ui.native_activity import NativeActivity
 from mpos.ui.native_input import ThumbZones
 
@@ -135,9 +133,6 @@ class _CoreEngine:
         self._surface = None
         self._keys = []
         self._files = {}
-        self._sink = None
-        self._audio_buffer = None
-        self._audio_ms = 0
         # ABI 7 added the request; an older core cannot make one.
         self._quit_query = getattr(mpos_core, "quit_requested", None)
 
@@ -170,13 +165,11 @@ class _CoreEngine:
         if __debug__:
             print("doom: core at 0x%x, %d bytes of text, wad %s" % (
                 self._core.mapped(), self._core.mapped_size(), wad))
-        self._open_audio()
 
     def resume(self):
-        self._open_audio()
+        pass
 
     def pause(self):
-        self._close_audio()
         # A core is not ticked while the activity is paused, so anything still
         # queued here would be replayed on resume.
         self._keys = []
@@ -185,7 +178,9 @@ class _CoreEngine:
         self._core.tick(now)
         if self._quit_query is not None and self._quit_query():
             self.quit = True
-        self._pump_audio(now)
+
+    def audio_mix(self, buffer):
+        self._core.audio_mix(buffer)
 
     def key(self, code, pressed):
         self._keys.append((code, pressed))
@@ -202,73 +197,8 @@ class _CoreEngine:
                 pass
         self._files = {}
         self._keys = []
-        self._close_audio()
 
     # -- audio ------------------------------------------------------------
-
-    def _open_audio(self):
-        """Ask the OS for a speaker to put the core's mixed samples on.
-
-        The user's choice in Settings -> Audio decides, with one exception this
-        app makes for itself: Doom's effects are 11 kHz broadband PCM, and a
-        piezo resonator with no output below 2 kHz turns that into a screech
-        (and its 11 kHz timer interrupt costs frame time). So a buzzer is not
-        offered this audio - a board with only a piezo stays silent, which is
-        the better of the two. The sink takes int16 mono samples at SAMPLE_RATE.
-        """
-        if self._sink is not None:
-            return
-        output = AudioManager.get_default_output()
-        if output is None or output.kind != "i2s":
-            output = AudioManager.find_output_by_kind("i2s")
-        if output is None:
-            return
-        try:
-            # Firmware older than the PCM sink API has no open_pcm: the game
-            # still runs, silently, which is better than refusing to start.
-            self._sink = AudioManager.open_pcm(SAMPLE_RATE, output=output)
-        except AttributeError:
-            self._sink = None
-            return
-        except Exception as error:
-            print("doom: audio init failed: %s" % (error,))
-            self._sink = None
-            return
-        if self._sink is None or not self._sink.active:
-            self._sink = None
-            return
-        self._audio_buffer = bytearray(2048 * 2)
-        self._audio_ms = time.ticks_ms()
-
-    def _close_audio(self):
-        if self._sink is not None:
-            try:
-                self._sink.close()
-            except Exception:
-                pass
-            self._sink = None
-        self._audio_buffer = None
-
-    def _pump_audio(self, now):
-        """Give the sink the samples the frame loop's elapsed time needs."""
-        if self._sink is None:
-            return
-        elapsed = time.ticks_diff(now, self._audio_ms)
-        if elapsed <= 0:
-            return
-        samples = (elapsed * SAMPLE_RATE) // 1000
-        if samples > 2048:
-            samples = 2048
-        elif samples < 64:
-            return
-        self._audio_ms = now
-        view = memoryview(self._audio_buffer)[:samples * 2]
-        self._core.audio_mix(view)
-        try:
-            self._sink.write(view)
-        except Exception:
-            # A short write means the ring is full; the next frame catches up.
-            pass
 
     # -- ABI callbacks ----------------------------------------------------
 
@@ -370,6 +300,9 @@ class _NatmodEngine:
         if self._doom.quit_requested():
             self.quit = True
 
+    def audio_mix(self, buffer):
+        self._doom.audio_mix(buffer)
+
     def key(self, code, pressed):
         self._doom.key(code, pressed)
 
@@ -406,6 +339,10 @@ class Doom(NativeActivity):
 
     target_fps = TARGET_FPS
     hint_text = HINT_TEXT
+    # Both engines export the same 11025 Hz mixer; a piezo is refused because
+    # Doom's broadband effects become a screech on one.
+    audio_rate = SAMPLE_RATE
+    audio_output_kind = "i2s"
 
     _wad = None
     _last_touch = None
