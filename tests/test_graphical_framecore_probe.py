@@ -16,10 +16,13 @@ _APP_DIR = "apps/com.micropythonos.framecoreprobe"
 if _APP_DIR not in sys.path:
     sys.path.insert(0, _APP_DIR)
 
-if sys.platform == "esp32":
-    import framecore_probe_xtensawin as probe
-else:
-    import framecore_probe_x64 as probe
+try:
+    if sys.platform == "esp32":
+        import framecore_probe_xtensawin as probe
+    else:
+        import framecore_probe_x64 as probe
+except Exception:  # noqa: BLE001 - built for another architecture
+    probe = None
 
 # The real engine frame: the test pattern and the counter box only make sense
 # at the size the probe actually runs.
@@ -35,6 +38,8 @@ def _rgb888_to_rgb565(r, g, b):
 class ProbeTest(unittest.TestCase):
 
     def setUp(self):
+        if probe is None:
+            self.skipTest("no native framecore probe module for this host")
         self.buffer = bytearray(WIDTH * HEIGHT * 2)
         probe.init(self.buffer, WIDTH, HEIGHT, 0)
         probe.free_framebuffer()

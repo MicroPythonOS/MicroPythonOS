@@ -58,6 +58,13 @@ class _FakePWM:
 class TestBreakoutActivity(unittest.TestCase):
 
     def setUp(self):
+        # The engine is a native module for this host's architecture; on a
+        # host it cannot load for (an arm64 build with the x64 module, or a
+        # firmware without one) there is nothing to test.
+        try:
+            self.module = _breakout_module()
+        except Exception as error:  # noqa: BLE001
+            self.skipTest("no native breakout module for this host: %s" % error)
         self.assertTrue(AppManager.start_app("com.micropythonos.breakout"))
         _wait_ms(400)
         self.activity = None
@@ -66,7 +73,6 @@ class TestBreakoutActivity(unittest.TestCase):
                 self.activity = entry[0]
         self.assertIsNotNone(self.activity, "the breakout activity is not on the stack")
         self.pump = self.activity._surface
-        self.module = _breakout_module()
 
     def tearDown(self):
         while len(screen_stack) > 1:

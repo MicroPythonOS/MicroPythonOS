@@ -61,7 +61,7 @@ import time
 
 
 sys.path.insert(0, os.path.dirname(__file__))
-from mpos_controller import ProcessBackend, SerialBackend
+from mpos_controller import ProcessBackend, SerialBackend, _mpremote_cmd
 
 
 REPO_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
@@ -909,6 +909,34 @@ def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=Fa
     return len(failed) == 0, merged
 
 
+def _install_test_unittest(port=None):
+    """Put a source unittest on the device, where a frozen one may be stripped.
+
+    mpy-cross removes `assert` at every -O level, so a firmware whose frozen
+    modules are compiled at -O3 (the release builds) has unittest methods that
+    cannot fail: every test would pass vacuously. sys.path puts 'lib' first on
+    the device, so internal_filesystem/lib/unittest/__init__.py shadows the
+    frozen copy, and the runner's own assert self-check then repairs the
+    module it already imported.
+    """
+    source = os.path.join(FS_ROOT, "lib", "unittest", "__init__.py")
+    if not os.path.isfile(source):
+        return
+    try:
+        subprocess.run(
+            _mpremote_cmd(port, "exec",
+                          "import os; os.path.isdir('/lib') or os.mkdir('/lib'); "
+                          "os.path.isdir('/lib/unittest') or os.mkdir('/lib/unittest')"),
+            capture_output=True, timeout=30)
+        subprocess.run(
+            _mpremote_cmd(port, "cp", source, ":/lib/unittest/__init__.py"),
+            capture_output=True, timeout=120)
+    except Exception:
+        # A device without room for it still runs; the runner reports the
+        # stripped-unittest FATAL instead of a false green.
+        pass
+
+
 def _install_test_apps(port=None):
     install_script = os.path.join(REPO_ROOT, "scripts", "install_test_apps.sh")
     if not os.path.isfile(install_script):
@@ -1050,6 +1078,8 @@ def main():
     if args.ondevice and not os.environ.get("MPOS_TEST_PORT"):
         os.environ["MPOS_TEST_PORT"] = "/dev/ttyACM0"
 
+    if args.ondevice:
+        _install_test_unittest(args.port)
     if args.ondevice and not args.no_install_test_apps:
         _install_test_apps(args.port)
 

@@ -355,6 +355,10 @@ class TestCoreEngine(unittest.TestCase):
 class TestNatmodEngine(unittest.TestCase):
     """The desktop path: the real module's frame, and the band loop."""
 
+    def setUp(self):
+        if natmod is None:
+            self.skipTest("no native module for this host")
+
     def test_the_surface_is_dooms_own_frame(self):
         if natmod is None:
             self.skipTest("no native module for this host")
