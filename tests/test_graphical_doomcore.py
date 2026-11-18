@@ -20,8 +20,10 @@ APP_DIR = "apps/com.micropythonos.doomcore"
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
+# The portrait layout the app asks for on a 240x320 panel.
 SURFACE_WIDTH = 200
 SURFACE_HEIGHT = 320
+DRAW_BUFFER_BYTES = 28800
 
 
 class _FakeCore:
@@ -62,21 +64,62 @@ if _real_core is not None:
     sys.modules["mpos_core"] = _real_core
 
 
+class _FakeDisplay:
+    """Just the two calls the activity makes when it picks a surface."""
+
+    def __init__(self, width, height):
+        self._w = width
+        self._h = height
+
+    def get_horizontal_resolution(self):
+        return self._w
+
+    def get_vertical_resolution(self):
+        return self._h
+
+
 class _FakeSurface:
     """A display surface that records invalidations instead of drawing."""
 
-    rows_per_band = 72
-    band_count = 5
-
-    # A 240x320 panel letterboxes the 200-wide surface by 20 px a side.
-    _image_x = 20
-    _image_y = 0
+    panel_width = 240
+    panel_height = 320
 
     def __init__(self, screen=None, width=None, height=None, buffer=None):
-        self.buffer = bytearray(SURFACE_WIDTH * SURFACE_HEIGHT * 2)
+        self.width = width or SURFACE_WIDTH
+        self.height = height or SURFACE_HEIGHT
+        # Same rule as NativeDisplay: a band is one draw buffer of rows.
+        self.rows_per_band = DRAW_BUFFER_BYTES // (self.width * 2)
+        self.band_count = ((self.height + self.rows_per_band - 1)
+                           // self.rows_per_band)
+        self.stride = self.width * 2
+        self.buffer = bytearray(self.width * self.height * 2)
+        self._image_x = (self.panel_width - self.width) // 2
+        self._image_y = (self.panel_height - self.height) // 2
         self._active = True
         self.invalidated = []
         self.flushed = 0
+        self.bands = 0
+        self.frames = 0
+        self._direct_cmd = None
+        self.direct_bands = []
+
+    def direct_start(self):
+        self._direct_cmd = 0x2C
+
+    def direct_stop(self):
+        self._direct_cmd = None
+
+    @property
+    def direct_active(self):
+        return self._direct_cmd is not None
+
+    def present_band_direct(self, y, rows):
+        self.direct_bands.append((y, rows))
+        self.bands += 1
+
+    def present_band_direct(self, y, rows):
+        self.direct_bands.append((y, rows))
+        self.bands += 1
 
     def begin(self):
         self._active = True
@@ -112,6 +155,8 @@ class TestDoomCoreActivity(unittest.TestCase):
         self._real_native_display = doom_core.NativeDisplay
         self._real_find_wad = doom_core.find_wad
         self._real_pointer_xy = InputManager.pointer_xy
+        self._real_display = mpos.ui.main_display
+        mpos.ui.main_display = _FakeDisplay(240, 320)
         doom_core.NativeDisplay = _FakeSurface
         self.activity = doom_core.DoomCore()
         self.activity.onCreate()
@@ -128,6 +173,7 @@ class TestDoomCoreActivity(unittest.TestCase):
         doom_core.NativeDisplay = self._real_native_display
         doom_core.find_wad = self._real_find_wad
         InputManager.pointer_xy = self._real_pointer_xy
+        mpos.ui.main_display = self._real_display
 
     # -- start-up ---------------------------------------------------------
 
@@ -141,10 +187,41 @@ class TestDoomCoreActivity(unittest.TestCase):
         self.assertEqual(args[0], doom_core.CORE_PARTITION)
         self.assertEqual(args[10], SURFACE_WIDTH)
         self.assertEqual(args[11], SURFACE_HEIGHT)
+        self.assertTrue(self.activity._rotated)
         # The core draws straight into the surface buffer, one display band at a
         # time: that is what overlaps the transfer with the next conversion.
         self.assertIs(args[12], self.activity._surface.buffer)
-        self.assertEqual(args[13], _FakeSurface.rows_per_band)
+        self.assertEqual(args[13], self.activity._surface.rows_per_band)
+
+    def test_a_landscape_panel_gets_dooms_frame_unrotated(self):
+        # The fri3d 2026 ends up 320x240 after its rotation, so the core must
+        # not transpose: a 320x200 surface is the request.
+        class _LandscapeSurface(_FakeSurface):
+            panel_width = 320
+            panel_height = 240
+
+        doom_core.NativeDisplay = _LandscapeSurface
+        mpos.ui.main_display = _FakeDisplay(320, 240)
+        self.activity._started = False
+        doom_core.find_wad = lambda intent=None: "doom1.wad"
+        self.activity.onResume(None)
+
+        args = fake_core.started
+        self.assertFalse(self.activity._rotated)
+        self.assertEqual(args[10], 320)
+        self.assertEqual(args[11], 200)
+        self.assertEqual(args[12], self.activity._surface.buffer)
+
+        # Identity mapping: Doom's x is the panel's x, its y the panel's y
+        # (offset by the letterbox).
+        self.assertEqual(self.activity._to_game(150, 70), (150, 50))
+
+        # The left half is still the joystick, and the bands are Doom's rows.
+        self._touch(lv.EVENT.PRESSED, 40, 70)
+        self.assertEqual(self.activity._zone, "stick")
+        self._touch(lv.EVENT.RELEASED, 40, 70)
+        self._touch(lv.EVENT.PRESSED, 240, 150)
+        self.assertEqual(self.activity._zone, "fire")
 
     # -- presenting -------------------------------------------------------
 
@@ -165,6 +242,25 @@ class TestDoomCoreActivity(unittest.TestCase):
         self.assertEqual(bytes(surface.buffer[0:4]), before)
         self.assertEqual(surface.invalidated, [0])
         self.assertEqual(surface.flushed, 1)
+
+    def test_bands_go_straight_to_the_bus_once_the_hint_is_gone(self):
+        # While the hint is up the image goes through LVGL; after it, the band
+        # is handed to the panel bus and nothing is flushed.
+        self.activity.hint = None
+        self.activity._drawframe()
+        self.assertTrue(self.activity.get_stats()["direct"])
+
+        self.activity._present_band(72, 72, None)
+        self.assertEqual(self.activity._surface.direct_bands, [(72, 72)])
+        self.assertEqual(self.activity._surface.flushed, 0)
+
+    def test_pausing_hands_the_panel_back_to_lvgl(self):
+        self.activity.hint = None
+        self.activity._drawframe()
+        self.assertTrue(self.activity._surface.direct_active)
+        self.activity._paused = False
+        self.activity.onPause(None)
+        self.assertFalse(self.activity._surface.direct_active)
 
     # -- buttons ----------------------------------------------------------
 

@@ -42,7 +42,7 @@
 
 #include <stdint.h>
 
-#define MPOS_CORE_ABI_VERSION 5
+#define MPOS_CORE_ABI_VERSION 6
 
 /* Flags for mpos_core_entry_t.flags. */
 #define MPOS_CORE_FLAG_FRAMEBUFFER_PALETTED (1u << 0)  /* 8-bit indices */
@@ -132,6 +132,11 @@ typedef struct mpos_core_abi {
  * tick(abi, now_ms): run one engine frame; the ABI pointer is passed again so a
  *     core with no writable memory of its own still works.
  * stop(abi): release the core's resources; the partition may then be remapped.
+ * audio_mix(dst, frames): mix `frames` mono signed-16-bit samples into `dst`
+ *     from whatever the engine is playing right now, advancing its own voice
+ *     state. The host pulls this at its output rate and writes the result to
+ *     the codec, so the engine never blocks on audio and the host decides when
+ *     to feed the DAC. May be NULL for a core with no sound.
  */
 typedef struct mpos_core_entry {
     uint32_t abi_version;
@@ -169,6 +174,7 @@ typedef struct mpos_core_entry {
     int (*init)(const mpos_core_abi_t *abi, const char *wad_path);
     void (*tick)(const mpos_core_abi_t *abi, uint32_t now_ms);
     void (*stop)(const mpos_core_abi_t *abi);
+    void (*audio_mix)(int16_t *dst, int frames);
 } mpos_core_entry_t;
 
 #endif  /* MPOS_CORE_ABI_H */

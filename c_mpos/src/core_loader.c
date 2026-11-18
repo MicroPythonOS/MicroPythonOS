@@ -651,6 +651,21 @@ static mp_obj_t mpos_core_mapped_size(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_mapped_size_obj, mpos_core_mapped_size);
 
+static mp_obj_t mpos_core_audio_mix(mp_obj_t buffer) {
+    if (s_entry == NULL || s_entry->audio_mix == NULL) {
+        return mp_obj_new_int(0);
+    }
+    mp_buffer_info_t info;
+    mp_get_buffer_raise(buffer, &info, MP_BUFFER_WRITE);
+    int frames = (int)(info.len / sizeof(int16_t));
+    if (frames <= 0) {
+        return mp_obj_new_int(0);
+    }
+    s_entry->audio_mix((int16_t *)info.buf, frames);
+    return mp_obj_new_int(frames);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(mpos_core_audio_mix_obj, mpos_core_audio_mix);
+
 static mp_obj_t mpos_core_abi_version(void) {
     return mp_obj_new_int(MPOS_CORE_ABI_VERSION);
 }
@@ -664,6 +679,7 @@ static const mp_rom_map_elem_t mpos_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_mapped), MP_ROM_PTR(&mpos_core_mapped_obj) },
     { MP_ROM_QSTR(MP_QSTR_mapped_size), MP_ROM_PTR(&mpos_core_mapped_size_obj) },
     { MP_ROM_QSTR(MP_QSTR_abi_version), MP_ROM_PTR(&mpos_core_abi_version_obj) },
+    { MP_ROM_QSTR(MP_QSTR_audio_mix), MP_ROM_PTR(&mpos_core_audio_mix_obj) },
 };
 static MP_DEFINE_CONST_DICT(mpos_core_module_globals, mpos_core_module_globals_table);
 

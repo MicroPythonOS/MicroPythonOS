@@ -180,6 +180,22 @@ static void convert_band(const mpos_core_abi_t *abi, uint16_t *dst,
     }
 }
 
+// A landscape panel takes the frame as it is: dst(x, y) = src(x, y). No
+// transpose and no palette indirection beyond the lookup, so this is the
+// cheaper of the two paths.
+static void convert_band_direct(const mpos_core_abi_t *abi, uint16_t *dst,
+                                int dst_y0, int rows) {
+    const uint8_t *src = (const uint8_t *)DG_ScreenBuffer;
+    const int out_w = abi->frame_width;
+    for (int y = dst_y0; y < dst_y0 + rows; y++) {
+        const uint8_t *src_row = src + y * DOOMGENERIC_RESX;
+        uint16_t *dst_row = dst + y * out_w;
+        for (int x = 0; x < DOOMGENERIC_RESX; x++) {
+            dst_row[x] = s_palette[src_row[x]];
+        }
+    }
+}
+
 static uint32_t s_engine_ms;
 static uint32_t s_convert_ms;
 static uint32_t s_present_ms;
@@ -196,6 +212,10 @@ static void present_frame(const mpos_core_abi_t *abi) {
     palette_changed = false;
 
     const int height = abi->frame_height;
+    // The host's surface shape says how to present it: a 200x320 surface is
+    // the rotated portrait layout, a 320x200 one is Doom's own landscape frame.
+    const int rotate = (abi->frame_width == DOOMGENERIC_RESY
+                         && abi->frame_height == DOOMGENERIC_RESX);
     uint16_t *target = abi->frame;
     if (target != NULL) {
         int band = abi->band_rows > 0 ? abi->band_rows : height;
@@ -208,7 +228,11 @@ static void present_frame(const mpos_core_abi_t *abi) {
                 rows = band;
             }
             uint32_t started = abi->now_ms(abi->host);
-            convert_band(abi, target, y, rows);
+            if (rotate) {
+                convert_band(abi, target, y, rows);
+            } else {
+                convert_band_direct(abi, target, y, rows);
+            }
             uint32_t converted = abi->now_ms(abi->host);
             s_convert_ms += converted - started;
             // The host flushes these rows now, so its panel transfer runs while
@@ -220,7 +244,11 @@ static void present_frame(const mpos_core_abi_t *abi) {
     }
 
     // No surface from the host: keep our own copy and hand bands over.
-    convert_band(abi, s_surface, 0, height);
+    if (rotate) {
+        convert_band(abi, s_surface, 0, height);
+    } else {
+        convert_band_direct(abi, s_surface, 0, height);
+    }
     const int band = abi->band_rows > 0 ? abi->band_rows : height;
     for (int y = 0; y < height; y += band) {
         int rows = height - y;
@@ -234,8 +262,18 @@ static void present_frame(const mpos_core_abi_t *abi) {
 
 // -- core entry points -------------------------------------------------------
 
+/* core_sound.c: mixes the engine's sound effects on demand. */
+void mpos_sound_mix(int16_t *dst, int frames);
+void mpos_sound_module_init(void);
+void mpos_sound_report(void);
+void mpos_sound_set_abi(const mpos_core_abi_t *abi);
+void mpos_music_module_init(void);
+
 static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
     mpos_libc_init(abi);
+    mpos_sound_set_abi(abi);
+    mpos_sound_module_init();
+    mpos_music_module_init();
     s_abi = abi;
     if (wad_path == NULL || wad_path[0] == '\0') {
         return -1;
@@ -251,8 +289,7 @@ static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
     s_argv[2] = s_wad_path;
     s_argv[3] = "-mb";
     s_argv[4] = s_zone_buf;
-    s_argv[5] = "-nosound";
-    s_argv[6] = NULL;
+    s_argv[5] = NULL;
     s_argv[4][0] = '3';  // megabytes of zone: the rest of PSRAM stays with the OS
     s_argv[4][1] = '\0';
 
@@ -266,8 +303,9 @@ static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
     // The dataless build moves every initialised global into code; this copies
     // them into the arena before the engine reads anything.
     doom_init_all_data();
-    doomgeneric_Create(6, s_argv);
+    doomgeneric_Create(5, s_argv);
     s_created = 1;
+    mpos_sound_report();
     return 0;
 }
 
@@ -367,4 +405,5 @@ const mpos_core_entry_t mpos_core_entry = {
     .init = core_init,
     .tick = core_tick,
     .stop = core_stop,
+    .audio_mix = mpos_sound_mix,
 };

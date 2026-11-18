@@ -39,9 +39,10 @@ A single-button board can only fire; the IMU could steer some day, not now.
 import time
 
 import lvgl as lv
+import machine
 
 import mpos.ui
-from mpos import Activity, InputManager
+from mpos import Activity, AudioManager, InputManager
 
 import mpos_core
 
@@ -52,12 +53,15 @@ from native_display import NativeDisplay
 CORE_PARTITION = "retro-core"
 CORE_PARTITION_SIZE = 0xF0000
 
-# The core rotates Doom's 320x200 frame into a portrait surface that fits the
-# panel, so the picture is upright when the device lies on its long side.
-SURFACE_WIDTH = 200
-SURFACE_HEIGHT = 320
+# Doom's own frame. A portrait panel gets it rotated (200x320, so the picture is
+# upright when the device lies on its long side); a landscape panel gets it as
+# it is. The core reads the surface shape from the ABI frame it is handed.
+GAME_WIDTH = 320
+GAME_HEIGHT = 200
 
 TARGET_FPS = 35
+# The core's mixer rate (core_sound.c), which is Doom's own 11025 Hz.
+SAMPLE_RATE = 11025
 FRAME_SLACK_MS = 5
 HOLD_MS = 180
 HINT_MS = 6000
@@ -135,6 +139,11 @@ class DoomCore(Activity):
     _stick_v = 0
     _last_touch = None
     _hint_until = 0
+    _i2s = None
+    _mck = None
+    _audio_buffer = None
+    _audio_ms = 0
+    _rotated = True
 
     def onCreate(self):
         self.screen = lv.obj()
@@ -152,8 +161,19 @@ class DoomCore(Activity):
         self._paused = False
         if not self._started:
             self._started = True
+            display = mpos.ui.main_display
+            # A portrait panel cannot show Doom's landscape frame, so the core
+            # rotates it into a 200x320 surface; a landscape panel takes the
+            # frame straight, which also keeps the touches unrotated.
+            self._rotated = (
+                display.get_vertical_resolution() > display.get_horizontal_resolution()
+            )
+            if self._rotated:
+                width, height = GAME_HEIGHT, GAME_WIDTH
+            else:
+                width, height = GAME_WIDTH, GAME_HEIGHT
             self._surface = NativeDisplay(
-                self.screen, width=SURFACE_WIDTH, height=SURFACE_HEIGHT)
+                self.screen, width=width, height=height)
             self._wad = find_wad(getattr(self, "intent", None))
             if self._wad is None:
                 if __debug__:
@@ -173,11 +193,12 @@ class DoomCore(Activity):
                 mpos_core.start(
                     CORE_PARTITION, 0, CORE_PARTITION_SIZE,
                     *self._callbacks,
-                    self._wad, SURFACE_WIDTH, SURFACE_HEIGHT,
+                    self._wad, self._surface.width, self._surface.height,
                     self._surface.buffer, self._surface.rows_per_band)
                 if __debug__:
                     print("doom: core at 0x%x, %d bytes of text, wad %s" % (
                         mpos_core.mapped(), mpos_core.mapped_size(), self._wad))
+                self._open_audio()
                 self._show_hint()
 
         self._surface.begin()
@@ -187,9 +208,83 @@ class DoomCore(Activity):
         mpos.ui.task_handler.add_event_cb(
             self._drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
 
+    # -- audio ------------------------------------------------------------
+
+    def _open_audio(self):
+        """Open the DAC and start pulling mixed samples from the core.
+
+        This mirrors what the WAV stream does for an i2s output: MCLK is a PWM
+        carrier at 256x the sample rate, and the I2S peripheral runs in MONO so
+        the codec duplicates the single channel itself. Boards with no i2s
+        output (the MaTouch) simply have no sound.
+        """
+        output = AudioManager.find_output_by_kind("i2s")
+        if output is None or not output.i2s_pins:
+            return
+        pins = output.i2s_pins
+        try:
+            if "mck" in pins:
+                self._mck = machine.PWM(machine.Pin(pins["mck"], machine.Pin.OUT))
+                self._mck.freq(SAMPLE_RATE * 256)
+                self._mck.duty_u16(32768)
+            self._i2s = machine.I2S(
+                0,
+                sck=machine.Pin(pins["sck"], machine.Pin.OUT),
+                ws=machine.Pin(pins["ws"], machine.Pin.OUT),
+                sd=machine.Pin(pins["sd"], machine.Pin.OUT),
+                mode=machine.I2S.TX,
+                bits=16,
+                format=machine.I2S.MONO,
+                rate=SAMPLE_RATE,
+                ibuf=8192,
+            )
+            self._audio_buffer = bytearray(2048 * 2)
+            self._audio_ms = time.ticks_ms()
+            self._i2s.write(bytearray(1024))
+
+        except Exception as error:
+            print("doom: audio init failed: %s" % (error,))
+            self._close_audio()
+
+    def _close_audio(self):
+        for name in ("_i2s", "_mck"):
+            device = getattr(self, name, None)
+            if device is not None:
+                try:
+                    device.deinit()
+                except Exception:
+                    pass
+                setattr(self, name, None)
+        self._audio_buffer = None
+
+    def _pump_audio(self, now):
+        """Give the DAC the samples the frame loop's elapsed time needs."""
+        if self._i2s is None:
+            return
+        elapsed = time.ticks_diff(now, self._audio_ms)
+        if elapsed <= 0:
+            return
+        samples = (elapsed * SAMPLE_RATE) // 1000
+        if samples > 2048:
+            samples = 2048
+        elif samples < 64:
+            return
+        self._audio_ms = now
+        view = memoryview(self._audio_buffer)[:samples * 2]
+        mpos_core.audio_mix(view)
+        try:
+            self._i2s.write(view)
+        except Exception:
+            # A short write means the ring is full; the next frame catches up.
+            pass
+
     def onPause(self, screen):
         self._paused = True
         mpos.ui.task_handler.remove_event_cb(self._drawframe)
+        self._close_audio()
+        if self._surface is not None:
+            # Hand the panel back before anything else draws on it.
+            self._surface.direct_stop()
         # Nothing ticks the core while paused, so queued events and held keys
         # are dropped rather than replayed on resume.
         self._keys = []
@@ -215,6 +310,7 @@ class DoomCore(Activity):
                 except Exception:
                     pass
             self._files = {}
+            self._close_audio()
             self._started = False
             self._wad = None
 
@@ -227,6 +323,10 @@ class DoomCore(Activity):
             return
         self._next_frame_ms = time.ticks_add(now, self._frame_interval_ms)
 
+        if self.hint is None and not self._surface.direct_active:
+            # The hint is an LVGL widget over the surface, and direct mode
+            # leaves the surface byte-swapped, so it starts once that is gone.
+            self._surface.direct_start()
         try:
             mpos_core.tick(now)
         except Exception as error:
@@ -235,6 +335,8 @@ class DoomCore(Activity):
             self._error = error
             print("doom: tick failed: %s" % (error,))
             return
+
+        self._pump_audio(now)
 
         # Held keys are released here rather than by the input driver: a keypad
         # only reports presses (and repeats), and Doom wants both edges.
@@ -266,9 +368,14 @@ class DoomCore(Activity):
         converts the next band.
         """
         if data is not None:
-            start = band * SURFACE_WIDTH * 2
+            start = band * self._surface.width * 2
             self._surface.buffer[start:start + len(data)] = data
         if not self._surface._active:
+            return
+        if self._surface.direct_active:
+            # The transfer starts here and the core converts the next band
+            # while the panel is fed.
+            self._surface.present_band_direct(band, rows)
             return
         self._surface.invalidate_band(band // self._surface.rows_per_band)
         self._surface.flush()
@@ -374,9 +481,11 @@ class DoomCore(Activity):
         turned back, a thumb at the panel's left edge means Doom's *top*.
         """
         surface = self._surface
-        sx = y - surface._image_y
-        sy = (SURFACE_WIDTH - 1) - (x - surface._image_x)
-        return sx, sy
+        dx = x - surface._image_x
+        dy = y - surface._image_y
+        if not self._rotated:
+            return dx, dy
+        return dy, (GAME_HEIGHT - 1) - dx
 
     def _stick_direction(self, sx, sy):
         """Turn/walk keys for a drag away from where the thumb landed."""
@@ -468,9 +577,10 @@ class DoomCore(Activity):
         label.set_style_text_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
         label.set_style_pad_all(6, lv.PART.MAIN)
         label.set_style_radius(6, lv.PART.MAIN)
-        # The surface is rotated by the core, so an overlay has to be rotated
-        # too: drawn as-is it would read sideways on the panel.
-        label.set_style_transform_rotation(900, lv.PART.MAIN)
+        if self._rotated:
+            # The core rotates the picture for a portrait panel, so an overlay
+            # has to be rotated too: drawn as-is it would read sideways.
+            label.set_style_transform_rotation(900, lv.PART.MAIN)
         label.align(lv.ALIGN.CENTER, 0, 0)
         label.remove_flag(lv.obj.FLAG.CLICKABLE)
         self.hint = label
@@ -491,6 +601,7 @@ class DoomCore(Activity):
             "error": self._error,
             "keys": self._keys_sent,
             "touch": self._last_touch,
+            "direct": self._surface.direct_active if self._surface else False,
             "bands": self._surface.band_count if self._surface else 0,
             "rows_per_band": self._surface.rows_per_band if self._surface else 0,
         }

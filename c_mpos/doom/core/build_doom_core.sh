@@ -41,13 +41,13 @@ mkdir -p "$build"
 # frame time, and the blob has a megabyte of flash around it.
 CFLAGS="-O2 -std=gnu99 -ffreestanding -fno-builtin -fno-common -fno-jump-tables"
 CFLAGS="$CFLAGS -ffunction-sections -fdata-sections -mtext-section-literals"
-CFLAGS="$CFLAGS -DCMAP256 -DNORMALUNIX -DLINUX -D_DEFAULT_SOURCE -DMPOS_CORE"
-CFLAGS="$CFLAGS -Idoomgeneric -Igen -Icore -I."
+CFLAGS="$CFLAGS -DCMAP256 -DNORMALUNIX -DLINUX -D_DEFAULT_SOURCE -DMPOS_CORE -DFEATURE_SOUND"
+CFLAGS="$CFLAGS -Idoomgeneric -Igen -Icore -Icore/stub -I."
 # The engine is 1990s C and its warnings are not this build's gate; ours are
 # covered by the host build.
 CFLAGS="$CFLAGS -w"
 
-sources="core/doom_core.c core/core_libc.c mpos_printf.c"
+sources="core/doom_core.c core/core_libc.c core/core_sound.c mpos_printf.c"
 for stem in $stems; do
     sources="$sources gen/$stem.c"
 done
