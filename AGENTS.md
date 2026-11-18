@@ -26,7 +26,15 @@ To keep it easy to manage/sync with upsteam lvgl_micropython, we keep the change
 **All tests:** `make tests` (20–35 min). CI runs them on push. **Syntax:** `make syntax-tests`  
 **CPython controller tests:** `python3 tests/cpython_mpos_controller.py`, `python3 tests/cpython_kill_orphaned.py`, `python3 tests/cpython_kill_orphaned_linux.py` (not run by test_runner.py).  
 **Prefs wipe:** `test_runner.py` deletes `internal_filesystem/prefs/` (all app settings) in the checkout it runs from (`_cleanup_config`). Run tests from a worktree if that checkout holds settings you need.  
-**Details:** `tests/README.md`
+**Details:** `tests/README.md`  
+**Frozen bytecode is -O3** (`manifests/manifest.py`): `mpy-cross` drops every `assert` at any
+`-O` level, so the frozen `unittest` in a release firmware cannot fail and every test
+would pass vacuously. The runner stages `internal_filesystem/lib/unittest` on an
+on-device run first (device `sys.path` puts `lib` ahead of the frozen modules) and its
+harness repairs the module it already imported. A device runs the whole suite in one
+interpreter: a test that assigns `sys.modules[...]` at import (the connectivity mocks
+did) poisons every later test - install mocks in `setUp`/`tearDown`, and remember
+MicroPython's `unittest` has no `setUpModule`.
 
 **Options:**  
 `--ondevice` — run on connected device (serial). `--no-install-test-apps` skips test-app install.  
