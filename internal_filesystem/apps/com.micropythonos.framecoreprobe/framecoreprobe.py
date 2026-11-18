@@ -26,9 +26,7 @@ if sys.platform == "esp32":
 else:
     import framecore_probe_x64 as probe
 
-# Ships with the app as well as in the firmware: an .mpk has to run on firmware
-# older than the one that first froze mpos.ui.native_display.
-from native_display import NativeDisplay
+from mpos.ui.native_display import NativeDisplay
 
 # The engine frame, 320x200 letterboxed on the 320x240 badge panel. It is the
 # classic 4:3-ish size Doom renders at, and 128 KB per full frame.

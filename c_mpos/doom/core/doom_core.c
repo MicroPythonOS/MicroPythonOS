@@ -20,11 +20,17 @@
 #include "doomkeys.h"
 #include "i_video.h"
 #include "doomstat.h"
+#include "d_main.h"
 #include "m_menu.h"
 
 
 
 #include "doom_data_init.h"
+
+// Declared inside m_menu.c, not in its header.
+void M_ClearMenus(void);
+
+#include "mpos_engine.h"
 
 #include "../../core_abi.h"
 #include "core_console.h"
@@ -299,6 +305,7 @@ static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
     s_key_head = 0;
     s_key_tail = 0;
     s_frame_ready = 0;
+    mpos_quit_requested = 0;
 
     // The dataless build moves every initialised global into code; this copies
     // them into the arena before the engine reads anything.
@@ -336,6 +343,15 @@ static int menu_key(int code) {
 
 static void core_tick(const mpos_core_abi_t *abi, uint32_t now_ms) {
     if (!s_created || s_stopped || mpos_libc_exit_requested()) {
+        return;
+    }
+    if (mpos_quit_requested) {
+        // The player picked "quit" in the menu. The host owns the panel, and
+        // this ABI cannot ask it to close the activity yet, so the engine goes
+        // back to its title screen and the player leaves with the OS back key.
+        mpos_quit_requested = 0;
+        M_ClearMenus();
+        D_StartTitle();
         return;
     }
     if (!s_have_start) {

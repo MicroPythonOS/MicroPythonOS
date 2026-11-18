@@ -313,16 +313,21 @@ class TestNativeDisplay(unittest.TestCase):
         return recorder.areas
 
 
-class TestShippedCopy(unittest.TestCase):
-    """The app ships its own copy so an .mpk runs on older firmware."""
+class TestNoPrivateCopy(unittest.TestCase):
+    """This is firmware infrastructure: apps import mpos.ui.native_display."""
 
-    def test_the_app_copy_is_identical_to_the_framework_one(self):
-        framework = open("lib/mpos/ui/native_display.py", "rb").read()
-        for path in ("apps/com.micropythonos.breakout/native_display.py",
-                     "apps/com.micropythonos.doom/native_display.py"):
-            bundled = open(path, "rb").read()
-            self.assertEqual(framework, bundled,
-                             "keep %s identical to the framework copy" % path)
+    def test_no_app_ships_its_own_copy(self):
+        import os
+        shipped = []
+        for name in os.listdir("apps"):
+            path = "apps/%s/native_display.py" % name
+            try:
+                os.stat(path)
+            except OSError:
+                continue
+            shipped.append(path)
+        self.assertEqual(shipped, [],
+                         "apps must import mpos.ui.native_display, not copy it")
 
 
 class TestNativeDisplayOnTheRealDisplay(unittest.TestCase):

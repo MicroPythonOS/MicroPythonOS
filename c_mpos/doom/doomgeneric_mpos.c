@@ -34,8 +34,11 @@
 #include "doomkeys.h"
 #include "i_video.h"
 #include "doomstat.h"
+#include "d_main.h"
+#include "m_menu.h"
 
 #include "doom_data_init.h"
+#include "mpos_engine.h"
 
 #define MAX_KEYS 64
 
@@ -122,8 +125,15 @@ void DG_SetWindowTitle(const char *title) {
 
 static mp_obj_t create(mp_obj_t wad_obj, mp_obj_t mb_obj) {
     if (g_created) {
+        // The app was started again after quitting: the module outlives the
+        // activity, so the engine is still loaded. Clear the request and put
+        // it back on the title screen instead of booting a second Copy of Doom.
+        mpos_quit_requested = 0;
+        M_ClearMenus();
+        D_StartTitle();
         return mp_const_none;
     }
+    mpos_quit_requested = 0;
     // Doom keeps the argv pointers for the whole session, so the string has to
     // stay alive: hold a reference to the Python object.
     g_wad_obj = wad_obj;
@@ -153,7 +163,7 @@ static mp_obj_t create(mp_obj_t wad_obj, mp_obj_t mb_obj) {
 }static MP_DEFINE_CONST_FUN_OBJ_2(create_obj, create);
 
 static mp_obj_t tick(mp_obj_t now_obj) {
-    if (!g_created) {
+    if (!g_created || mpos_quit_requested) {
         return mp_const_none;
     }
     const uint32_t now_ms = (uint32_t)mp_obj_get_int(now_obj);
@@ -270,6 +280,11 @@ static mp_obj_t height(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(height_obj, height);
 
+static mp_obj_t quit_requested(void) {
+    return mpos_quit_requested ? mp_const_true : mp_const_false;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(quit_requested_obj, quit_requested);
+
 mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *args) {
     MP_DYNRUNTIME_INIT_ENTRY
 
@@ -282,6 +297,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     mp_store_global(MP_QSTR_width, MP_OBJ_FROM_PTR(&width_obj));
     mp_store_global(MP_QSTR_debug_state, MP_OBJ_FROM_PTR(&debug_state_obj));
     mp_store_global(MP_QSTR_height, MP_OBJ_FROM_PTR(&height_obj));
+    mp_store_global(MP_QSTR_quit_requested, MP_OBJ_FROM_PTR(&quit_requested_obj));
 
     mp_store_global(MP_QSTR_KEY_LEFT, MP_OBJ_NEW_SMALL_INT(KEY_LEFTARROW));
     mp_store_global(MP_QSTR_KEY_RIGHT, MP_OBJ_NEW_SMALL_INT(KEY_RIGHTARROW));

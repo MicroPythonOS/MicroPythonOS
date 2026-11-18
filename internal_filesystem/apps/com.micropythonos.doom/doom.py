@@ -42,9 +42,7 @@ import lvgl as lv
 import mpos.ui
 from mpos import Activity, AudioManager, InputManager
 
-# Ships with the app as well as in the firmware: an .mpk has to run on firmware
-# older than the one that first froze mpos.ui.native_display.
-from native_display import NativeDisplay
+from mpos.ui.native_display import NativeDisplay
 
 GAME_WIDTH = 320
 GAME_HEIGHT = 200
@@ -139,6 +137,9 @@ class _CoreEngine:
     """
 
     name = "core"
+    # The core reports quit itself (it returns to its title screen): the ABI
+    # cannot ask the host to close the activity yet.
+    quit = False
 
     def __init__(self):
         import mpos_core
@@ -346,6 +347,7 @@ class _NatmodEngine:
         import doom_x64
         self._doom = doom_x64
         self._surface = None
+        self.quit = False
 
     def surface_size(self, display):
         # The module only ever presents Doom's landscape frame; it cannot
@@ -366,6 +368,9 @@ class _NatmodEngine:
 
     def tick(self, now):
         self._doom.tick(now)
+        if self._doom.quit_requested():
+            self.quit = True
+            return
         self._surface.present_all(self._blit_band)
 
     def key(self, code, pressed):
@@ -420,6 +425,7 @@ class Doom(Activity):
     _last_touch = None
     _hint_until = 0
     _rotated = False
+    _leaving = False
 
     def onCreate(self):
         self.screen = lv.obj()
@@ -525,6 +531,10 @@ class Doom(Activity):
             print("doom: tick failed: %s" % (error,))
             return
 
+        if self._engine.quit:
+            self._leave()
+            return
+
         self._frames += 1
         self._fps_frames += 1
         elapsed = time.ticks_diff(now, self._fps_since)
@@ -535,6 +545,15 @@ class Doom(Activity):
             self._fps_since = now
             if __debug__ and frames:
                 print("doom: %.1f fps" % (self._fps,))
+
+    def _leave(self):
+        """Close the activity because the engine asked for it (Doom's menu)."""
+        if self._leaving:
+            return
+        self._leaving = True
+        self._paused = True
+        mpos.ui.task_handler.remove_event_cb(self._drawframe)
+        self.finish()
 
     # -- input ------------------------------------------------------------
 

@@ -76,7 +76,11 @@ int isdigit(int c) {
     return (c >= '0' && c <= '9');
 }
 
-const int *__ctype_toupper_loc(void) {
+// glibc's ctype inline expands toupper(c) into (*__ctype_toupper_loc ())[c],
+// so this returns a pointer to the table *pointer*, not the table.
+int *mpos_ctype_toupper_table_pointer;
+
+const int **__ctype_toupper_loc(void) {
     if (!mpos_ctype_toupper_inited) {
         for (int i = 0; i < 256; ++i) {
             mpos_ctype_toupper_table[i] = i;
@@ -86,7 +90,8 @@ const int *__ctype_toupper_loc(void) {
         }
         mpos_ctype_toupper_inited = 1;
     }
-    return mpos_ctype_toupper_table;
+    mpos_ctype_toupper_table_pointer = mpos_ctype_toupper_table;
+    return (const int **)&mpos_ctype_toupper_table_pointer;
 }
 
 int strcasecmp(const char *a, const char *b) {

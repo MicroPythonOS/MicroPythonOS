@@ -1,9 +1,7 @@
 """A full-screen RGB565 surface for native (C) renderers, presented by LVGL.
 
-This file also ships inside com.micropythonos.breakout as `native_display.py`,
-because an app released through the AppStore has to run on firmware that was
-built before this module existed. The two copies must stay identical:
-tests/test_graphical_native_display.py checks that they are.
+Apps import it as `mpos.ui.native_display`; it is firmware infrastructure and
+is not copied into an app folder.
 
 Why not write the display's framebuffers directly
 -------------------------------------------------

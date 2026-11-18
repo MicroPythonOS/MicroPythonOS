@@ -48,6 +48,8 @@
 
 #include "i_system.h"
 
+#include "mpos_engine.h"
+
 #include "w_wad.h"
 #include "z_zone.h"
 
@@ -57,6 +59,8 @@
 
 #define DEFAULT_RAM 6 /* MiB */
 #define MIN_RAM     6  /* MiB */
+
+int mpos_quit_requested;
 
 
 typedef struct atexit_listentry_s atexit_listentry_t;
@@ -245,23 +249,11 @@ void I_BindVariables(void)
 
 void I_Quit (void)
 {
-    atexit_listentry_t *entry;
-
-    // Run through all exit functions
- 
-    entry = exit_funcs; 
-
-    while (entry != NULL)
-    {
-        entry->func();
-        entry = entry->next;
-    }
-
-#if ORIGCODE
-    SDL_Quit();
-
-    exit(0);
-#endif
+    // Doom's own quit runs the atexit list - which frees the framebuffer and
+    // shuts the sound down - and then ends the process. There is no process
+    // here: the app owns the panel and the audio device, and a host that kept
+    // drawing after the teardown read freed memory. Ask the host instead.
+    mpos_quit_requested = 1;
 }
 
 #if !defined(_WIN32) && !defined(__MACOSX__) && !defined(__DJGPP__)

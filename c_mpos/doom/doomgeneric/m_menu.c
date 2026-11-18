@@ -1167,10 +1167,10 @@ static char *M_SelectEndMessage(void)
 
 void M_QuitDOOM(int choice)
 {
-    DEH_snprintf(endstring, sizeof(endstring), "%s\n\n" DOSY,
-                 DEH_String(M_SelectEndMessage()));
-
-    M_StartMessage(endstring,M_QuitResponse,true);
+    // Doom asks "are you sure?" and waits for 'y'. A badge has no 'y' key
+    // (Y is its menu key), and picking QUIT GAME is already deliberate, so
+    // the prompt is skipped: the engine asks the host to close it.
+    I_Quit();
 }
 
 

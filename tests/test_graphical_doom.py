@@ -144,6 +144,7 @@ class _FakeEngine:
         self.resumes = 0
         self.pauses = 0
         self.stops = 0
+        self.quit = False
 
     def surface_size(self, display):
         return self.size
@@ -441,6 +442,37 @@ class TestNatmodEngine(unittest.TestCase):
         self.assertEqual(engine.surface_size(_FakeDisplay(240, 320)),
                          (doom.GAME_WIDTH, doom.GAME_HEIGHT))
 
+    def test_the_module_can_ask_to_close_the_app(self):
+        if natmod is None:
+            self.skipTest("no native module for this host")
+
+        class _Engine:
+            def __init__(self):
+                self.ticks = 0
+
+            def tick(self, now):
+                self.ticks += 1
+
+            def quit_requested(self):
+                return True
+
+        presented = []
+
+        class _Surface:
+            rows_per_band = 10
+
+            def present_all(self, render):
+                presented.append(True)
+
+        engine = doom._NatmodEngine()
+        engine._doom = _Engine()
+        engine._surface = _Surface()
+        engine.tick(time.ticks_ms())
+
+        self.assertTrue(engine.quit)
+        # Nothing is drawn once the engine has asked to close.
+        self.assertEqual(presented, [])
+
     def test_a_tick_blits_every_band_and_lets_the_surface_present_it(self):
         if natmod is None:
             self.skipTest("no native module for this host")
@@ -452,6 +484,9 @@ class TestNatmodEngine(unittest.TestCase):
 
             def tick(self, now):
                 self.ticks += 1
+
+            def quit_requested(self):
+                return False
 
             def blit_band(self, buffer, band, rows):
                 self.blits.append((band, rows))
@@ -725,6 +760,19 @@ class TestDoomActivity(unittest.TestCase):
         self.assertEqual(len(self.engine.started), 0, "the engine restarted")
         self.assertTrue(self.activity._surface._active)
 
+    def test_the_engine_can_ask_the_app_to_close(self):
+        closed = []
+        self.activity.finish = lambda: closed.append(True)
+        self.engine.quit = True
+        self.activity._next_frame_ms = 0
+        self.activity._drawframe()
+
+        self.assertEqual(closed, [True], "the activity did not finish")
+        self.assertTrue(self.activity._paused)
+        # Idempotent: a second frame cannot finish it twice.
+        self.activity._drawframe()
+        self.assertEqual(closed, [True])
+
     def test_stopping_hands_the_engine_back(self):
         self.activity.onStop(None)
         self.assertEqual(self.engine.stops, 1)
@@ -786,6 +834,19 @@ class TestDoomOnTheRealApp(unittest.TestCase):
         _wait_ms(300)
         self.assertTrue(self.activity.get_stats()["frames"] > frames,
                         "resuming did not restart the loop")
+
+    def test_quitting_from_dooms_menu_leaves_the_app(self):
+        # Doom's quit used to free its framebuffer under the running frame
+        # loop; the engine asks the host to close the activity instead.
+        for code in (natmod.KEY_ESCAPE, natmod.KEY_DOWN, natmod.KEY_DOWN,
+                     natmod.KEY_DOWN, natmod.KEY_DOWN, natmod.KEY_DOWN):
+            self.activity.tap(code)
+            _wait_ms(350)
+        self.activity.tap(natmod.KEY_ENTER)
+        _wait_ms(1500)
+        names = [type(entry[0]).__name__ for entry in screen_stack]
+        self.assertEqual("Doom" in names, False,
+                         "the app is still on the stack after quitting")
 
     def test_a_band_blit_writes_that_band_only(self):
         surface = self.activity._surface

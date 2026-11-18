@@ -20,9 +20,7 @@ if sys.platform == "esp32":
 else:
     import breakout_x64 as breakout
 
-# Ships with the app as well as in the firmware: an .mpk has to run on
-# firmware older than the one that first froze mpos.ui.native_display.
-from native_display import NativeDisplay
+from mpos.ui.native_display import NativeDisplay
 
 
 # Frames per second the pump aims for. Measured on the badge: a frame that
