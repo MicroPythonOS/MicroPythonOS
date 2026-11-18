@@ -581,6 +581,16 @@ class TestDoomActivity(unittest.TestCase):
         ])
         self.assertIn(doom.KEY_USE, self.activity.holds.held())
 
+    def test_the_a_letter_uses_like_enter(self):
+        # A keyboard's "A" is the badge's use button; both open doors and both
+        # select in a menu.
+        self.activity.on_key_event(ord("a"))
+        self.assertEqual(self.engine.keys, [
+            (doom.KEY_ENTER, True), (doom.KEY_ENTER, False),
+            (doom.KEY_USE, True),
+        ])
+        self.assertTrue(self.activity.holds.is_held(doom.KEY_USE))
+
     def test_fire_button_is_held_and_then_released(self):
         self.activity.on_key_event(ord("B"))
         self.assertEqual(self.engine.keys, [(doom.KEY_FIRE, True)])

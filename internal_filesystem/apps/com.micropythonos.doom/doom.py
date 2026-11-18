@@ -28,9 +28,12 @@ the left thumb gets a joystick and the right thumb three bands.
 Controls - keyboard, mouse and badge buttons:
 
     arrows / joystick   turn and walk
-    Enter / A           use / open, and select in menus
-    B or space          fire
-    Y                   Doom's menu (Esc is the OS "back" key)
+    Enter / A           use / open doors, and select in menus
+    B or space          fire, and select in menus (the same button does both,
+                        as on a console pad)
+    Y                   Doom's menu
+    Esc                 back to the launcher - the OS takes this one before
+                        Doom sees it (on a badge that is the X button)
 """
 
 import sys
@@ -405,11 +408,12 @@ class Doom(NativeActivity):
             # Same for Y: the letter opens the menu, PREV would also turn left.
             if self._letter_key is None:
                 self.holds.hold(KEY_LEFT)
-        elif key == lv.KEY.ENTER:
+        elif key in (lv.KEY.ENTER, ord("A"), ord("a")):
             # Enter selects in a menu (the engine acts on the event itself) and
             # opens doors in game, where the key has to stay down for at least
             # one tic: a press and a release drained in the same frame cancel
-            # out before the tic is built.
+            # out before the tic is built. A keyboard gets the same action on
+            # "A", which is the badge's use button.
             self.holds.tap(KEY_ENTER)
             self.holds.hold(KEY_USE)
         elif key == ord("B") or key == ord("b") or key == 0x20:
