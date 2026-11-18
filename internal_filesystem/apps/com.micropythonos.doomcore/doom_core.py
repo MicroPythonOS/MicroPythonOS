@@ -43,6 +43,7 @@ import machine
 
 import mpos.ui
 from mpos import Activity, AudioManager, InputManager
+from mpos.audio.stream_buzzer import open_sink as open_buzzer_sink
 
 import mpos_core
 
@@ -139,7 +140,7 @@ class DoomCore(Activity):
     _stick_v = 0
     _last_touch = None
     _hint_until = 0
-    _i2s = None
+    _sink = None
     _mck = None
     _audio_buffer = None
     _audio_ms = 0
@@ -211,43 +212,50 @@ class DoomCore(Activity):
     # -- audio ------------------------------------------------------------
 
     def _open_audio(self):
-        """Open the DAC and start pulling mixed samples from the core.
+        """Open a sink for the core's mixed samples: the DAC, else the buzzer.
 
-        This mirrors what the WAV stream does for an i2s output: MCLK is a PWM
-        carrier at 256x the sample rate, and the I2S peripheral runs in MONO so
-        the codec duplicates the single channel itself. Boards with no i2s
-        output (the MaTouch) simply have no sound.
+        The DAC path mirrors the WAV stream: MCLK is a PWM carrier at 256x the
+        sample rate and the I2S peripheral runs in MONO, so the codec duplicates
+        the single channel itself. A board with no i2s output (a fri3d 2024, an
+        odroid_go) gets the piezo buzzer instead, through the same native driver
+        the audio player uses for files - it rewrites an LEDC duty from a timer
+        interrupt at the sample rate, which makes a piezo a quiet, low-fidelity
+        speaker. Both present ``write(buf)``, so the pump does not care which.
         """
-        output = AudioManager.find_output_by_kind("i2s")
-        if output is None or not output.i2s_pins:
-            return
-        pins = output.i2s_pins
         try:
-            if "mck" in pins:
-                self._mck = machine.PWM(machine.Pin(pins["mck"], machine.Pin.OUT))
-                self._mck.freq(SAMPLE_RATE * 256)
-                self._mck.duty_u16(32768)
-            self._i2s = machine.I2S(
-                0,
-                sck=machine.Pin(pins["sck"], machine.Pin.OUT),
-                ws=machine.Pin(pins["ws"], machine.Pin.OUT),
-                sd=machine.Pin(pins["sd"], machine.Pin.OUT),
-                mode=machine.I2S.TX,
-                bits=16,
-                format=machine.I2S.MONO,
-                rate=SAMPLE_RATE,
-                ibuf=8192,
-            )
+            output = AudioManager.find_output_by_kind("i2s")
+            if output is not None and output.i2s_pins:
+                pins = output.i2s_pins
+                if "mck" in pins:
+                    self._mck = machine.PWM(
+                        machine.Pin(pins["mck"], machine.Pin.OUT))
+                    self._mck.freq(SAMPLE_RATE * 256)
+                    self._mck.duty_u16(32768)
+                self._sink = machine.I2S(
+                    0,
+                    sck=machine.Pin(pins["sck"], machine.Pin.OUT),
+                    ws=machine.Pin(pins["ws"], machine.Pin.OUT),
+                    sd=machine.Pin(pins["sd"], machine.Pin.OUT),
+                    mode=machine.I2S.TX,
+                    bits=16,
+                    format=machine.I2S.MONO,
+                    rate=SAMPLE_RATE,
+                    ibuf=8192,
+                )
+            else:
+                self._sink = open_buzzer_sink(
+                    AudioManager.find_output_by_kind("buzzer"), SAMPLE_RATE)
+            if self._sink is None:
+                return
             self._audio_buffer = bytearray(2048 * 2)
             self._audio_ms = time.ticks_ms()
-            self._i2s.write(bytearray(1024))
-
+            self._sink.write(bytearray(1024))
         except Exception as error:
             print("doom: audio init failed: %s" % (error,))
             self._close_audio()
 
     def _close_audio(self):
-        for name in ("_i2s", "_mck"):
+        for name in ("_sink", "_mck"):
             device = getattr(self, name, None)
             if device is not None:
                 try:
@@ -258,8 +266,8 @@ class DoomCore(Activity):
         self._audio_buffer = None
 
     def _pump_audio(self, now):
-        """Give the DAC the samples the frame loop's elapsed time needs."""
-        if self._i2s is None:
+        """Give the sink the samples the frame loop's elapsed time needs."""
+        if self._sink is None:
             return
         elapsed = time.ticks_diff(now, self._audio_ms)
         if elapsed <= 0:
@@ -273,7 +281,7 @@ class DoomCore(Activity):
         view = memoryview(self._audio_buffer)[:samples * 2]
         mpos_core.audio_mix(view)
         try:
-            self._i2s.write(view)
+            self._sink.write(view)
         except Exception:
             # A short write means the ring is full; the next frame catches up.
             pass

@@ -116,6 +116,29 @@ class _DeviceBuzzerSink(_BuzzerSink):
             pass
 
 
+def open_sink(output, rate, channels=1, gain=100, bufsize=_DEVICE_BUFSIZE,
+              carrier=0, emphasis=0, mod=0):
+    """Open the native buzzer driver as an I2S-like sink for live PCM.
+
+    ``AudioManager.player()`` uses the same sink to play whole files; an app
+    that synthesises its own audio (a game mixer feeding a DAC-less board) can
+    write into it directly with ``sink.write(buf)``, one int16 mono sample per
+    frame. Returns None where the driver is not built in, so callers can treat
+    "no buzzer here" the same way as "no i2s output".
+    """
+    if sys.platform != "esp32":
+        return None
+    try:
+        import buzzer  # noqa: F401
+    except ImportError:
+        return None
+    if output is None or getattr(output, "buzzer_pin", None) is None:
+        return None
+    return _DeviceBuzzerSink(output.buzzer_pin, rate, channels, gain,
+                             bufsize=bufsize, carrier=carrier,
+                             emphasis=emphasis, mod=mod)
+
+
 class _EmulatedBuzzerSink(_BuzzerSink):
     """Desktop/web stand-in: applies the driver's conversions to a WAV file."""
 

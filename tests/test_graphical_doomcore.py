@@ -50,7 +50,11 @@ class _FakeCore:
         return 0x20000
 
     def abi_version(self):
-        return 5
+        return 6
+
+    def audio_mix(self, buffer):
+        for index in range(len(buffer)):
+            buffer[index] = 1
 
 
 fake_core = _FakeCore()
@@ -390,6 +394,48 @@ class TestDoomCoreActivity(unittest.TestCase):
         self._touch(lv.EVENT.PRESSED, x, 10)
         self.assertEqual(self.activity._zone, "stick")
         self.assertEqual(self.activity._keys, [])
+
+    def test_a_board_without_a_dac_plays_on_the_buzzer(self):
+        # The same sink the audio player uses for files: a piezo driven by an
+        # LEDC duty rewritten from a timer interrupt.
+        class _Sink:
+            def __init__(self):
+                self.writes = []
+
+            def write(self, buffer):
+                self.writes.append(bytes(buffer))
+                return len(buffer)
+
+            def deinit(self):
+                pass
+
+        class _Output:
+            buzzer_pin = 38
+
+        class _Audio:
+            @staticmethod
+            def find_output_by_kind(kind):
+                return _Output() if kind == "buzzer" else None
+
+        sink = _Sink()
+        real_audio = doom_core.AudioManager
+        real_open = doom_core.open_buzzer_sink
+        doom_core.AudioManager = _Audio
+        doom_core.open_buzzer_sink = lambda output, rate: sink
+        try:
+            self.activity._open_audio()
+            self.assertIs(self.activity._sink, sink)
+            self.assertEqual(len(sink.writes), 1)  # primed with silence
+
+            self.activity._audio_ms = time.ticks_ms() - 60
+            self.activity._pump_audio(time.ticks_ms())
+            self.assertTrue(len(sink.writes) > 1, "nothing was written")
+            self.assertTrue(any(any(chunk) for chunk in sink.writes[1:]),
+                            "the buzzer got silence")
+        finally:
+            doom_core.AudioManager = real_audio
+            doom_core.open_buzzer_sink = real_open
+            self.activity._close_audio()
 
     # -- measurements -----------------------------------------------------
 
