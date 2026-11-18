@@ -10,18 +10,15 @@
 # that changed are blitted and flushed (a frame that moves the ball and the
 # paddle costs two bands, not a whole screen).
 import lvgl as lv
-import mpos.ui
 import time
-from mpos import Activity, InputManager, SharedPreferences, AudioManager
+from mpos import SharedPreferences, AudioManager
+from mpos.ui.native_activity import NativeActivity
 
 import sys
 if sys.platform == "esp32":
     import breakout_xtensawin as breakout
 else:
     import breakout_x64 as breakout
-
-from mpos.ui.native_display import NativeDisplay
-
 
 # Frames per second the pump aims for. Measured on the badge: a frame that
 # touches two bands costs about 10ms end to end, so 50fps leaves half the budget
@@ -99,21 +96,17 @@ class Beep:
             self._pwm = None
 
 
-class Breakout(Activity):
+class Breakout(NativeActivity):
+
+    target_fps = TARGET_FPS
 
     # Play area and pacing.
     hor_res = 0
     ver_res = 0
     paddle_move_step = 0
 
-    screen = None
     leftbutton = None
     rightbutton = None
-    _display = None
-    _frame_interval_ms = 1000 // TARGET_FPS
-    _next_frame_ms = 0
-    _paused = True
-    _started = False
 
     # Touch tracking.
     touch_active = False
@@ -131,11 +124,7 @@ class Breakout(Activity):
 
     _beep = None
 
-    def onCreate(self):
-        self.screen = lv.obj()
-        self.screen.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.screen.add_event_cb(self.touch_cb, lv.EVENT.ALL, None)
-
+    def on_screen(self, screen):
         d = lv.display_get_default()
         self.hor_res = d.get_horizontal_resolution()
         self.paddle_move_step = round(self.hor_res / 10)
@@ -143,79 +132,51 @@ class Breakout(Activity):
 
         # Invisible buttons: they exist so the keypad indev has something to
         # focus, which is how the B/Y buttons reach move_left()/move_right().
-        self.leftbutton = lv.button(self.screen)
+        self.leftbutton = lv.button(screen)
         self.leftbutton.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         self.leftbutton.set_size(1, 1)
         self.leftbutton.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         self.leftbutton.add_event_cb(lambda e: self.move_left(), lv.EVENT.FOCUSED, None)
 
         # Invisible button, just for defocusing the left and right buttons:
-        self.defocus_button = lv.button(self.screen)
+        self.defocus_button = lv.button(screen)
         self.defocus_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         self.defocus_button.set_size(1, 1)
         self.defocus_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
 
-        self.rightbutton = lv.button(self.screen)
+        self.rightbutton = lv.button(screen)
         self.rightbutton.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         self.rightbutton.set_size(1, 1)
         self.rightbutton.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         self.rightbutton.add_event_cb(lambda e: self.move_right(), lv.EVENT.FOCUSED, None)
 
-        self.setContentView(self.screen)
-
-    def onResume(self, screen):
-        self._paused = False
+    def start_engine(self, surface):
         self.highscore = SharedPreferences(self.appFullName).get_int("highscore", 0)
+        breakout.init(surface.buffer, surface.width, surface.height)
+        bands = breakout.set_band_rows(surface.rows_per_band)
+        if __debug__:
+            print("breakout: %dx%d, %d bands of %d rows" % (
+                surface.width, surface.height, bands, surface.rows_per_band))
+        breakout.set_highscore(self.highscore)
+        self._check_autoload()
+        self._beep = Beep()
+        return True
 
-        if not self._started:
-            self._started = True
-            self._init_display()
-            breakout.set_highscore(self.highscore)
-            self._check_autoload()
-            self._beep = Beep()
-
-        self._display.begin()
+    def on_resumed(self):
         # The surface may hold anything after another activity used the panel.
         breakout.mark_all_dirty()
-        self._next_frame_ms = time.ticks_ms()
-
-        mpos.ui.task_handler.add_event_cb(self.drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
-
         if self._state_timer is None:
             self._state_timer = lv.timer_create(self._update_state, 2000, None)
 
-    def _init_display(self):
-        self._display = NativeDisplay(self.screen)
-        breakout.init(self._display.buffer, self.hor_res, self.ver_res)
-        bands = breakout.set_band_rows(self._display.rows_per_band)
-        if __debug__:
-            print("breakout: %dx%d, %d bands of %d rows" % (
-                self.hor_res, self.ver_res, bands, self._display.rows_per_band))
-
-    def onPause(self, screen):
-        self._paused = True
-        mpos.ui.task_handler.remove_event_cb(self.drawframe)
-        if self._display is not None:
-            self._display.end()
+    def on_paused(self):
         if self._beep is not None:
             self._beep.stop()
         self._save_state()
         self._stop_state_timer()
 
-    def onDestroy(self, screen):
-        self.onPause(screen)
-
     # -- frame loop -------------------------------------------------------
 
-    def drawframe(self, arg1=None, arg2=None):
-        if self._paused:
-            return
-
-        now = time.ticks_ms()
-        if time.ticks_diff(now, self._next_frame_ms) < -FRAME_SLACK_MS:
-            return
-        self._next_frame_ms = time.ticks_add(now, self._frame_interval_ms)
-
+    def on_frame(self, now):
         breakout.tick(now)
         events = breakout.poll_events()
         beep = self._beep
@@ -226,7 +187,7 @@ class Breakout(Activity):
             # turned off on time even when the next frame has nothing to say.
             beep.poll(now)
 
-        self._display.present(self._dirty_bands(), breakout.render_band)
+        self._surface.present(self._dirty_bands(), breakout.render_band)
 
     def _dirty_bands(self):
         # next_dirty() keeps reporting a band until render_band() has drawn it,
@@ -274,24 +235,20 @@ class Breakout(Activity):
         lv.group_focus_obj(self.defocus_button)
         breakout.move_paddle(self.paddle_move_step)
 
-    def touch_cb(self, event):
+    def on_pointer(self, event_code, x, y):
         if breakout.is_game_over():
             return
 
-        event_code = event.get_code()
         if event_code == lv.EVENT.PRESSED:
-            x, y = InputManager.pointer_xy()
             self.touch_active = True
             self.touch_last_x = x
             return
 
         if event_code == lv.EVENT.PRESSING:
             if not self.touch_active:
-                x, y = InputManager.pointer_xy()
                 self.touch_active = True
                 self.touch_last_x = x
                 return
-            x, y = InputManager.pointer_xy()
             if self.touch_last_x is not None:
                 delta = x - self.touch_last_x
                 if delta:

@@ -65,6 +65,15 @@ char *g_argv[8];
 char g_mb_buf[8];
 mp_obj_t g_wad_obj;
 
+// Presentation target: the host's RGB565 surface, and the Python callback that
+// flushes each band. A borrowed reference - the app holds the bound method for
+// as long as the surface is set, and clears it on stop.
+uint16_t *g_target;
+int g_target_width;
+int g_target_height;
+int g_band_rows;
+mp_obj_t g_present_cb;
+
 uint32_t mpos_get_clock_ms(void);
 void mpos_libc_init(void);
 void mpos_set_clock_ms(uint32_t now_ms);
@@ -170,6 +179,8 @@ static mp_obj_t create(mp_obj_t wad_obj, mp_obj_t mb_obj) {
     return mp_const_none;
 }static MP_DEFINE_CONST_FUN_OBJ_2(create_obj, create);
 
+static void present_frame(void);
+
 static mp_obj_t tick(mp_obj_t now_obj) {
     if (!g_created || mpos_quit_requested) {
         return mp_const_none;
@@ -184,6 +195,7 @@ static mp_obj_t tick(mp_obj_t now_obj) {
     g_now_ms = now_ms;
     mpos_set_clock_ms(g_now_ms - g_start_ms);
     doomgeneric_Tick();
+    present_frame();
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(tick_obj, tick);
@@ -219,10 +231,9 @@ static MP_DEFINE_CONST_FUN_OBJ_0(palette_obj, palette);
 // band overlap the SPI transfer of the previous one (see
 // docs/apps/native-apps.md): a whole-frame conversion costs a frame's worth of
 // SPI on top of the transfer instead of underneath it.
-static mp_obj_t blit_band(mp_obj_t dst_obj, mp_obj_t band_obj, mp_obj_t rows_obj) {
-    if (DG_ScreenBuffer == NULL) {
-        return mp_const_none;
-    }
+// One band of the paletted frame -> RGB565, at the same row offset.
+static void convert_pixels(uint16_t *out, const unsigned char *src,
+                           size_t count) {
     if (!g_palette_ready || palette_changed) {
         for (int i = 0; i < 256; i++) {
             g_palette[i] = rgb565((int)colors[i].r, (int)colors[i].g,
@@ -230,6 +241,15 @@ static mp_obj_t blit_band(mp_obj_t dst_obj, mp_obj_t band_obj, mp_obj_t rows_obj
         }
         g_palette_ready = 1;
         palette_changed = false;
+    }
+    for (size_t i = 0; i < count; i++) {
+        out[i] = g_palette[src[i]];
+    }
+}
+
+static mp_obj_t blit_band(mp_obj_t dst_obj, mp_obj_t band_obj, mp_obj_t rows_obj) {
+    if (DG_ScreenBuffer == NULL) {
+        return mp_const_none;
     }
     mp_buffer_info_t dst;
     mp_get_buffer_raise(dst_obj, &dst, MP_BUFFER_WRITE);
@@ -249,13 +269,74 @@ static mp_obj_t blit_band(mp_obj_t dst_obj, mp_obj_t band_obj, mp_obj_t rows_obj
         mp_raise_ValueError("destination too small");
     }
     const unsigned char *src = (const unsigned char *)DG_ScreenBuffer + start;
-    uint16_t *out = (uint16_t *)dst.buf + start;
-    for (size_t i = 0; i < count; i++) {
-        out[i] = g_palette[src[i]];
-    }
+    convert_pixels((uint16_t *)dst.buf + start, src, count);
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_3(blit_band_obj, blit_band);
+
+// surface(buffer, width, height, band_rows, present): where this frame goes.
+//
+// Same contract as a flash-resident core: the engine draws RGB565 into the
+// host's buffer one display band at a time and calls present(y, rows) for each
+// finished band, so the panel transfer of one band overlaps the conversion of
+// the next. buffer=None (or present=None) stops presenting.
+static mp_obj_t surface(size_t n_args, const mp_obj_t *args) {
+    if (n_args != 5) {
+        mp_raise_TypeError("surface() takes 5 arguments");
+    }
+    if (args[0] == mp_const_none || args[4] == mp_const_none) {
+        g_target = NULL;
+        g_present_cb = mp_const_none;
+        return mp_const_none;
+    }
+    const int width = (int)mp_obj_get_int(args[1]);
+    const int height = (int)mp_obj_get_int(args[2]);
+    const int band_rows = (int)mp_obj_get_int(args[3]);
+    if (width != DOOMGENERIC_RESX || height != DOOMGENERIC_RESY) {
+        // The module presents the engine's own frame; it cannot transpose it
+        // for a portrait panel the way the core does.
+        mp_raise_ValueError("surface must be the engine resolution");
+    }
+    if (band_rows < 1) {
+        mp_raise_ValueError("band_rows must be positive");
+    }
+    mp_buffer_info_t dst;
+    mp_get_buffer_raise(args[0], &dst, MP_BUFFER_WRITE);
+    if (dst.len / 2 < (size_t)width * (size_t)height) {
+        mp_raise_ValueError("destination too small");
+    }
+    g_target = (uint16_t *)dst.buf;
+    g_target_width = width;
+    g_target_height = height;
+    g_band_rows = band_rows;
+    g_present_cb = args[4];
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(surface_obj, 5, 5, surface);
+
+// Convert and announce one frame's bands. Called from tick(), after the engine
+// has drawn, so the whole frame path lives in C except the flush itself.
+static void present_frame(void) {
+    if (g_target == NULL || g_present_cb == mp_const_none || DG_ScreenBuffer == NULL) {
+        return;
+    }
+    const size_t width = (size_t)g_target_width;
+    const size_t height = (size_t)g_target_height;
+    for (size_t y = 0; y < height; y += (size_t)g_band_rows) {
+        size_t rows = (size_t)g_band_rows;
+        if (y + rows > height) {
+            rows = height - y;
+        }
+        const size_t start = y * width;
+        convert_pixels(g_target + start,
+                       (const unsigned char *)DG_ScreenBuffer + start,
+                       rows * width);
+        mp_obj_t call_args[2];
+        call_args[0] = mp_obj_new_int((int)y);
+        call_args[1] = mp_obj_new_int((int)rows);
+        mp_call_function_n_kw(g_present_cb, 2, 0, call_args);
+    }
+}
 
 static mp_obj_t key(mp_obj_t code_obj, mp_obj_t pressed_obj) {
     const int code = (int)mp_obj_get_int(code_obj);
@@ -311,6 +392,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     mp_store_global(MP_QSTR_palette, MP_OBJ_FROM_PTR(&palette_obj));
     mp_store_global(MP_QSTR_key, MP_OBJ_FROM_PTR(&key_obj));
     mp_store_global(MP_QSTR_blit_band, MP_OBJ_FROM_PTR(&blit_band_obj));
+    mp_store_global(MP_QSTR_surface, MP_OBJ_FROM_PTR(&surface_obj));
     mp_store_global(MP_QSTR_width, MP_OBJ_FROM_PTR(&width_obj));
     mp_store_global(MP_QSTR_debug_state, MP_OBJ_FROM_PTR(&debug_state_obj));
     mp_store_global(MP_QSTR_height, MP_OBJ_FROM_PTR(&height_obj));

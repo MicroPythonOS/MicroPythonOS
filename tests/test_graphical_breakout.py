@@ -62,10 +62,10 @@ class TestBreakoutActivity(unittest.TestCase):
         _wait_ms(400)
         self.activity = None
         for entry in screen_stack:
-            if hasattr(entry[0], "_display"):
+            if hasattr(entry[0], "_surface"):
                 self.activity = entry[0]
         self.assertIsNotNone(self.activity, "the breakout activity is not on the stack")
-        self.pump = self.activity._display
+        self.pump = self.activity._surface
         self.module = _breakout_module()
 
     def tearDown(self):
@@ -226,7 +226,7 @@ class TestBreakoutActivity(unittest.TestCase):
             beep.tone(3200, 20)
             beep._off_at = time.ticks_add(time.ticks_ms(), -1)
             activity._next_frame_ms = time.ticks_add(time.ticks_ms(), -1)
-            activity.drawframe()
+            activity._drawframe()
             self.assertEqual(beep._pwm.duties[-1], 0, "a stale tone must stop")
         finally:
             activity._beep = had_beep
@@ -258,7 +258,7 @@ class TestBreakoutActivity(unittest.TestCase):
 
         def drawframe_callbacks():
             return [cb for (cb, evt, data) in task_handler._callbacks
-                    if getattr(cb, "__name__", "") == "drawframe"]
+                    if getattr(cb, "__name__", "") == "_drawframe"]
 
         self.activity.onPause(self.activity.screen)
         self.assertEqual(drawframe_callbacks(), [])
