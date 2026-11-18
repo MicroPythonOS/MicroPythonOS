@@ -209,17 +209,24 @@ class DoomCore(Activity):
     # -- audio ------------------------------------------------------------
 
     def _open_audio(self):
-        """Ask the OS for somewhere to put the core's mixed samples.
+        """Ask the OS for a speaker to put the core's mixed samples on.
 
-        Which device that is - an i2s DAC, the piezo buzzer, whatever a board
-        has - is not this app's business: the user picks it in Settings -> Audio
-        and ``AudioManager.open_pcm`` resolves it, the same rule every other app
-        follows. The sink takes int16 mono samples at SAMPLE_RATE.
+        The user's choice in Settings -> Audio decides, with one exception this
+        app makes for itself: Doom's effects are 11 kHz broadband PCM, and a
+        piezo resonator with no output below 2 kHz turns that into a screech
+        (and its 11 kHz timer interrupt costs frame time). So a buzzer is not
+        offered this audio - a board with only a piezo stays silent, which is
+        the better of the two. The sink takes int16 mono samples at SAMPLE_RATE.
         """
+        output = AudioManager.get_default_output()
+        if output is None or output.kind != "i2s":
+            output = AudioManager.find_output_by_kind("i2s")
+        if output is None:
+            return
         try:
             # Firmware older than the PCM sink API has no open_pcm: the game
             # still runs, silently, which is better than refusing to start.
-            self._sink = AudioManager.open_pcm(SAMPLE_RATE)
+            self._sink = AudioManager.open_pcm(SAMPLE_RATE, output=output)
         except AttributeError:
             self._sink = None
             return

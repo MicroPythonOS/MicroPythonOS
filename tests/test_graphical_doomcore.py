@@ -357,13 +357,19 @@ class TestDoomCoreActivity(unittest.TestCase):
         self.assertEqual(self.activity._zone, "stick")
         self.assertEqual(self.activity._keys, [])
 
-    def _patch_pcm(self):
-        """Stand in for AudioManager.open_pcm; returns (sink, restore)."""
+    def _patch_pcm(self, chosen=None, outputs=()):
+        """Stand in for AudioManager's PCM sink API; returns (sink, restore)."""
+        class _Output:
+            def __init__(self, name, kind):
+                self.name = name
+                self.kind = kind
+
         class _Sink:
             def __init__(self):
                 self.writes = []
                 self.closes = 0
                 self.active = True
+                self.output = None
 
             def write(self, buffer):
                 self.writes.append(bytes(buffer))
@@ -378,8 +384,20 @@ class TestDoomCoreActivity(unittest.TestCase):
 
         class _Audio:
             @staticmethod
+            def get_default_output():
+                return chosen
+
+            @staticmethod
+            def find_output_by_kind(kind):
+                for output in outputs:
+                    if output.kind == kind:
+                        return output
+                return None
+
+            @staticmethod
             def open_pcm(rate, channels=1, output=None):
                 sink.rate = rate
+                sink.output = output
                 return sink
 
         doom_core.AudioManager = _Audio
@@ -390,13 +408,13 @@ class TestDoomCoreActivity(unittest.TestCase):
 
         return sink, restore
 
-    def test_the_app_asks_the_os_for_a_sink_and_feeds_it(self):
-        # Which device that sink is (DAC, piezo) belongs to the framework: the
-        # app only says "here are samples".
-        sink, restore = self._patch_pcm()
+    def test_the_app_asks_for_a_speaker_and_feeds_it(self):
+        dac = type("O", (), {"name": "Headset Output", "kind": "i2s"})()
+        sink, restore = self._patch_pcm(chosen=dac, outputs=(dac,))
         try:
             self.activity._open_audio()
             self.assertIs(self.activity._sink, sink)
+            self.assertIs(sink.output, dac)
             self.assertEqual(sink.rate, doom_core.SAMPLE_RATE)
 
             self.activity._audio_ms = time.ticks_ms() - 60
@@ -410,21 +428,36 @@ class TestDoomCoreActivity(unittest.TestCase):
         finally:
             restore()
 
-    def test_no_sink_means_no_audio_and_no_crash(self):
-        real = doom_core.AudioManager
+    def test_a_selected_buzzer_is_not_offered_dooms_audio(self):
+        # 11 kHz broadband PCM through a piezo is a screech; the app asks for a
+        # speaker instead rather than obeying a buzzer selection.
+        class _Output:
+            def __init__(self, name, kind):
+                self.name = name
+                self.kind = kind
 
-        class _Audio:
-            @staticmethod
-            def open_pcm(rate, channels=1, output=None):
-                return None
+        buzzer = _Output("Badge Buzzer", "buzzer")
+        dac = _Output("Headset Output", "i2s")
+        sink, restore = self._patch_pcm(chosen=buzzer, outputs=(buzzer, dac))
+        try:
+            self.activity._open_audio()
+            self.assertIs(sink.output, dac)
+        finally:
+            restore()
 
-        doom_core.AudioManager = _Audio
+    def test_a_board_with_only_a_piezo_stays_silent(self):
+        class _Output:
+            name = "Badge Buzzer"
+            kind = "buzzer"
+
+        buzzer = _Output()
+        sink, restore = self._patch_pcm(chosen=buzzer, outputs=(buzzer,))
         try:
             self.activity._open_audio()
             self.assertIsNone(self.activity._sink)
             self.activity._pump_audio(time.ticks_ms())
         finally:
-            doom_core.AudioManager = real
+            restore()
 
     # -- measurements -----------------------------------------------------
 
