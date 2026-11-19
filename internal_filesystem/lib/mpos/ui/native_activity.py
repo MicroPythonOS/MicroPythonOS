@@ -372,6 +372,31 @@ class NativeActivity(Activity):
             return dx, dy
         return dy, (surface.width - 1) - dx
 
+    def game_to_panel(self, x, y):
+        """A point in the engine's frame -> a panel point.
+
+        The inverse of :meth:`to_game`: an app that draws over the picture
+        (touch hints, a HUD) can place its widgets in the game's own
+        coordinates and let this apply the letterbox and the rotation.
+        """
+        surface = self._surface
+        if not self._rotated:
+            return surface._image_x + x, surface._image_y + y
+        return (surface._image_x + surface.width - 1 - y,
+                surface._image_y + x)
+
+    def game_rect_to_panel(self, x, y, width, height):
+        """A rect in the engine's frame -> ``(x, y, width, height)`` on the panel.
+
+        A 90 degree rotation swaps the rect's width and height, so overlays do
+        not have to special-case the portrait surfaces.
+        """
+        surface = self._surface
+        if not self._rotated:
+            return surface._image_x + x, surface._image_y + y, width, height
+        return (surface._image_x + surface.width - 1 - (y + height - 1),
+                surface._image_y + x, height, width)
+
     # -- labels -----------------------------------------------------------
 
     def _add_label(self, text):

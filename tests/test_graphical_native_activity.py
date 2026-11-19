@@ -308,6 +308,31 @@ class TestNativeActivity(unittest.TestCase):
             self.game.to_game(100, 60),
             (100 - surface._image_x, 60 - surface._image_y))
 
+    def test_game_to_panel_is_the_inverse_of_to_game(self):
+        for width, height, rotated in ((320, 200, False), (200, 320, True)):
+            self.game._surface = _FakeSurface(width=width, height=height)
+            self.game._rotated = rotated
+            for point in ((0, 0), (37, 11), (width - 1, height - 1)):
+                panel = self.game.game_to_panel(*point)
+                self.assertEqual(self.game.to_game(*panel), point)
+
+    def test_game_rect_to_panel_swaps_the_sides_when_rotated(self):
+        self.game._surface = _FakeSurface(width=200, height=320)
+        self.game._rotated = True
+        x, y, width, height = self.game.game_rect_to_panel(10, 20, 30, 40)
+        self.assertEqual((x, y), self.game.game_to_panel(10, 20 + 40 - 1))
+        self.assertEqual(
+            (x + width - 1, y + height - 1),
+            self.game.game_to_panel(10 + 30 - 1, 20))
+
+    def test_game_rect_to_panel_keeps_the_rect_when_not_rotated(self):
+        self.game._surface = _FakeSurface(width=320, height=200)
+        self.game._rotated = False
+        x, y = self.game.game_to_panel(10, 20)
+        self.assertEqual(
+            self.game.game_rect_to_panel(10, 20, 30, 40),
+            (x, y, 30, 40))
+
     # -- audio ------------------------------------------------------------
 
     def _patch_pcm(self, chosen=None, outputs=()):

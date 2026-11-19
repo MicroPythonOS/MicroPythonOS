@@ -37,11 +37,14 @@ Controls - keyboard, mouse and badge buttons:
 """
 
 import sys
+import time
 
 import lvgl as lv
 
+from mpos.ui.input_manager import InputManager
 from mpos.ui.native_activity import NativeActivity
 from mpos.ui.native_input import ThumbZones
+from doom_overlay import TouchOverlay
 
 GAME_WIDTH = 320
 GAME_HEIGHT = 200
@@ -70,10 +73,10 @@ KEY_FIRE = 0xA3
 KEY_ENTER = 13
 KEY_ESCAPE = 27
 
-HINT_TEXT = ("left thumb: turn / walk\n"
-             "right thumb, bottom: fire\n"
-             "right thumb, middle: use\n"
-             "right thumb, top: menu")
+HINT_TEXT = "Hold sideways: the outlined areas are touch controls"
+# The zone map is a hint, not chrome: it is shown at start and whenever the
+# menu opens, then hidden so a heavy frame keeps its whole refresh slot.
+TOUCH_HINT_MS = 6000
 
 
 def _app_directory():
@@ -342,6 +345,9 @@ class Doom(NativeActivity):
 
     target_fps = TARGET_FPS
     hint_text = HINT_TEXT
+    # The game covers the screen and owns the edges: the OS's top/left swipes
+    # would otherwise steal the menu band and the joystick's outer edge.
+    system_gestures_enabled = False
     # Both engines export the same 11025 Hz mixer; a piezo is refused because
     # Doom's broadband effects become a screech on one.
     audio_rate = SAMPLE_RATE
@@ -349,6 +355,8 @@ class Doom(NativeActivity):
 
     _wad = None
     _last_touch = None
+    overlay = None
+    _overlay_until = 0
     # The letter a button sent, when the board sends both the letter and the
     # NEXT/PREV it rides on (see on_key_event).
     _letter_key = None
@@ -367,6 +375,10 @@ class Doom(NativeActivity):
             return False
         self._wad = wad
         self.engine.start(wad, surface)
+        if InputManager.has_pointer():
+            self.overlay = TouchOverlay(
+                self, self.zones, GAME_WIDTH, GAME_HEIGHT)
+            self._show_touch_hints()
         return True
 
     # -- input ------------------------------------------------------------
@@ -378,10 +390,23 @@ class Doom(NativeActivity):
             "menu": KEY_ESCAPE, "use": KEY_USE, "fire": KEY_FIRE,
         }, self.holds)
 
+    def _show_touch_hints(self, ms=TOUCH_HINT_MS):
+        if self.overlay is not None:
+            self.overlay.set_visible(True)
+            self._overlay_until = time.ticks_add(time.ticks_ms(), ms)
+
+    def on_resumed(self):
+        # Returning from a dialog or the launcher is a good moment for the map.
+        self._show_touch_hints()
+
     def on_frame(self, now):
         # A letter and the NEXT/PREV it rides on arrive in one input read, so
         # the flag only has to survive until the frame that read belongs to.
         self._letter_key = None
+        if (self.overlay is not None and self._overlay_until
+                and time.ticks_diff(now, self._overlay_until) >= 0):
+            self.overlay.set_visible(False)
+            self._overlay_until = 0
         self.engine.tick(now)
 
     def on_key_event(self, key):
@@ -425,6 +450,7 @@ class Doom(NativeActivity):
             # Esc would be the natural Doom menu key, but the OS claims it as
             # "back" on the desktop (board/linux.py) and on the 2026 badge, so
             # it never arrives here. Y is the menu, as on the badge.
+            self._show_touch_hints()
             self.holds.tap(KEY_ESCAPE)
 
     def on_pointer(self, event_code, x, y):
@@ -432,6 +458,8 @@ class Doom(NativeActivity):
         if event_code == lv.EVENT.PRESSED:
             self._last_touch = ("p", x, y, sx, sy)
             self.zones.pressed(sx, sy)
+            if self.zones.zone == "menu":
+                self._show_touch_hints()
         elif event_code == lv.EVENT.PRESSING:
             self.zones.moving(sx, sy)
         elif event_code == lv.EVENT.RELEASED:

@@ -571,6 +571,34 @@ class TestDoomActivity(unittest.TestCase):
         mpos.ui.main_display = self._real_display
         InputManager.pointer_xy = self._real_pointer_xy
 
+    # -- the screen belongs to the game ---------------------------------
+
+    def test_the_game_is_immersive_and_its_hint_fits_on_one_line(self):
+        self.assertFalse(doom.Doom.system_gestures_enabled)
+        self.assertTrue("\n" not in doom.HINT_TEXT)
+
+    def test_the_touch_map_is_a_hint_and_goes_away(self):
+        class _Overlay:
+            def __init__(self):
+                self.visible = True
+                self.calls = []
+
+            def set_visible(self, visible):
+                self.visible = visible
+                self.calls.append(visible)
+
+        overlay = _Overlay()
+        self.activity.overlay = overlay
+        self.activity._overlay_until = time.ticks_add(time.ticks_ms(), 1)
+        self.activity.on_frame(time.ticks_add(time.ticks_ms(), 50))
+        self.assertFalse(overlay.visible, "the map did not hide")
+        self.assertEqual(self.activity._overlay_until, 0)
+
+        # Opening the menu brings it back for another few seconds.
+        self.activity.on_key_event(ord("y"))
+        self.assertTrue(overlay.visible)
+        self.assertTrue(self.activity._overlay_until > 0)
+
     # -- buttons ----------------------------------------------------------
 
     def test_enter_selects_and_uses(self):
