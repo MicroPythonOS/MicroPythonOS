@@ -1,0 +1,1181 @@
+diff --git a/extmod/vfs_lfs.c b/extmod/vfs_lfs.c
+index 19063d63..ed20325c 100644
+--- a/extmod/vfs_lfs.c
++++ b/extmod/vfs_lfs.c
+@@ -114,6 +114,22 @@ typedef struct _mp_obj_vfs_lfs2_t {
+     lfs2_t lfs;
+ } mp_obj_vfs_lfs2_t;
+ 
++// littlefs2e: give the lfs2e user C module the filesystem mounted at "/".
++// There is no public Python accessor for the mounted VfsLfs2 instance, and
++// the extent API needs the lfs2_t (not just a path).
++lfs2_t *mp_vfs_lfs2_root_lfs2(void) {
++    for (mp_vfs_mount_t *vfs = MP_STATE_VM(vfs_mount_table);
++            vfs != NULL; vfs = vfs->next) {
++        if (vfs->len == 1 && vfs->str[0] == '/') {
++            if (mp_obj_is_type(vfs->obj, &mp_type_vfs_lfs2)) {
++                return &((mp_obj_vfs_lfs2_t *)MP_OBJ_TO_PTR(vfs->obj))->lfs;
++            }
++            return NULL;
++        }
++    }
++    return NULL;
++}
++
+ typedef struct _mp_obj_vfs_lfs2_file_t {
+     mp_obj_base_t base;
+     mp_obj_vfs_lfs2_t *vfs;
+diff --git a/extmod/vfs_lfs.h b/extmod/vfs_lfs.h
+index 1fdf792f..a477ae8c 100644
+--- a/extmod/vfs_lfs.h
++++ b/extmod/vfs_lfs.h
+@@ -28,6 +28,13 @@
+ 
+ #include "py/obj.h"
+ 
++#if MICROPY_VFS_LFS2
++#include "lib/littlefs/lfs2.h"
++// The littlefs2 filesystem mounted at "/", or NULL when the root is not
++// littlefs2. Used by the lfs2e (extent) user C module.
++lfs2_t *mp_vfs_lfs2_root_lfs2(void);
++#endif
++
+ extern const mp_obj_type_t mp_type_vfs_lfs1;
+ extern const mp_obj_type_t mp_type_vfs_lfs1_fileio;
+ extern const mp_obj_type_t mp_type_vfs_lfs1_textio;
+diff --git a/lib/littlefs/lfs2.c b/lib/littlefs/lfs2.c
+index 6c3c3ece..a51453dc 100644
+--- a/lib/littlefs/lfs2.c
++++ b/lib/littlefs/lfs2.c
+@@ -258,7 +258,7 @@ static int lfs2_bd_prog(lfs2_t *lfs2,
+             continue;
+         }
+ 
+-        // pcache must have been flushed, either by programming and
++        // pcache must have been flushed, either by programming an
+         // entire block or manually flushing the pcache
+         LFS2_ASSERT(pcache->block == LFS2_BLOCK_NULL);
+ 
+@@ -286,7 +286,7 @@ static int lfs2_bd_erase(lfs2_t *lfs2, lfs2_block_t block) {
+ 
+ // some operations on paths
+ static inline lfs2_size_t lfs2_path_namelen(const char *path) {
+-    return strcspn(path, "/");
++    return (lfs2_size_t)strcspn(path, "/");
+ }
+ 
+ static inline bool lfs2_path_islast(const char *path) {
+@@ -484,6 +484,35 @@ static void lfs2_ctz_tole32(struct lfs2_ctz *ctz) {
+ }
+ #endif
+ 
++// littlefs2e extent descriptor
++static void lfs2_ext_fromle32(lfs2_ext_t *ext) {
++    ext->head = lfs2_fromle32(ext->head);
++    ext->count = lfs2_fromle32(ext->count);
++    ext->length = lfs2_fromle32(ext->length);
++    ext->crc = lfs2_fromle32(ext->crc);
++    ext->flags = lfs2_fromle32(ext->flags);
++}
++
++#ifndef LFS2_READONLY
++static void lfs2_ext_tole32(lfs2_ext_t *ext) {
++    ext->head = lfs2_tole32(ext->head);
++    ext->count = lfs2_tole32(ext->count);
++    ext->length = lfs2_tole32(ext->length);
++    ext->crc = lfs2_tole32(ext->crc);
++    ext->flags = lfs2_tole32(ext->flags);
++}
++#endif
++
++// Validate a descriptor read from disk. A corrupt tag must never make the
++// allocator or a reader touch a block outside the filesystem.
++static bool lfs2_ext_valid(lfs2_t *lfs2, const lfs2_ext_t *ext) {
++    return ext->length > 0
++        && ext->count > 0
++        && ext->head < lfs2->block_count
++        && ext->count <= lfs2->block_count - ext->head
++        && ext->length <= (lfs2_size_t)ext->count * lfs2->cfg->block_size;
++}
++
+ static inline void lfs2_superblock_fromle32(lfs2_superblock_t *superblock) {
+     superblock->version     = lfs2_fromle32(superblock->version);
+     superblock->block_size  = lfs2_fromle32(superblock->block_size);
+@@ -533,15 +562,12 @@ static void lfs2_mlist_append(lfs2_t *lfs2, struct lfs2_mlist *mlist) {
+ 
+ // some other filesystem operations
+ static uint32_t lfs2_fs_disk_version(lfs2_t *lfs2) {
+-    (void)lfs2;
+ #ifdef LFS2_MULTIVERSION
+     if (lfs2->cfg->disk_version) {
+         return lfs2->cfg->disk_version;
+-    } else
+-#endif
+-    {
+-        return LFS2_DISK_VERSION;
+     }
++#endif
++    return lfs2->disk_version;
+ }
+ 
+ static uint16_t lfs2_fs_disk_version_major(lfs2_t *lfs2) {
+@@ -658,6 +684,22 @@ static int lfs2_alloc_scan(lfs2_t *lfs2) {
+         return err;
+     }
+ 
++    // Mark blocks reserved for an in-flight extent/defrag window as used in
++    // this lookahead window too (the tree does not reference them yet).
++    if (lfs2->ext_bitmap) {
++        for (lfs2_block_t b = lfs2->ext_head;
++                b < lfs2->ext_head + lfs2->ext_count; b++) {
++            if (b >= lfs2->block_count) {
++                break;
++            }
++            lfs2_block_t off = ((b - lfs2->lookahead.start)
++                    + lfs2->block_count) % lfs2->block_count;
++            if (off < lfs2->lookahead.size) {
++                lfs2->lookahead.buffer[off / 8] |= 1U << (off % 8);
++            }
++        }
++    }
++
+     return 0;
+ }
+ #endif
+@@ -673,6 +715,15 @@ static int lfs2_alloc(lfs2_t *lfs2, lfs2_block_t *block) {
+                 *block = (lfs2->lookahead.start + lfs2->lookahead.next)
+                         % lfs2->block_count;
+ 
++                // A run reserved for an extent/defrag is not in the tree yet.
++                if (lfs2->ext_bitmap
++                        && (lfs2->ext_bitmap[*block / 8]
++                            & (UINT8_C(1) << (*block % 8)))) {
++                    lfs2->lookahead.next += 1;
++                    lfs2->lookahead.ckpoint -= 1;
++                    continue;
++                }
++
+                 // eagerly find next free block to maximize how many blocks
+                 // lfs2_alloc_ckpoint makes available for scanning
+                 while (true) {
+@@ -1291,6 +1342,7 @@ static lfs2_stag_t lfs2_dir_fetchmatch(lfs2_t *lfs2,
+ 
+             // found a match for our fetcher?
+             if ((fmask & tag) == (fmask & ftag)) {
++                LFS2_ASSERT(cb != NULL);
+                 int res = cb(data, tag, &(struct lfs2_diskoff){
+                         dir->pair[0], off+sizeof(tag)});
+                 if (res < 0) {
+@@ -1427,6 +1479,21 @@ static int lfs2_dir_getinfo(lfs2_t *lfs2, lfs2_mdir_t *dir,
+ 
+     info->type = lfs2_tag_type3(tag);
+ 
++    // littlefs2e extent files carry their size in the extent descriptor.
++    lfs2_ext_t ext;
++    lfs2_stag_t xtag = lfs2_dir_get(lfs2, dir, LFS2_MKTAG(0x7ff, 0x3ff, 0),
++            LFS2_MKTAG(LFS2_TYPE_EXTSTRUCT, id, sizeof(ext)), &ext);
++    if (xtag >= 0) {
++        lfs2_ext_fromle32(&ext);
++        if (!lfs2_ext_valid(lfs2, &ext)) {
++            return LFS2_ERR_CORRUPT;
++        }
++        info->size = ext.length;
++        return 0;
++    } else if (xtag != LFS2_ERR_NOENT) {
++        return (int)xtag;
++    }
++
+     struct lfs2_ctz ctz;
+     tag = lfs2_dir_get(lfs2, dir, LFS2_MKTAG(0x700, 0x3ff, 0),
+             LFS2_MKTAG(LFS2_TYPE_STRUCT, id, sizeof(ctz)), &ctz);
+@@ -1501,7 +1568,7 @@ nextname:
+         if (lfs2_tag_type3(tag) == LFS2_TYPE_DIR) {
+             name += strspn(name, "/");
+         }
+-        lfs2_size_t namelen = strcspn(name, "/");
++        lfs2_size_t namelen = (lfs2_size_t)strcspn(name, "/");
+ 
+         // skip '.'
+         if (namelen == 1 && memcmp(name, ".", 1) == 0) {
+@@ -1520,7 +1587,7 @@ nextname:
+         int depth = 1;
+         while (true) {
+             suffix += strspn(suffix, "/");
+-            sufflen = strcspn(suffix, "/");
++            sufflen = (lfs2_size_t)strcspn(suffix, "/");
+             if (sufflen == 0) {
+                 break;
+             }
+@@ -1761,7 +1828,7 @@ static int lfs2_dir_commitcrc(lfs2_t *lfs2, struct lfs2_commit *commit) {
+ 
+         commit->off = noff;
+         // perturb valid bit?
+-        commit->ptag = ntag ^ ((0x80UL & ~eperturb) << 24);
++        commit->ptag = ntag ^ ((lfs2_tag_t)(0x80 & ~eperturb) << 24);
+         // reset crc for next commit
+         commit->crc = 0xffffffff;
+ 
+@@ -3142,20 +3209,67 @@ static int lfs2_file_opencfg_(lfs2_t *lfs2, lfs2_file_t *file,
+         err = LFS2_ERR_ISDIR;
+         goto cleanup;
+ #ifndef LFS2_READONLY
+-    } else if (flags & LFS2_O_TRUNC) {
+-        // truncate if requested
++    } else if ((flags & LFS2_O_TRUNC)
++            && ((flags & LFS2_O_WRONLY) == LFS2_O_WRONLY)) {
++        // A normal truncate/write replaces an extent with ordinary file
++        // data. Delete the extent tag first (its blocks become free), then
++        // proceed as an empty inline file.
++        lfs2_ext_t ext;
++        lfs2_stag_t xtag = lfs2_dir_get(lfs2, &file->m,
++                LFS2_MKTAG(0x7ff, 0x3ff, 0),
++                LFS2_MKTAG(LFS2_TYPE_EXTSTRUCT, file->id, sizeof(ext)), &ext);
++        if (xtag >= 0) {
++            err = lfs2_dir_commit(lfs2, &file->m, LFS2_MKATTRS(
++                    {LFS2_MKTAG(LFS2_TYPE_EXTSTRUCT, file->id, 0x3ff),
++                        NULL}));
++            if (err) {
++                goto cleanup;
++            }
++        } else if (xtag != LFS2_ERR_NOENT) {
++            err = (int)xtag;
++            goto cleanup;
++        }
+         tag = LFS2_MKTAG(LFS2_TYPE_INLINESTRUCT, file->id, 0);
+         file->flags |= LFS2_F_DIRTY;
+ #endif
+     } else {
+-        // try to load what's on disk, if it's inlined we'll fix it later
+-        tag = lfs2_dir_get(lfs2, &file->m, LFS2_MKTAG(0x700, 0x3ff, 0),
+-                LFS2_MKTAG(LFS2_TYPE_STRUCT, file->id, 8), &file->ctz);
+-        if (tag < 0) {
+-            err = tag;
++        // littlefs2e: the file data tag may be an extent
++        lfs2_ext_t ext;
++        lfs2_stag_t xtag = lfs2_dir_get(lfs2, &file->m,
++                LFS2_MKTAG(0x7ff, 0x3ff, 0),
++                LFS2_MKTAG(LFS2_TYPE_EXTSTRUCT, file->id, sizeof(ext)), &ext);
++        if (xtag >= 0) {
++            lfs2_ext_fromle32(&ext);
++            if (!lfs2_ext_valid(lfs2, &ext)) {
++                err = LFS2_ERR_CORRUPT;
++                goto cleanup;
++            }
++#ifndef LFS2_READONLY
++            if ((flags & LFS2_O_WRONLY) == LFS2_O_WRONLY) {
++                // Extent files are immutable; replace them (O_TRUNC/wb)
++                // instead of writing in place.
++                err = LFS2_ERR_INVAL;
++                goto cleanup;
++            }
++#endif
++            file->ext = ext;
++            file->ctz.head = ext.head;
++            file->ctz.size = ext.length;
++            file->flags |= LFS2_F_EXT;
++            tag = xtag;
++        } else if (xtag != LFS2_ERR_NOENT) {
++            err = (int)xtag;
+             goto cleanup;
++        } else {
++            // try to load what's on disk, if it's inlined we'll fix it later
++            tag = lfs2_dir_get(lfs2, &file->m, LFS2_MKTAG(0x700, 0x3ff, 0),
++                    LFS2_MKTAG(LFS2_TYPE_STRUCT, file->id, 8), &file->ctz);
++            if (tag < 0) {
++                err = tag;
++                goto cleanup;
++            }
++            lfs2_ctz_fromle32(&file->ctz);
+         }
+-        lfs2_ctz_fromle32(&file->ctz);
+     }
+ 
+     // fetch attrs
+@@ -3244,10 +3358,12 @@ static int lfs2_file_open_(lfs2_t *lfs2, lfs2_file_t *file,
+ #endif
+ 
+ static int lfs2_file_close_(lfs2_t *lfs2, lfs2_file_t *file) {
+-#ifndef LFS2_READONLY
+-    int err = lfs2_file_sync_(lfs2, file);
+-#else
+     int err = 0;
++#ifndef LFS2_READONLY
++    // it's not safe to do anything if our file errored
++    if (!(file->flags & LFS2_F_ERRED)) {
++        err = lfs2_file_sync_(lfs2, file);
++    }
+ #endif
+ 
+     // remove from list of mdirs
+@@ -3429,18 +3545,12 @@ relocate:
+ 
+ #ifndef LFS2_READONLY
+ static int lfs2_file_sync_(lfs2_t *lfs2, lfs2_file_t *file) {
+-    if (file->flags & LFS2_F_ERRED) {
+-        // it's not safe to do anything if our file errored
+-        return 0;
+-    }
+-
+     int err = lfs2_file_flush(lfs2, file);
+     if (err) {
+         file->flags |= LFS2_F_ERRED;
+         return err;
+     }
+ 
+-
+     if ((file->flags & LFS2_F_DIRTY) &&
+             !lfs2_pair_isnull(file->m.pair)) {
+         // before we commit metadata, we need sync the disk to make sure
+@@ -3485,6 +3595,17 @@ static int lfs2_file_sync_(lfs2_t *lfs2, lfs2_file_t *file) {
+         file->flags &= ~LFS2_F_DIRTY;
+     }
+ 
++    // mark any other file handles as dirty + desync
++    for (lfs2_file_t *f = (lfs2_file_t*)lfs2->mlist; f; f = f->next) {
++        if (file != f
++                && f->type == LFS2_TYPE_REG
++                && lfs2_pair_cmp(f->m.pair, file->m.pair) == 0
++                && f->id == file->id) {
++            f->flags |= LFS2_F_DUSTY;
++        }
++    }
++
++    file->flags &= ~LFS2_F_ERRED & ~LFS2_F_DUSTY;
+     return 0;
+ }
+ #endif
+@@ -3506,7 +3627,12 @@ static lfs2_ssize_t lfs2_file_flushedread(lfs2_t *lfs2, lfs2_file_t *file,
+         // check if we need a new block
+         if (!(file->flags & LFS2_F_READING) ||
+                 file->off == lfs2->cfg->block_size) {
+-            if (!(file->flags & LFS2_F_INLINE)) {
++            if (file->flags & LFS2_F_EXT) {
++                // One contiguous run: the block is a direct index.
++                file->block = file->ext.head
++                        + file->pos / lfs2->cfg->block_size;
++                file->off = file->pos % lfs2->cfg->block_size;
++            } else if (!(file->flags & LFS2_F_INLINE)) {
+                 int err = lfs2_ctz_find(lfs2, NULL, &file->cache,
+                         file->ctz.head, file->ctz.size,
+                         file->pos, &file->block, &file->off);
+@@ -3692,7 +3818,7 @@ static lfs2_ssize_t lfs2_file_write_(lfs2_t *lfs2, lfs2_file_t *file,
+         return nsize;
+     }
+ 
+-    file->flags &= ~LFS2_F_ERRED;
++    file->flags &= ~LFS2_F_ERRED & ~LFS2_F_DUSTY;
+     return nsize;
+ }
+ #endif
+@@ -3725,6 +3851,7 @@ static lfs2_soff_t lfs2_file_seek_(lfs2_t *lfs2, lfs2_file_t *file,
+     // if we're only reading and our new offset is still in the file's cache
+     // we can avoid flushing and needing to reread the data
+     if ((file->flags & LFS2_F_READING)
++            && !(file->flags & LFS2_F_EXT)
+             && file->off != lfs2->cfg->block_size) {
+         int oindex = lfs2_ctz_index(lfs2, &(lfs2_off_t){file->pos});
+         lfs2_off_t noff = npos;
+@@ -4198,6 +4325,13 @@ static int lfs2_removeattr_(lfs2_t *lfs2, const char *path, uint8_t type) {
+ static int lfs2_init(lfs2_t *lfs2, const struct lfs2_config *cfg) {
+     lfs2->cfg = cfg;
+     lfs2->block_count = cfg->block_count;  // May be 0
++    // Images are written at the safe 2.1 baseline until an extent is
++    // committed; the mount raises this to the on-disk version.
++    lfs2->disk_version = LFS2_DISK_VERSION_LITTLEFS2;
++    lfs2->ext_bitmap = NULL;
++    lfs2->ext_head = 0;
++    lfs2->ext_count = 0;
++    lfs2->ext_length = 0;
+     int err = 0;
+ 
+ #ifdef LFS2_MULTIVERSION
+@@ -4382,6 +4516,8 @@ static int lfs2_deinit(lfs2_t *lfs2) {
+         lfs2_free(lfs2->lookahead.buffer);
+     }
+ 
++    lfs2->ext_bitmap = NULL;
++
+     return 0;
+ }
+ 
+@@ -4415,7 +4551,9 @@ static int lfs2_format_(lfs2_t *lfs2, const struct lfs2_config *cfg) {
+ 
+         // write one superblock
+         lfs2_superblock_t superblock = {
+-            .version     = lfs2_fs_disk_version(lfs2),
++            // Format at the safe baseline: stock littlefs can still mount an
++            // image that has never had an extent.
++            .version     = LFS2_DISK_VERSION_LITTLEFS2,
+             .block_size  = lfs2->cfg->block_size,
+             .block_count = lfs2->block_count,
+             .name_max    = lfs2->name_max,
+@@ -4530,31 +4668,27 @@ static int lfs2_mount_(lfs2_t *lfs2, const struct lfs2_config *cfg) {
+             // check version
+             uint16_t major_version = (0xffff & (superblock.version >> 16));
+             uint16_t minor_version = (0xffff & (superblock.version >>  0));
+-            if (major_version != lfs2_fs_disk_version_major(lfs2)
+-                    || minor_version > lfs2_fs_disk_version_minor(lfs2)) {
++            if (major_version != LFS2_DISK_VERSION_EXTENTS_MAJOR
++                    || minor_version > LFS2_DISK_VERSION_EXTENTS_MINOR) {
+                 LFS2_ERROR("Invalid version "
+                         "v%"PRIu16".%"PRIu16" != v%"PRIu16".%"PRIu16,
+                         major_version,
+                         minor_version,
+-                        lfs2_fs_disk_version_major(lfs2),
+-                        lfs2_fs_disk_version_minor(lfs2));
++                        (uint16_t)LFS2_DISK_VERSION_EXTENTS_MAJOR,
++                        (uint16_t)LFS2_DISK_VERSION_EXTENTS_MINOR);
+                 err = LFS2_ERR_INVAL;
+                 goto cleanup;
+             }
+ 
+-            // found older minor version? set an in-device only bit in the
+-            // gstate so we know we need to rewrite the superblock before
+-            // the first write
+-            bool needssuperblock = false;
+-            if (minor_version < lfs2_fs_disk_version_minor(lfs2)) {
+-                LFS2_DEBUG("Found older minor version "
+-                        "v%"PRIu16".%"PRIu16" < v%"PRIu16".%"PRIu16,
+-                        major_version,
+-                        minor_version,
+-                        lfs2_fs_disk_version_major(lfs2),
+-                        lfs2_fs_disk_version_minor(lfs2));
+-                needssuperblock = true;
++            // Preserve the on-disk version; do not silently upgrade a 2.1
++            // image on the first write. The extent commit raises it
++            // explicitly before any extent tag can exist.
++            if (minor_version >= 1) {
++                lfs2->disk_version = superblock.version;
++            } else {
++                lfs2->disk_version = LFS2_DISK_VERSION_LITTLEFS2;
+             }
++            bool needssuperblock = (minor_version < 1);
+             // note this bit is reserved on disk, so fetching more gstate
+             // will not interfere here
+             lfs2_fs_prepsuperblock(lfs2, needssuperblock);
+@@ -4735,6 +4869,27 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
+         }
+ 
+         for (uint16_t id = 0; id < dir.count; id++) {
++            // littlefs2e: an extent claims its whole run.
++            lfs2_ext_t ext;
++            lfs2_stag_t xtag = lfs2_dir_get(lfs2, &dir,
++                    LFS2_MKTAG(0x7ff, 0x3ff, 0),
++                    LFS2_MKTAG(LFS2_TYPE_EXTSTRUCT, id, sizeof(ext)), &ext);
++            if (xtag >= 0) {
++                lfs2_ext_fromle32(&ext);
++                if (!lfs2_ext_valid(lfs2, &ext)) {
++                    return LFS2_ERR_CORRUPT;
++                }
++                for (lfs2_block_t b = ext.head; b < ext.head+ext.count; b++) {
++                    int err = cb(data, b);
++                    if (err) {
++                        return err;
++                    }
++                }
++                continue;
++            } else if (xtag != LFS2_ERR_NOENT) {
++                return (int)xtag;
++            }
++
+             struct lfs2_ctz ctz;
+             lfs2_stag_t tag = lfs2_dir_get(lfs2, &dir, LFS2_MKTAG(0x700, 0x3ff, 0),
+                     LFS2_MKTAG(LFS2_TYPE_STRUCT, id, sizeof(ctz)), &ctz);
+@@ -4771,7 +4926,8 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
+             continue;
+         }
+ 
+-        if ((f->flags & LFS2_F_DIRTY) && !(f->flags & LFS2_F_INLINE)) {
++        if (((f->flags & LFS2_F_DIRTY) || (f->flags & LFS2_F_DUSTY))
++                && !(f->flags & LFS2_F_INLINE)) {
+             int err = lfs2_ctz_traverse(lfs2, &f->cache, &lfs2->rcache,
+                     f->ctz.head, f->ctz.size, cb, data);
+             if (err) {
+@@ -5968,6 +6124,490 @@ cleanup:
+ 
+ // Public API
+ #ifndef LFS2_READONLY
++
++/// littlefs2e extent files ///
++
++struct lfs2_ext_map {
++    uint8_t *map;
++    lfs2_size_t size;
++};
++
++static int lfs2_ext_map_cb(void *data, lfs2_block_t block) {
++    struct lfs2_ext_map *m = data;
++    if (block / 8 < m->size) {
++        m->map[block / 8] |= (uint8_t)(1U << (block % 8));
++    }
++    return 0;
++}
++
++static lfs2_size_t lfs2_ext_map_size(lfs2_t *lfs2) {
++    return (lfs2->block_count + 7) / 8;
++}
++
++static bool lfs2_ext_map_get(const uint8_t *map, lfs2_block_t block) {
++    return (map[block / 8] & (uint8_t)(1U << (block % 8))) != 0;
++}
++
++static void lfs2_ext_map_set(uint8_t *map, lfs2_block_t block) {
++    map[block / 8] |= (uint8_t)(1U << (block % 8));
++}
++
++// Mark this directory's metadata pair and every pair in its tail chain.
++static void lfs2_ext_mark_pairs(lfs2_t *lfs2, const lfs2_block_t pair[2],
++        uint8_t *meta, lfs2_size_t meta_size) {
++    lfs2_block_t p[2] = {pair[0], pair[1]};
++    int guard = 0;
++    while (!lfs2_pair_isnull(p) && guard++ < 128) {
++        if (p[0] / 8 < meta_size) {
++            lfs2_ext_map_set(meta, p[0]);
++        }
++        if (p[1] / 8 < meta_size) {
++            lfs2_ext_map_set(meta, p[1]);
++        }
++        lfs2_mdir_t m;
++        if (lfs2_dir_fetch(lfs2, &m, p)) {
++            break;
++        }
++        p[0] = m.tail[0];
++        p[1] = m.tail[1];
++    }
++}
++
++static int lfs2_ext_walk_meta(lfs2_t *lfs2, const char *path, int depth,
++        uint8_t *meta, lfs2_size_t meta_size) {
++    if (depth > 8) {
++        return LFS2_ERR_INVAL;
++    }
++
++    lfs2_dir_t dir;
++    int err = lfs2_dir_open(lfs2, &dir, path);
++    if (err) {
++        return err;
++    }
++    lfs2_ext_mark_pairs(lfs2, dir.m.pair, meta, meta_size);
++
++    struct lfs2_info info;
++    while ((err = lfs2_dir_read(lfs2, &dir, &info)) > 0) {
++        if (info.type != LFS2_TYPE_DIR) {
++            continue;
++        }
++        if (strcmp(info.name, ".") == 0 || strcmp(info.name, "..") == 0) {
++            continue;
++        }
++        char child[LFS2_NAME_MAX+2];
++        lfs2_size_t plen = strlen(path);
++        lfs2_size_t nlen = strlen(info.name);
++        bool slash = strcmp(path, "/") != 0;
++        if (plen + (slash ? 1 : 0) + nlen + 1 > sizeof(child)) {
++            lfs2_dir_close(lfs2, &dir);
++            return LFS2_ERR_NAMETOOLONG;
++        }
++        memcpy(child, path, plen);
++        lfs2_size_t o = plen;
++        if (slash) {
++            child[o++] = '/';
++        }
++        memcpy(child + o, info.name, nlen);
++        child[o + nlen] = '\0';
++        int r = lfs2_ext_walk_meta(lfs2, child, depth+1, meta, meta_size);
++        if (r) {
++            lfs2_dir_close(lfs2, &dir);
++            return r;
++        }
++    }
++    lfs2_dir_close(lfs2, &dir);
++    return (err < 0) ? err : 0;
++}
++
++int lfs2_ext_block_maps(lfs2_t *lfs2,
++        uint8_t *used, lfs2_size_t used_size,
++        uint8_t *meta, lfs2_size_t meta_size) {
++    lfs2_size_t need = lfs2_ext_map_size(lfs2);
++    if (used && used_size < need) {
++        return LFS2_ERR_INVAL;
++    }
++    if (meta && meta_size < need) {
++        return LFS2_ERR_INVAL;
++    }
++    if (used) {
++        memset(used, 0, need);
++        struct lfs2_ext_map m = {used, need};
++        int err = lfs2_fs_traverse_(lfs2, lfs2_ext_map_cb, &m, true);
++        if (err) {
++            return err;
++        }
++    }
++    if (meta) {
++        memset(meta, 0, need);
++        int err = lfs2_ext_walk_meta(lfs2, "/", 0, meta, need);
++        if (err) {
++            return err;
++        }
++    }
++    return 0;
++}
++
++lfs2_block_t lfs2_ext_largest_run(lfs2_t *lfs2, lfs2_block_t align) {
++    if (align == 0) {
++        align = 1;
++    }
++    lfs2_size_t size = lfs2_ext_map_size(lfs2);
++    if (size > LFS2_EXT_MAP_MAX) {
++        return 0;
++    }
++    uint8_t used[LFS2_EXT_MAP_MAX];
++    memset(used, 0, size);
++    struct lfs2_ext_map m = {used, size};
++    lfs2_block_t best = 0;
++    if (lfs2_fs_traverse_(lfs2, lfs2_ext_map_cb, &m, true) == 0) {
++        for (lfs2_block_t i = 0; i < lfs2->block_count; i += align) {
++            lfs2_block_t run = 0;
++            while (i+run < lfs2->block_count
++                    && !lfs2_ext_map_get(used, i+run)) {
++                run++;
++            }
++            if (run > best) {
++                best = run;
++            }
++            if (i + run >= lfs2->block_count) {
++                break;
++            }
++        }
++    }
++    return best;
++}
++
++int lfs2_ext_file_blocks(lfs2_t *lfs2, const char *path,
++        int (*cb)(void*, lfs2_block_t), void *data) {
++    lfs2_mdir_t cwd;
++    uint16_t id;
++    lfs2_stag_t tag = lfs2_dir_find(lfs2, &cwd, &path, &id);
++    if (tag < 0) {
++        return (int)tag;
++    }
++    if (lfs2_tag_type3(tag) != LFS2_TYPE_REG) {
++        return LFS2_ERR_ISDIR;
++    }
++
++    lfs2_ext_t ext;
++    lfs2_stag_t xtag = lfs2_dir_get(lfs2, &cwd, LFS2_MKTAG(0x7ff, 0x3ff, 0),
++            LFS2_MKTAG(LFS2_TYPE_EXTSTRUCT, id, sizeof(ext)), &ext);
++    if (xtag >= 0) {
++        lfs2_ext_fromle32(&ext);
++        if (!lfs2_ext_valid(lfs2, &ext)) {
++            return LFS2_ERR_CORRUPT;
++        }
++        for (lfs2_block_t b = ext.head; b < ext.head+ext.count; b++) {
++            int err = cb(data, b);
++            if (err) {
++                return err;
++            }
++        }
++        return 0;
++    } else if (xtag != LFS2_ERR_NOENT) {
++        return (int)xtag;
++    }
++
++    struct lfs2_ctz ctz;
++    lfs2_stag_t t = lfs2_dir_get(lfs2, &cwd, LFS2_MKTAG(0x700, 0x3ff, 0),
++            LFS2_MKTAG(LFS2_TYPE_STRUCT, id, sizeof(ctz)), &ctz);
++    if (t < 0) {
++        if (t == LFS2_ERR_NOENT) {
++            return 0;
++        }
++        return (int)t;
++    }
++    lfs2_ctz_fromle32(&ctz);
++    if (lfs2_tag_type3(t) == LFS2_TYPE_CTZSTRUCT) {
++        return lfs2_ctz_traverse(lfs2, NULL, &lfs2->rcache,
++                ctz.head, ctz.size, cb, data);
++    }
++    return 0;
++}
++
++#ifndef LFS2_READONLY
++int lfs2_ext_exclude(lfs2_t *lfs2, lfs2_block_t head, lfs2_block_t count) {
++    if (head >= lfs2->block_count
++            || count > lfs2->block_count - head) {
++        return LFS2_ERR_INVAL;
++    }
++    lfs2_size_t size = lfs2_ext_map_size(lfs2);
++    if (size > LFS2_EXT_MAP_MAX) {
++        return LFS2_ERR_NOMEM;
++    }
++    memset(lfs2->ext_map, 0, size);
++    lfs2->ext_bitmap = lfs2->ext_map;
++    lfs2->ext_head = head;
++    lfs2->ext_count = count;
++    for (lfs2_block_t b = head; b < head+count; b++) {
++        lfs2_ext_map_set(lfs2->ext_bitmap, b);
++    }
++    return 0;
++}
++
++void lfs2_ext_clear_exclude(lfs2_t *lfs2) {
++    lfs2->ext_bitmap = NULL;
++    lfs2->ext_head = 0;
++    lfs2->ext_count = 0;
++    lfs2->ext_length = 0;
++}
++
++int lfs2_ext_reserve(lfs2_t *lfs2, lfs2_size_t length, lfs2_block_t align,
++        lfs2_ext_t *out) {
++    if (!out || length == 0) {
++        return LFS2_ERR_INVAL;
++    }
++    if (align == 0) {
++        align = 1;
++    }
++    lfs2_size_t bs = lfs2->cfg->block_size;
++    lfs2_block_t count = (length + bs - 1) / bs;
++    if (count == 0 || count > lfs2->block_count) {
++        return LFS2_ERR_NOSPC;
++    }
++
++    // Drop any previous reservation/exclusion.
++    lfs2_ext_clear_exclude(lfs2);
++
++    lfs2_size_t size = lfs2_ext_map_size(lfs2);
++    if (size > LFS2_EXT_MAP_MAX) {
++        return LFS2_ERR_NOMEM;
++    }
++    uint8_t used[LFS2_EXT_MAP_MAX];
++    memset(used, 0, size);
++    struct lfs2_ext_map m = {used, size};
++    int err = lfs2_fs_traverse_(lfs2, lfs2_ext_map_cb, &m, true);
++    if (err) {
++        return err;
++    }
++    uint8_t *reserved = lfs2->ext_map;
++    memset(reserved, 0, size);
++
++    lfs2_block_t head = 0;
++    bool found = false;
++    for (int attempt = 0; attempt < 16 && !found; attempt++) {
++        head = 0;
++        while (head + count <= lfs2->block_count) {
++            if (head % align != 0) {
++                head += align - (head % align);
++                continue;
++            }
++            lfs2_block_t i;
++            for (i = 0; i < count; i++) {
++                if (lfs2_ext_map_get(used, head+i)
++                        || lfs2_ext_map_get(reserved, head+i)) {
++                    break;
++                }
++            }
++            if (i == count) {
++                break;
++            }
++            head += align;
++        }
++        if (head + count > lfs2->block_count) {
++            break;
++        }
++
++        // Erase the candidate. A bad block disqualifies it; try the next run.
++        bool bad = false;
++        for (lfs2_block_t i = 0; i < count; i++) {
++            err = lfs2_bd_erase(lfs2, head+i);
++            if (err) {
++                if (err == LFS2_ERR_CORRUPT) {
++                    lfs2_ext_map_set(used, head+i);
++                    bad = true;
++                    break;
++                }
++                return err;
++            }
++        }
++        if (bad) {
++            // Skip past the bad block and search again.
++            for (lfs2_block_t i = 0; i < count; i++) {
++                if (lfs2_ext_map_get(used, head+i)) {
++                    head = head+i+1;
++                    break;
++                }
++            }
++            continue;
++        }
++        found = true;
++    }
++
++    if (!found) {
++        return LFS2_ERR_NOCONTIG;
++    }
++
++    for (lfs2_block_t b = head; b < head+count; b++) {
++        lfs2_ext_map_set(reserved, b);
++    }
++    lfs2->ext_bitmap = reserved;
++    lfs2->ext_head = head;
++    lfs2->ext_count = count;
++    lfs2->ext_length = length;
++    out->head = head;
++    out->count = count;
++    out->length = length;
++    out->crc = 0;
++    out->flags = 0;
++    return 0;
++}
++
++int lfs2_ext_write(lfs2_t *lfs2, lfs2_size_t offset,
++        const void *buffer, lfs2_size_t size) {
++    if (!lfs2->ext_bitmap || lfs2->ext_count == 0) {
++        return LFS2_ERR_INVAL;
++    }
++    lfs2_size_t bs = lfs2->cfg->block_size;
++    if (offset > (lfs2_size_t)lfs2->ext_count * bs
++            || size > (lfs2_size_t)lfs2->ext_count * bs - offset) {
++        return LFS2_ERR_INVAL;
++    }
++    const uint8_t *data = buffer;
++    while (size > 0) {
++        lfs2_block_t block = lfs2->ext_head + offset / bs;
++        lfs2_off_t off = offset % bs;
++        lfs2_size_t n = lfs2_min(size, bs - (lfs2_size_t)off);
++        int err = lfs2_bd_prog(lfs2, &lfs2->pcache, &lfs2->rcache, true,
++                block, off, data, n);
++        if (err) {
++            return err;
++        }
++        data += n;
++        offset += n;
++        size -= n;
++    }
++    return 0;
++}
++
++int lfs2_fs_set_disk_version(lfs2_t *lfs2, uint32_t version) {
++    if (version <= lfs2->disk_version) {
++        return 0;
++    }
++    if ((0xffff & (version >> 16)) != LFS2_DISK_VERSION_EXTENTS_MAJOR
++            || (0xffff & version) > LFS2_DISK_VERSION_EXTENTS_MINOR) {
++        return LFS2_ERR_INVAL;
++    }
++    int err = lfs2_fs_forceconsistency(lfs2);
++    if (err) {
++        return err;
++    }
++    uint32_t old = lfs2->disk_version;
++    lfs2->disk_version = version;
++    lfs2_fs_prepsuperblock(lfs2, true);
++    err = lfs2_fs_desuperblock(lfs2);
++    if (err) {
++        lfs2->disk_version = old;
++    }
++    return err;
++}
++
++int lfs2_ext_commit(lfs2_t *lfs2, const char *path, uint32_t crc) {
++    if (!lfs2->ext_bitmap || lfs2->ext_count == 0) {
++        return LFS2_ERR_INVAL;
++    }
++
++    int err = lfs2_bd_sync(lfs2, &lfs2->pcache, &lfs2->rcache, false);
++    if (err) {
++        lfs2_ext_clear_exclude(lfs2);
++        return err;
++    }
++
++    // Stock littlefs must not be able to mount an image that contains (or
++    // may contain) an extent; raise the version before writing the tag.
++    err = lfs2_fs_set_disk_version(lfs2, LFS2_DISK_VERSION_EXTENTS);
++    if (err) {
++        lfs2_ext_clear_exclude(lfs2);
++        return err;
++    }
++
++    lfs2_ext_t ext;
++    ext.head = lfs2->ext_head;
++    ext.count = lfs2->ext_count;
++    ext.length = lfs2->ext_length;
++    ext.crc = crc;
++    ext.flags = 0;
++
++    lfs2_mdir_t cwd;
++    uint16_t id;
++    lfs2_stag_t tag = lfs2_dir_find(lfs2, &cwd, &path, &id);
++    if (tag < 0 && tag != LFS2_ERR_NOENT) {
++        lfs2_ext_clear_exclude(lfs2);
++        return (int)tag;
++    }
++
++    if (tag >= 0) {
++        if (lfs2_tag_type3(tag) != LFS2_TYPE_REG) {
++            lfs2_ext_clear_exclude(lfs2);
++            return LFS2_ERR_ISDIR;
++        }
++        // Find the data tag this commit replaces (CTZ, inline or extent).
++        struct lfs2_ctz ctz;
++        lfs2_stag_t old = lfs2_dir_get(lfs2, &cwd,
++                LFS2_MKTAG(0x700, 0x3ff, 0),
++                LFS2_MKTAG(LFS2_TYPE_STRUCT, id, sizeof(ctz)), &ctz);
++        if (old < 0 && old != LFS2_ERR_NOENT) {
++            lfs2_ext_clear_exclude(lfs2);
++            return (int)old;
++        }
++        uint16_t oldtype = (old >= 0)
++                ? lfs2_tag_type3(old) : LFS2_TYPE_INLINESTRUCT;
++        lfs2_ext_tole32(&ext);
++        err = lfs2_dir_commit(lfs2, &cwd, LFS2_MKATTRS(
++                {LFS2_MKTAG(oldtype, id, 0x3ff), NULL},
++                {LFS2_MKTAG(LFS2_TYPE_EXTSTRUCT, id, sizeof(ext)), &ext}));
++    } else {
++        lfs2_size_t nlen = lfs2_path_namelen(path);
++        if (nlen > lfs2->name_max) {
++            lfs2_ext_clear_exclude(lfs2);
++            return LFS2_ERR_NAMETOOLONG;
++        }
++        lfs2_ext_tole32(&ext);
++        err = lfs2_dir_commit(lfs2, &cwd, LFS2_MKATTRS(
++                {LFS2_MKTAG(LFS2_TYPE_CREATE, id, 0), NULL},
++                {LFS2_MKTAG(LFS2_TYPE_REG, id, nlen), path},
++                {LFS2_MKTAG(LFS2_TYPE_EXTSTRUCT, id, sizeof(ext)), &ext}));
++    }
++
++    lfs2_ext_clear_exclude(lfs2);
++    return err;
++}
++
++void lfs2_ext_abort(lfs2_t *lfs2) {
++    lfs2_ext_clear_exclude(lfs2);
++}
++#endif
++
++int lfs2_ext_info(lfs2_t *lfs2, const char *path, lfs2_ext_t *out) {
++    lfs2_mdir_t cwd;
++    uint16_t id;
++    lfs2_stag_t tag = lfs2_dir_find(lfs2, &cwd, &path, &id);
++    if (tag < 0) {
++        return (int)tag;
++    }
++    if (lfs2_tag_type3(tag) != LFS2_TYPE_REG) {
++        return LFS2_ERR_ISDIR;
++    }
++    lfs2_ext_t ext;
++    lfs2_stag_t xtag = lfs2_dir_get(lfs2, &cwd, LFS2_MKTAG(0x7ff, 0x3ff, 0),
++            LFS2_MKTAG(LFS2_TYPE_EXTSTRUCT, id, sizeof(ext)), &ext);
++    if (xtag < 0) {
++        return (int)xtag;
++    }
++    lfs2_ext_fromle32(&ext);
++    if (!lfs2_ext_valid(lfs2, &ext)) {
++        return LFS2_ERR_CORRUPT;
++    }
++    if (out) {
++        *out = ext;
++    }
++    return 0;
++}
++
++lfs2_size_t lfs2_fs_block_count(lfs2_t *lfs2) {
++    return lfs2->block_count;
++}
++
+ int lfs2_format(lfs2_t *lfs2, const struct lfs2_config *cfg) {
+     int err = LFS2_LOCK(cfg);
+     if (err) {
+diff --git a/lib/littlefs/lfs2.h b/lib/littlefs/lfs2.h
+index 77477aaf..a8b60705 100644
+--- a/lib/littlefs/lfs2.h
++++ b/lib/littlefs/lfs2.h
+@@ -21,16 +21,37 @@ extern "C"
+ // Software library version
+ // Major (top-nibble), incremented on backwards incompatible changes
+ // Minor (bottom-nibble), incremented on feature additions
+-#define LFS2_VERSION 0x0002000b
++#define LFS2_VERSION 0x0002000c
+ #define LFS2_VERSION_MAJOR (0xffff & (LFS2_VERSION >> 16))
+ #define LFS2_VERSION_MINOR (0xffff & (LFS2_VERSION >>  0))
+ 
+ // Version of On-disk data structures
+ // Major (top-nibble), incremented on backwards incompatible changes
+ // Minor (bottom-nibble), incremented on feature additions
+-#define LFS2_DISK_VERSION 0x00020001
++//
++// littlefs2e (extent files) is a deliberately high minor under the same
++// major: the metadata format and every tag older littlefs knows are
++// unchanged, but a stock littlefs must refuse the image once an extent can
++// exist (it does not know LFS2_TYPE_EXTSTRUCT, so it would hand the extent
++// blocks out as free). LFS2_DISK_VERSION_LITTLEFS2 is the safe baseline an
++// image is formatted with; the superblock is upgraded to
++// LFS2_DISK_VERSION_EXTENTS before the first extent is committed.
++#define LFS2_DISK_VERSION_LITTLEFS2 0x00020001
++#define LFS2_DISK_VERSION_EXTENTS   0x0002E000
++
++// Fixed bookkeeping for an in-flight extent reservation or defrag window.
++// 1024 bytes covers 8192 blocks, i.e. a 32 MiB filesystem at 4 KiB blocks.
++// littlefs is built with LFS2_NO_MALLOC on MicroPython, so the extent code
++// must not call the allocator.
++#define LFS2_EXT_MAP_MAX 1024
++// The format baseline (what lfs2_format writes and what an image without
++// extents reports) stays 2.1. The extent minor is opt-in and is committed
++// before the first extent tag.
++#define LFS2_DISK_VERSION LFS2_DISK_VERSION_LITTLEFS2
+ #define LFS2_DISK_VERSION_MAJOR (0xffff & (LFS2_DISK_VERSION >> 16))
+ #define LFS2_DISK_VERSION_MINOR (0xffff & (LFS2_DISK_VERSION >>  0))
++#define LFS2_DISK_VERSION_EXTENTS_MAJOR (0xffff & (LFS2_DISK_VERSION_EXTENTS >> 16))
++#define LFS2_DISK_VERSION_EXTENTS_MINOR (0xffff & (LFS2_DISK_VERSION_EXTENTS >>  0))
+ 
+ 
+ /// Definitions ///
+@@ -83,6 +104,7 @@ enum lfs2_error {
+     LFS2_ERR_NOMEM       = -12,  // No more memory available
+     LFS2_ERR_NOATTR      = -61,  // No data/attr available
+     LFS2_ERR_NAMETOOLONG = -36,  // File name too long
++    LFS2_ERR_NOCONTIG    = -129, // No contiguous run large enough
+ };
+ 
+ // File types
+@@ -108,6 +130,9 @@ enum lfs2_type {
+     LFS2_TYPE_DIRSTRUCT      = 0x200,
+     LFS2_TYPE_CTZSTRUCT      = 0x202,
+     LFS2_TYPE_INLINESTRUCT   = 0x201,
++    // littlefs2e: a contiguous, immutable run of raw blocks. The file's data
++    // tag is the extent itself; there is no CTZ skip-list or inline data.
++    LFS2_TYPE_EXTSTRUCT      = 0x203,
+     LFS2_TYPE_SOFTTAIL       = 0x600,
+     LFS2_TYPE_HARDTAIL       = 0x601,
+     LFS2_TYPE_MOVESTATE      = 0x7ff,
+@@ -135,14 +160,16 @@ enum lfs2_open_flags {
+ 
+     // internally used flags
+ #ifndef LFS2_READONLY
+-    LFS2_F_DIRTY   = 0x010000, // File does not match storage
+-    LFS2_F_WRITING = 0x020000, // File has been written since last flush
++    LFS2_F_DIRTY   = 0x00010000, // File does not match storage due to write
++    LFS2_F_DUSTY   = 0x00020000, // File does not match storage due to desync
++    LFS2_F_WRITING = 0x00040000, // File has been written since last flush
+ #endif
+-    LFS2_F_READING = 0x040000, // File has been read since last flush
++    LFS2_F_READING = 0x00080000, // File has been read since last flush
+ #ifndef LFS2_READONLY
+-    LFS2_F_ERRED   = 0x080000, // An error occurred during write
++    LFS2_F_ERRED   = 0x00100000, // An error occurred during write
+ #endif
+-    LFS2_F_INLINE  = 0x100000, // Currently inlined in directory entry
++    LFS2_F_INLINE  = 0x01000000, // Currently inlined in directory entry
++    LFS2_F_EXT     = 0x02000000, // File data is a contiguous extent
+ };
+ 
+ // File seek flags
+@@ -396,6 +423,18 @@ typedef struct lfs2_dir {
+     lfs2_block_t head[2];
+ } lfs2_dir_t;
+ 
++// littlefs2e extent: a single contiguous run of blocks holding file bytes
++// verbatim. `head` is block-aligned to the creator's alignment request (16
++// blocks for a 64 KiB XIP mapping), `count` is the padded run length, and
++// `length` is the real payload size. `crc` is optional (0 means "not set").
++typedef struct lfs2_ext {
++    lfs2_block_t head;
++    lfs2_block_t count;
++    lfs2_size_t length;
++    uint32_t crc;
++    uint32_t flags;
++} lfs2_ext_t;
++
+ // littlefs file type
+ typedef struct lfs2_file {
+     struct lfs2_file *next;
+@@ -408,6 +447,8 @@ typedef struct lfs2_file {
+         lfs2_size_t size;
+     } ctz;
+ 
++    lfs2_ext_t ext;
++
+     uint32_t flags;
+     lfs2_off_t pos;
+     lfs2_block_t block;
+@@ -463,6 +504,16 @@ typedef struct lfs2 {
+     lfs2_size_t file_max;
+     lfs2_size_t attr_max;
+     lfs2_size_t inline_max;
++    // On-disk version this mount will write. Initialised from the superblock
++    // (2.1) and raised to LFS2_DISK_VERSION_EXTENTS before the first extent.
++    uint32_t disk_version;
++    // Blocks reserved for an in-flight extent creation or defrag window.
++    // Consulted by the allocator until the extent tag is committed.
++    uint8_t *ext_bitmap;
++    uint8_t ext_map[LFS2_EXT_MAP_MAX];
++    lfs2_block_t ext_head;
++    lfs2_block_t ext_count;
++    lfs2_size_t ext_length;
+ 
+ #ifdef LFS2_MIGRATE
+     struct lfs21 *lfs21;
+@@ -794,6 +845,67 @@ int lfs2_migrate(lfs2_t *lfs2, const struct lfs2_config *cfg);
+ #endif
+ 
+ 
++/// Extent files (littlefs2e) ///
++
++#ifndef LFS2_READONLY
++// Reserve a contiguous, aligned run of blocks for a new extent. The run is
++// kept out of the allocator until lfs2_ext_commit() or lfs2_ext_abort().
++// `align` is in blocks (1 for no alignment, 16 for a 64 KiB XIP window with
++// 4 KiB blocks). The run is erased. On success `out` receives head/count/
++// length; crc/flags are the caller's to fill in for lfs2_ext_commit().
++//
++// Returns a negative error code on failure (LFS2_ERR_NOCONTIG when the
++// filesystem has free blocks but no run of the requested size/alignment).
++int lfs2_ext_reserve(lfs2_t *lfs2, lfs2_size_t length, lfs2_block_t align,
++        lfs2_ext_t *out);
++
++// Write bytes into the reserved run at `offset`.
++int lfs2_ext_write(lfs2_t *lfs2, lfs2_size_t offset,
++        const void *buffer, lfs2_size_t size);
++
++// Sync the payload, raise the on-disk version to littlefs2e if needed, and
++// commit `path` as an extent file, replacing any existing file data tag.
++// Metadata is committed atomically; old data blocks become free.
++int lfs2_ext_commit(lfs2_t *lfs2, const char *path, uint32_t crc);
++
++// Drop a reservation. The run is unreferenced and will be reused.
++void lfs2_ext_abort(lfs2_t *lfs2);
++#endif
++
++// Read the extent descriptor of `path`. Returns LFS2_ERR_NOENT if the path is
++// not a regular extent file (including an ordinary file).
++int lfs2_ext_info(lfs2_t *lfs2, const char *path, lfs2_ext_t *out);
++
++// Largest free run in blocks, optionally requiring `align`-block alignment.
++lfs2_block_t lfs2_ext_largest_run(lfs2_t *lfs2, lfs2_block_t align);
++
++// Fill `used` and `meta` bitmaps (block_count bits each, caller-sized at
++// (block_count+7)/8) for defrag planning. `meta` marks directory pairs
++// (including split-directory tails). Extents count as used.
++int lfs2_ext_block_maps(lfs2_t *lfs2,
++        uint8_t *used, lfs2_size_t used_size,
++        uint8_t *meta, lfs2_size_t meta_size);
++
++// Mark every block of `path` via `cb`. Inline files and directories call
++// nothing. Extent files yield their whole run.
++int lfs2_ext_file_blocks(lfs2_t *lfs2, const char *path,
++        int (*cb)(void*, lfs2_block_t), void *data);
++
++#ifndef LFS2_READONLY
++// Exclude [head, head+count) from allocation while defrag moves files.
++// Only one range may be active at a time.
++int lfs2_ext_exclude(lfs2_t *lfs2, lfs2_block_t head, lfs2_block_t count);
++void lfs2_ext_clear_exclude(lfs2_t *lfs2);
++
++// Raise the on-disk version (currently only to LFS2_DISK_VERSION_EXTENTS).
++// Commits a new superblock before returning.
++int lfs2_fs_set_disk_version(lfs2_t *lfs2, uint32_t version);
++#endif
++
++// Number of blocks, useful for sizing the maps above.
++lfs2_size_t lfs2_fs_block_count(lfs2_t *lfs2);
++
++
+ #ifdef __cplusplus
+ } /* extern "C" */
+ #endif

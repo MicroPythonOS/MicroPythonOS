@@ -1,0 +1,162 @@
+# littlefs2e extent files.
+#
+# Run with the vendored littlefs test runner (see README.md in this directory).
+
+[cases.test_extent_simple]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+
+    // ordinary file survives
+    lfs_file_t file;
+    lfs_file_open(&lfs, &file, "normal",
+            LFS_O_WRONLY | LFS_O_CREAT | LFS_O_EXCL) => 0;
+    lfs_file_write(&lfs, &file, "hello", 5) => 5;
+    lfs_file_close(&lfs, &file) => 0;
+
+    uint8_t data[9000];
+    for (int i = 0; i < (int)sizeof(data); i++) {
+        data[i] = (uint8_t)(i*7);
+    }
+    lfs_ext_t ext;
+    lfs_ext_reserve(&lfs, sizeof(data), 4, &ext) => 0;
+    assert(ext.head % 4 == 0);
+    assert(ext.count == (sizeof(data)+cfg->block_size-1)/cfg->block_size);
+    for (lfs_size_t off = 0; off < sizeof(data); off += 512) {
+        lfs_size_t n = sizeof(data)-off < 512 ? sizeof(data)-off : 512;
+        lfs_ext_write(&lfs, off, data+off, n) => 0;
+    }
+    lfs_ext_commit(&lfs, "core.bin", 0x12345678) => 0;
+
+    lfs_ext_t got;
+    lfs_ext_info(&lfs, "core.bin", &got) => 0;
+    assert(got.head == ext.head);
+    assert(got.count == ext.count);
+    assert(got.length == sizeof(data));
+    assert(got.crc == 0x12345678);
+
+    struct lfs_info info;
+    lfs_stat(&lfs, "core.bin", &info) => 0;
+    assert(info.size == sizeof(data));
+
+    lfs_file_open(&lfs, &file, "core.bin", LFS_O_RDONLY) => 0;
+    uint8_t back[9000];
+    lfs_file_read(&lfs, &file, back, sizeof(back)) => sizeof(back);
+    assert(memcmp(back, data, sizeof(data)) == 0);
+    lfs_file_close(&lfs, &file) => 0;
+
+    // rename keeps the extent
+    lfs_rename(&lfs, "core.bin", "renamed.bin") => 0;
+    lfs_ext_info(&lfs, "renamed.bin", &got) => 0;
+    assert(got.head == ext.head);
+
+    lfs_remove(&lfs, "renamed.bin") => 0;
+    lfs_ext_info(&lfs, "renamed.bin", &got) => LFS_ERR_NOENT;
+
+    lfs_file_open(&lfs, &file, "normal", LFS_O_RDONLY) => 0;
+    char hello[8] = {0};
+    lfs_file_read(&lfs, &file, hello, 5) => 5;
+    assert(memcmp(hello, "hello", 5) == 0);
+    lfs_file_close(&lfs, &file) => 0;
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_extent_truncate_converts]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+
+    uint8_t data[5000];
+    memset(data, 0x5a, sizeof(data));
+    lfs_ext_t ext;
+    lfs_ext_reserve(&lfs, sizeof(data), 1, &ext) => 0;
+    lfs_ext_write(&lfs, 0, data, sizeof(data)) => 0;
+    lfs_ext_commit(&lfs, "blob", 0) => 0;
+
+    // A normal write replaces the extent with ordinary littlefs data.
+    lfs_file_t file;
+    lfs_file_open(&lfs, &file, "blob",
+            LFS_O_WRONLY | LFS_O_TRUNC) => 0;
+    lfs_file_write(&lfs, &file, "small", 5) => 5;
+    lfs_file_close(&lfs, &file) => 0;
+
+    lfs_ext_t got;
+    lfs_ext_info(&lfs, "blob", &got) => LFS_ERR_NOENT;
+    struct lfs_info info;
+    lfs_stat(&lfs, "blob", &info) => 0;
+    assert(info.size == 5);
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_extent_version_gate]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    struct lfs_fsinfo fsinfo;
+    lfs_fs_stat(&lfs, &fsinfo) => 0;
+    assert((fsinfo.disk_version & 0xffff) == 1);
+
+    uint8_t data[4096];
+    memset(data, 1, sizeof(data));
+    lfs_ext_t ext;
+    lfs_ext_reserve(&lfs, sizeof(data), 1, &ext) => 0;
+    lfs_ext_write(&lfs, 0, data, sizeof(data)) => 0;
+    lfs_ext_commit(&lfs, "blob", 0) => 0;
+
+    lfs_fs_stat(&lfs, &fsinfo) => 0;
+    assert((fsinfo.disk_version & 0xffff) == 0xE000);
+    lfs_unmount(&lfs) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_fs_stat(&lfs, &fsinfo) => 0;
+    assert((fsinfo.disk_version & 0xffff) == 0xE000);
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_extent_alignment]
+defines.ALIGN = [1, 2, 4, 8]
+defines.SIZE = [1, 4096, 4097, 20000]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    static uint8_t data[20000];
+    memset(data, 0xa5, sizeof(data));
+    lfs_ext_t ext;
+    lfs_ext_reserve(&lfs, SIZE, ALIGN, &ext) => 0;
+    assert(ext.head % ALIGN == 0);
+    lfs_ext_write(&lfs, 0, data, SIZE) => 0;
+    lfs_ext_commit(&lfs, "blob", 0) => 0;
+    lfs_ext_t got;
+    lfs_ext_info(&lfs, "blob", &got) => 0;
+    assert(got.head == ext.head);
+    assert(got.count == (SIZE+cfg->block_size-1)/cfg->block_size);
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_extent_no_contiguous_space]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+
+    // Fill with single-block files so no large run remains.
+    lfs_file_t file;
+    uint8_t data[512];
+    memset(data, 0x33, sizeof(data));
+    for (int i = 0; i < 64; i++) {
+        char name[16];
+        sprintf(name, "f%03d", i);
+        lfs_file_open(&lfs, &file, name,
+                LFS_O_WRONLY | LFS_O_CREAT | LFS_O_EXCL) => 0;
+        lfs_file_write(&lfs, &file, data, sizeof(data)) => sizeof(data);
+        lfs_file_close(&lfs, &file) => 0;
+    }
+
+    lfs_ext_t ext;
+    int err = lfs_ext_reserve(&lfs, cfg->block_count*cfg->block_size, 1, &ext);
+    assert(err == LFS_ERR_NOCONTIG || err == LFS_ERR_NOSPC);
+    lfs_unmount(&lfs) => 0;
+'''

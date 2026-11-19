@@ -2,6 +2,15 @@ Future release (next version)
 =====
 
 Frameworks:
+- littlefs2e: contiguous "extent" files on the internal filesystem. An extent is
+  an immutable, aligned run of blocks whose bytes are stored verbatim, so it can
+  be mapped from flash (XIP) instead of being read through the CTZ skip-list.
+  `mpos.extent` creates/reads/verifies them; the first extent upgrades the
+  superblock from disk 2.1 to 2.0xE000, which stock littlefs refuses rather than
+  handing the run out as free space. Images without extents stay 2.1. A normal
+  `open(path, "wb")` converts an extent back to an ordinary file, and extent
+  creation defragments a fragmented filesystem by relocating the files in the
+  target window. The Doom badge engine is now stored and executed this way.
 - Multi-touch: the GT911 and FocalTech drivers read every touch point (`get_touches()`) instead of only the first, and `mpos.ui.multitouch.MultiTouchGesture` reports pinch scale, rotation and pan from two fingers. A second finger is gesture-only: the driver sends the contact to LVGL as released until every finger lifts, so a pinch cannot click the widget under it or trigger the back-swipe.
 - AudioManager: `get()` rebuilds a singleton whose initialisation never finished. A
   constructor call that raised (a wrong keyword argument, a preferences read failing
