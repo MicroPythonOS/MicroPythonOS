@@ -329,6 +329,15 @@ class TestNativeActivity(unittest.TestCase):
         self.game._on_touch(_Event(code=lv.EVENT.PRESSED))
         self.assertEqual(self.game.pointer, [(lv.EVENT.PRESSED, 120, 40)])
 
+    def test_a_refresh_event_is_not_a_touch(self):
+        # The screen listens for EVENT.ALL, so LVGL also delivers draw and
+        # refresh events there; none of them is input.
+        self.game.pointer = []
+        InputManager.pointer_xy = staticmethod(lambda: (120, 40))
+        self.game._on_touch(_Event(code=lv.EVENT.DRAW_MAIN))
+        self.game._on_touch(_Event(code=lv.EVENT.REFR_EXT_DRAW_SIZE))
+        self.assertEqual(self.game.pointer, [])
+
     # -- multi-point panels ------------------------------------------------
 
     def _multi_game(self, touches):

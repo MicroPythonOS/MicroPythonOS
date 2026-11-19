@@ -59,6 +59,11 @@ TOUCH_EVENTS = {
     TouchFingers.RELEASED: lv.EVENT.RELEASED,
 }
 
+# The screen is registered for EVENT.ALL so it gets the pointer events, but
+# that also delivers refresh, draw and style events. on_pointer() is only
+# promised the three input codes, and a refresh event has no touch position.
+POINTER_EVENTS = (lv.EVENT.PRESSED, lv.EVENT.PRESSING, lv.EVENT.RELEASED)
+
 
 class NativeActivity(Activity):
 
@@ -373,6 +378,8 @@ class NativeActivity(Activity):
         self.on_key_event(event.get_key())
 
     def _on_touch(self, event):
+        if event.get_code() not in POINTER_EVENTS:
+            return
         # LVGL also sends PRESSED/RELEASED to the focused object when ENTER is
         # pressed on a keypad, so only a pointer may drive the touch zones.
         indev = lv.indev_active()
