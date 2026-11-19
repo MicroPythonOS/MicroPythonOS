@@ -128,7 +128,7 @@ class TestAppDetailRateContVisibility(unittest.TestCase):
 
         try:
             detail = AppDetail()
-            detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None})()
+            detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None, "_store_source": "badgehub"})()
             detail.appstore = type("AppStore", (), {})()
 
             class MockObj:
@@ -157,7 +157,7 @@ class TestAppDetailRateContVisibility(unittest.TestCase):
 
         try:
             detail = AppDetail()
-            detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None})()
+            detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None, "_store_source": "badgehub"})()
             detail.appstore = type("AppStore", (), {})()
 
             class MockObj:
@@ -184,7 +184,7 @@ class TestAppDetailRateContVisibility(unittest.TestCase):
 
         try:
             detail = AppDetail()
-            detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None})()
+            detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None, "_store_source": "badgehub"})()
             detail.appstore = type("AppStore", (), {})()
 
             class MockObj:

@@ -4,9 +4,11 @@ import logging
 
 import time
 import ujson
+import store_source
+from store_install import update_available
 
 from mpos import (
-    AppManager,
+    AppManager as AppManager,
     BuildInfo,
     ConnectivityManager,
     TaskManager,
@@ -355,14 +357,16 @@ class AppUpdateManager:
             return
         self._last_check_ts = now
         self._check_in_progress = True
+        selected_source = store_source.current_source()
         try:
             self._set_state(AppUpdateState.CHECKING_UPDATES)
 
             if index_url is None:
-                index_url = self._BADGEHUB_INDEX_URL
+                index_url = store_source.index_url()
 
+            print("APPSTORE_UPDATE_SOURCE", selected_source, index_url)
             try:
-                response = await DownloadManager.download_url(index_url)
+                response = await store_source.fetch_updates(index_url)
             except Exception as e:
                 logger.error("download error: %s", e)
                 if DownloadManager.is_network_error(e):
@@ -372,12 +376,14 @@ class AppUpdateManager:
                 return
 
             try:
-                apps_json = ujson.loads(response)
+                apps_json = response
             except Exception as e:
                 logger.error("JSON parse error: %s", e)
                 self._set_state(AppUpdateState.ERROR)
                 return
 
+            if selected_source != store_source.current_source():
+                return
             updatable = []
             for app_data in apps_json:
                 try:
@@ -385,12 +391,15 @@ class AppUpdateManager:
                     remote_version = app_data.get("version")
                     if not fullname or not remote_version:
                         continue
-                    if AppManager.is_update_available(fullname, remote_version):
+                    if update_available(fullname, remote_version, app_data.get("revision"), app_data.get("_store_source")):
                         updatable.append({
                             "fullname": fullname,
                             "version": remote_version,
                             "name": app_data.get("name", fullname),
-                            "download_url": None,
+                            "download_url": app_data.get("download_url"),
+                            "_store_source": app_data.get("_store_source", store_source.current_source()),
+                            "_store_slug": app_data.get("_store_slug"),
+                            "revision": app_data.get("revision"),
                         })
                 except Exception as e:
                     logger.error("error checking %s: %s", app_data, e)
@@ -406,6 +415,8 @@ class AppUpdateManager:
 
         finally:
             self._check_in_progress = False
+            if selected_source != store_source.current_source() and self._running:
+                TaskManager.create_task(self.check_for_updates(force=True))
 
     # ------------------------------------------------------------------
     # Notification helpers

@@ -2,8 +2,10 @@ import logging
 
 import lvgl as lv
 
-from mpos import Activity, DownloadManager, AppManager, TaskManager, WidgetAnimator
+from mpos import Activity, AppManager, TaskManager, WidgetAnimator
 from mpos.ui import STAR_SYMBOL, add_focus_highlight
+import store_source
+from store_install import install_package, update_available, forget_receipt, exists, clear_app_cache
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
 
 logger = logging.getLogger(__name__)
@@ -37,7 +39,11 @@ class AppDetail(Activity):
     appstore = None
 
     def _open_app(self, app_fullname):
-        AppManager.start_app(app_fullname)
+        print("APPSTORE_OPEN_REQUEST", app_fullname)
+        if not AppManager.start_app(app_fullname):
+            if self.has_foreground():
+                self.long_desc_label.set_text("App failed to open. Check its dependencies or uninstall and retry.")
+            print("APPSTORE_OPEN_FAILED", app_fullname)
 
     def _sync_open_button(self):
         if self._open_button is None:
@@ -50,7 +56,7 @@ class AppDetail(Activity):
     def _sync_rate_cont(self):
         if self.rate_cont is None:
             return
-        if AppManager.is_installed_by_name(self.app.fullname) and not self._rated:
+        if getattr(self.app, "_store_source", store_source.current_source()) != "upystore" and AppManager.is_installed_by_name(self.app.fullname) and not self._rated:
             self.rate_cont.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             self.rate_cont.add_flag(lv.obj.FLAG.HIDDEN)
@@ -104,9 +110,12 @@ class AppDetail(Activity):
             return
         if __debug__: logger.debug("downloading icon for %s from %s", self.app.fullname, self.app.icon_url)
         try:
-            self.app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(self.app.icon_url), 5)
+            self.app.icon_data = await store_source.request(self.app.icon_url, timeout=10)
         except Exception as e:
             if __debug__: logger.debug("download of %s failed: %s", self.app.icon_url, e)
+            self._icon_download_started = False
+            return
+        if not self.has_foreground():
             self._icon_download_started = False
             return
         if self.app.icon_data:
@@ -125,14 +134,16 @@ class AppDetail(Activity):
 
     async def _update_progress(self, value, wait=True):
         """Update progress bar with optional wait"""
-        self.progress_bar.set_value(value, wait)
+        if self.has_foreground():
+            self.progress_bar.set_value(value, wait)
         if wait:
             await TaskManager.sleep(1)
 
     def _show_progress_bar(self):
         """Show progress bar and reset to 0"""
-        self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(0, False)
+        if self.has_foreground():
+            self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
+            self.progress_bar.set_value(0, False)
 
     def _hide_progress_bar(self):
         """Hide progress bar and reset to 0"""
@@ -252,6 +263,7 @@ class AppDetail(Activity):
         self.setContentView(app_detail_screen)
 
     def onResume(self, screen):
+        super().onResume(screen)
         self._sync_open_button()
         self._sync_rate_cont()
         TaskManager.create_task(self.fetch_and_set_app_details())
@@ -278,7 +290,7 @@ class AppDetail(Activity):
         if self.version_label is not None:
             remote = getattr(self.app, "_remote_version", None) or self.app.version
             if remote:
-                self.version_label.set_text("Available: %s" % remote)
+                self.version_label.set_text("Available: %s%s" % (remote, " (r%s)" % self.app.revision if getattr(self.app, "revision", None) is not None else ""))
             else:
                 self.version_label.set_text("Loading details...")
         if self.installed_version_label is not None:
@@ -317,7 +329,7 @@ class AppDetail(Activity):
         store_version = getattr(app, "_remote_version", None) or app.version
         if __debug__: logger.debug("update check: _remote_version=%s app.version=%s store_version=%s",
             getattr(app, "_remote_version", None), app.version, store_version)
-        if store_version and AppManager.is_update_available(self.app.fullname, store_version):
+        if store_version and update_available(self.app.fullname, store_version, getattr(app, "revision", None), getattr(app, "_store_source", None)):
             if __debug__: logger.debug("update available, adding update button")
             self.update_button = lv.button(buttoncont)
             self.update_button.set_style_pad_hor(3, lv.PART.MAIN)
@@ -340,11 +352,35 @@ class AppDetail(Activity):
         if install_had_focus:
             lv.group_focus_obj(self.install_button)
 
+    def _description_text(self):
+        description = getattr(self.app, "long_description", None) or ""
+        if getattr(self.app, "_store_source", store_source.current_source()) == "upystore":
+            description += "\n\nuPyStore: rating submission is not available."
+            versions = getattr(self.app, "_store_versions", [])
+            if versions:
+                description += "\nPublished: " + ", ".join("%s (r%s)" % (v.get("version", "?"), v.get("revision", "?")) for v in versions[:8])
+        return description
+
     async def fetch_and_set_app_details(self):
-        await self.fetch_badgehub_app_details(self.app)
+        if getattr(self, "_details_loading", False):
+            return
+        self._details_loading = True
+        try:
+            await self.fetch_badgehub_app_details(self.app)
+            self._details_error = False
+        except Exception as error:
+            print("APPSTORE_DETAILS_FAILED", self.app.fullname, type(error).__name__, str(error))
+            self._details_error = True
+            if self.has_foreground():
+                self.long_desc_label.set_text("Store details unavailable: %s. Tap Install to retry or return to the list." % store_source.error_text(error)[:90])
+            return
+        finally:
+            self._details_loading = False
+        if not self.has_foreground():
+            return
         if __debug__: logger.debug("app has version: %s", self.app.version)
         self._update_version_labels()
-        self.long_desc_label.set_text(self.app.long_description)
+        self.long_desc_label.set_text(self._description_text())
         self.publisher_label.set_text(self.app.publisher)
         if not self._action_in_progress:
             self.add_action_buttons(self.buttoncont, self.app)
@@ -367,6 +403,7 @@ class AppDetail(Activity):
         if label_text == self.action_label_install:
             if not download_url:
                 if __debug__: logger.debug("no download_url yet, ignoring")
+                TaskManager.create_task(self.fetch_and_set_app_details())
                 return
             if __debug__: logger.debug("starting install task")
             self._action_in_progress = True
@@ -395,17 +432,35 @@ class AppDetail(Activity):
 
     async def uninstall_app(self, app_fullname):
         self._show_progress_bar()
-        await self._update_progress(21)
-        await self._update_progress(42)
-        AppManager.uninstall_app(app_fullname)
-        await self._update_progress(100, wait=False)
-        self._hide_progress_bar()
-        self._action_in_progress = False
-        AppManager.refresh_apps()
-        self.add_action_buttons(self.buttoncont, self.app)
-        self._trigger_update_recheck()
+        try:
+            destination = "apps/" + store_source.identity(app_fullname)
+            if not exists(destination):
+                raise ValueError("No removable user installation")
+            await self._update_progress(21)
+            AppManager.uninstall_app(app_fullname)
+            if exists(destination):
+                raise OSError("Application directory could not be removed")
+            clear_app_cache(destination)
+            forget_receipt(app_fullname)
+            print("APPSTORE_UNINSTALL_SUCCESS", app_fullname)
+            if self.has_foreground() and self.long_desc_label is not None:
+                self.long_desc_label.set_text(self._description_text())
+            await self._update_progress(100, wait=False)
+            self._trigger_update_recheck()
+        except Exception as error:
+            print("APPSTORE_UNINSTALL_FAILED", app_fullname, error)
+            if self.has_foreground():
+                self.long_desc_label.set_text("Uninstall failed: %s. Retry or return to the list." % store_source.error_text(error)[:110])
+        finally:
+            self._action_in_progress = False
+            AppManager.refresh_apps()
+            if self.has_foreground():
+                self._hide_progress_bar()
+                self.add_action_buttons(self.buttoncont, self.app)
 
     async def pcb(self, percent):
+        if not self.has_foreground():
+            return
         if __debug__: logger.debug("pcb: %s", percent)
         scaled_percent_start = 5 # before 5% is preparation
         scaled_percent_finished = 60 # after 60% is unzip
@@ -417,37 +472,35 @@ class AppDetail(Activity):
 
     async def download_and_install(self, app_obj, dest_folder):
         app_fullname = app_obj.fullname
-        download_url_size = getattr(app_obj, "download_url_size", None)
         self._show_progress_bar()
         await self._update_progress(5)
         try:
-            await AppManager.download_and_install_package(
-                app_obj.download_url,
-                app_fullname,
-                download_url_size=download_url_size,
-                progress_callback=self.pcb,
-            )
+            receipt = await install_package(app_obj, progress_callback=self.pcb)
+            if receipt and receipt.get("version"):
+                app_obj._remote_version = receipt["version"]
+                app_obj.revision = receipt.get("revision")
         except Exception as e:
-            logger.error("download failed: %s", e)
-            if DownloadManager.is_network_error(e):
-                self.install_label.set_text(f"Network error - check WiFi")
-            elif "Not enough free space" in str(e):
-                self.install_label.set_text(f"Not enough space")
-            else:
-                self.install_label.set_text(f"Download failed: {str(e)[:30]}")
-            self.install_button.remove_state(lv.STATE.DISABLED)
+            print("APPSTORE_INSTALL_FAILED", app_fullname, type(e).__name__, str(e))
+            logger.error("download failed: %s", store_source.error_text(e))
             self._action_in_progress = False
-            self._hide_progress_bar()
+            if self.has_foreground():
+                self._hide_progress_bar()
+                self.add_action_buttons(self.buttoncont, self.app)
+                self.long_desc_label.set_text("Install failed: %s. Retry the action or return to the list." % store_source.error_text(e)[:110])
             return
+        self._details_error = False
+        if self.has_foreground() and self.long_desc_label is not None:
+            self.long_desc_label.set_text(self._description_text())
         revision = getattr(app_obj, "revision", None)
-        if revision is not None:
+        if revision is not None and getattr(app_obj, "_store_source", store_source.current_source()) == "badgehub":
             from appstore_core import report_badgehub_install
             TaskManager.create_task(report_badgehub_install(app_obj.fullname, revision))
         await self._update_progress(100, wait=False)
-        self._hide_progress_bar()
         self._action_in_progress = False
         AppManager.refresh_apps()
-        self.add_action_buttons(self.buttoncont, self.app)
+        if self.has_foreground():
+            self._hide_progress_bar()
+            self.add_action_buttons(self.buttoncont, self.app)
         self._trigger_update_recheck()
 
     def _trigger_update_recheck(self):
@@ -464,20 +517,9 @@ class AppDetail(Activity):
             logger.warning("could not schedule update recheck: %s", e)
 
     async def fetch_badgehub_app_details(self, app_obj):
-        from appstore_core import fetch_badgehub_project_details
-        details_url = self.appstore._BADGEHUB_DETAILS_URL + "/" + app_obj.fullname
-        result = await fetch_badgehub_project_details(details_url)
-        if not result:
-            return
-        remote_version = result.get("version")
-        if remote_version and not getattr(app_obj, "_remote_version", None):
-            app_obj._remote_version = remote_version
-        if result.get("download_url"):
-            app_obj.download_url = result["download_url"]
-            app_obj.download_url_size = result.get("download_url_size")
-        if result.get("publisher"):
-            app_obj.publisher = result["publisher"]
-        if result.get("long_description"):
-            app_obj.long_description = result["long_description"]
-        if result.get("revision") is not None:
-            app_obj.revision = result["revision"]
+        result = await store_source.fetch_details(app_obj.fullname, getattr(app_obj, "_store_slug", None), getattr(app_obj, "_store_source", None))
+        store_source.attach(app_obj, result)
+        app_obj.download_url = result.get("download_url")
+        app_obj.download_url_size = result.get("download_url_size")
+        app_obj.long_description = result.get("long_description") or app_obj.short_description
+        app_obj._store_versions = result.get("versions", [])

@@ -263,8 +263,8 @@ class TestAppStoreUpdateAllRecheck(unittest.TestCase):
         async def _fake_download_and_install(*args, **kwargs):
             pass
 
-        self._orig_download_and_install = mpos.AppManager.download_and_install_package
-        mpos.AppManager.download_and_install_package = _fake_download_and_install
+        self._orig_download_and_install = __import__("appstore").install_package
+        __import__("appstore").install_package = _fake_download_and_install
 
         self._orig_aum = appstore_core.AppUpdateManager
         appstore_core.AppUpdateManager = MockAppUpdateManager
@@ -275,7 +275,7 @@ class TestAppStoreUpdateAllRecheck(unittest.TestCase):
         import appstore_core
         mpos.TaskManager.create_task = self._orig_create_task
         mpos.AppManager.refresh_apps = self._orig_refresh_apps
-        mpos.AppManager.download_and_install_package = self._orig_download_and_install
+        __import__("appstore").install_package = self._orig_download_and_install
         appstore_core.AppUpdateManager = self._orig_aum
 
     def _make_store(self):
@@ -613,6 +613,7 @@ class TestAppDetailUpdateRecheck(unittest.TestCase):
     def _make_detail(self):
         from app_detail import AppDetail
         detail = AppDetail()
+        detail._has_foreground = True
         detail.app = type("App", (), {"fullname": "com.test.a"})()
         detail.appstore = type("AppStore", (), {})()
         return detail
@@ -648,7 +649,7 @@ class TestAppDetailRefreshBeforeAddButtons(unittest.TestCase):
         asyncio.new_event_loop()
 
         self._orig_refresh = mpos.AppManager.refresh_apps
-        self._orig_dl = mpos.AppManager.download_and_install_package
+        self._orig_dl = __import__("app_detail").install_package
         self._orig_create = mpos.TaskManager.create_task
 
         self._tracked_events = []
@@ -662,7 +663,7 @@ class TestAppDetailRefreshBeforeAddButtons(unittest.TestCase):
         import mpos
         import appstore_core
         mpos.AppManager.refresh_apps = self._orig_refresh
-        mpos.AppManager.download_and_install_package = self._orig_dl
+        __import__("app_detail").install_package = self._orig_dl
         mpos.TaskManager.create_task = self._orig_create
         appstore_core.AppUpdateManager = self._orig_aum
 
@@ -673,12 +674,13 @@ class TestAppDetailRefreshBeforeAddButtons(unittest.TestCase):
         import mpos
         from app_detail import AppDetail
 
-        async def _fake_dl(url, fullname, **kwargs):
+        async def _fake_dl(app_obj, **kwargs):
             pass
 
-        mpos.AppManager.download_and_install_package = _fake_dl
+        __import__("app_detail").install_package = _fake_dl
 
         detail = AppDetail()
+        detail._has_foreground = True
         detail.app = type("App", (), {
             "fullname": "com.test.a",
             "download_url": "https://example.com/a.mpk",
@@ -844,6 +846,8 @@ class TestAppDetailRefreshBeforeAddButtons(unittest.TestCase):
         )()
 
         detail = AppDetail()
+        detail._has_foreground = True
+        app_obj._store_source = "badgehub"
         detail.app = app_obj
         detail.appstore = type(
             "AppStore",
@@ -969,24 +973,26 @@ class TestBadgehubReportInstall(unittest.TestCase):
         async def fake_report(fullname, revision):
             report_calls.append((fullname, revision))
 
-        async def fake_download_and_install(url, fullname, **kwargs):
+        async def fake_download_and_install(app_obj, **kwargs):
             pass
 
         orig_report = __import__("appstore_core").report_badgehub_install
-        orig_dl = mpos.AppManager.download_and_install_package
+        orig_dl = __import__("app_detail").install_package
         orig_create = mpos.TaskManager.create_task
-        mpos.AppManager.download_and_install_package = fake_download_and_install
+        __import__("app_detail").install_package = fake_download_and_install
 
         tasks = []
         mpos.TaskManager.create_task = lambda c: tasks.append(c) or asyncio.get_event_loop().run_until_complete(c)
 
         try:
             detail = AppDetail()
+            detail._has_foreground = True
             detail.app = type("App", (), {
                 "fullname": "com.test.app",
                 "download_url": "https://badgehub.eu/file.mpk",
                 "revision": 42,
             })()
+            detail.app._store_source = "badgehub"
             detail.appstore = type("AppStore", (), {})()
 
             detail.install_button = self.MockBtn()
@@ -1001,7 +1007,7 @@ class TestBadgehubReportInstall(unittest.TestCase):
             loop = asyncio.get_event_loop()
             loop.run_until_complete(detail.download_and_install(detail.app, "apps/com.test.app"))
         finally:
-            mpos.AppManager.download_and_install_package = orig_dl
+            __import__("app_detail").install_package = orig_dl
             mpos.TaskManager.create_task = orig_create
             appstore_core.report_badgehub_install = orig_report
 
@@ -1018,12 +1024,12 @@ class TestBadgehubReportInstall(unittest.TestCase):
         async def fake_report(fullname, revision):
             report_calls.append((fullname, revision))
 
-        async def fake_download_and_install(url, fullname, **kwargs):
+        async def fake_download_and_install(app_obj, **kwargs):
             pass
 
-        orig_dl = mpos.AppManager.download_and_install_package
+        orig_dl = __import__("app_detail").install_package
         orig_create = mpos.TaskManager.create_task
-        mpos.AppManager.download_and_install_package = fake_download_and_install
+        __import__("app_detail").install_package = fake_download_and_install
         mpos.TaskManager.create_task = lambda c: asyncio.get_event_loop().run_until_complete(c)
 
         try:
@@ -1032,10 +1038,12 @@ class TestBadgehubReportInstall(unittest.TestCase):
             appstore_core.report_badgehub_install = fake_report
 
             detail = AppDetail()
+            detail._has_foreground = True
             detail.app = type("App", (), {
                 "fullname": "com.test.app",
                 "download_url": "https://badgehub.eu/file.mpk",
             })()
+            detail.app._store_source = "badgehub"
             detail.appstore = type("AppStore", (), {})()
             detail.install_button = self.MockBtn()
             detail.install_label = self.MockLbl()
@@ -1045,7 +1053,7 @@ class TestBadgehubReportInstall(unittest.TestCase):
             loop = asyncio.get_event_loop()
             loop.run_until_complete(detail.download_and_install(detail.app, "apps/com.test.app"))
         finally:
-            mpos.AppManager.download_and_install_package = orig_dl
+            __import__("app_detail").install_package = orig_dl
             mpos.TaskManager.create_task = orig_create
             appstore_core.report_badgehub_install = orig_report
 
