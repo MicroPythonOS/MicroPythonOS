@@ -61,6 +61,9 @@ touch confirmation and camera video.
 | Controlled timeout | Passed: a delayed coroutine exceeded the framework deadline and showed TimeoutError with retry guidance; invalid earlier fixture runs are excluded |
 | Actual WiFi offline prompt | Passed: WiFi disabled on device, install rejected with Offline guidance; Uninstall remained available |
 | Actual network recovery | Passed: WiFi reconnected, real metadata and MPK requests completed, installation succeeded and the previous error description was cleared; stage and backup directories were empty |
+| Actual HTTP 404 | Passed: obsolete sample detail returned HTTP 404; the detail screen offered retry and return |
+| Real malformed packages | Passed: Danke failed the top-level identity check; Show Battery failed unsafe path validation; neither app was committed |
+| Final state | Passed: running firmware SHA256 re-read and matched; online event loop alive, no framework overlay, test apps removed, controlled transport disabled, installation stage/backup empty |
 
 The controlled apps are `com.freakstudio.storetest_upgrade` and
 `com.freakstudio.storetest_peer`: 1.0.0/r1 to 1.1.0/r2. The Activity source stays
