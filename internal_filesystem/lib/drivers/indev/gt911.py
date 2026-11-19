@@ -54,7 +54,7 @@ def parse_touch_points(buf, count):
         size = buf[offset + 4] | (buf[offset + 5] << 8)
         if not (x or y or size):
             continue
-        points.append((None, x, y))
+        points.append((index, x, y))
     return points
 
 

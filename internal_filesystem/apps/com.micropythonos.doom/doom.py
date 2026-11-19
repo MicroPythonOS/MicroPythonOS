@@ -348,6 +348,8 @@ class Doom(NativeActivity):
     # The game covers the screen and owns the edges: the OS's top/left swipes
     # would otherwise steal the menu band and the joystick's outer edge.
     system_gestures_enabled = False
+    # Both thumbs at once: walk with the left one and fire with the right one.
+    touch_fingers = True
     # Both engines export the same 11025 Hz mixer; a piezo is refused because
     # Doom's broadband effects become a screech on one.
     audio_rate = SAMPLE_RATE
@@ -398,6 +400,11 @@ class Doom(NativeActivity):
     def on_resumed(self):
         # Returning from a dialog or the launcher is a good moment for the map.
         self._show_touch_hints()
+
+    def on_paused(self):
+        # No frame loop runs while paused, so no finger is down when the game
+        # comes back: a hold that straddles the pause must not continue.
+        self.zones.reset()
 
     def on_frame(self, now):
         # A letter and the NEXT/PREV it rides on arrive in one input read, so
@@ -454,17 +461,26 @@ class Doom(NativeActivity):
             self.holds.tap(KEY_ESCAPE)
 
     def on_pointer(self, event_code, x, y):
+        # A single-point panel (or the desktop mouse): one finger, number 0.
+        self._touch(0, event_code, x, y)
+
+    def on_touch_finger(self, finger, event_code, x, y):
+        # A multi-point panel: the left thumb keeps its own direction while the
+        # right one fires, because every finger has its own zone state.
+        self._touch(finger, event_code, x, y)
+
+    def _touch(self, finger, event_code, x, y):
         sx, sy = self.to_game(x, y)
         if event_code == lv.EVENT.PRESSED:
-            self._last_touch = ("p", x, y, sx, sy)
-            self.zones.pressed(sx, sy)
-            if self.zones.zone == "menu":
+            zone = self.zones.pressed(sx, sy, finger)
+            self._last_touch = (finger, "p", x, y, sx, sy)
+            if zone == "menu":
                 self._show_touch_hints()
         elif event_code == lv.EVENT.PRESSING:
-            self.zones.moving(sx, sy)
+            self.zones.moving(sx, sy, finger)
         elif event_code == lv.EVENT.RELEASED:
-            self._last_touch = ("r", self.zones.zone, x, y, sx, sy)
-            self.zones.released(sx, sy)
+            zone = self.zones.released(sx, sy, finger)
+            self._last_touch = (finger, "r", zone, x, y, sx, sy)
 
     # -- measurements -----------------------------------------------------
 

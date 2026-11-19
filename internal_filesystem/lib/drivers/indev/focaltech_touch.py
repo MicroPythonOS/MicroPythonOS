@@ -50,7 +50,7 @@ def parse_touch_points(buf, count, factors):
         if factors is not None:
             x = round(x / factors[0])
             y = round(y / factors[1])
-        points.append((None, x, y))
+        points.append((index, x, y))
     return points
 
 

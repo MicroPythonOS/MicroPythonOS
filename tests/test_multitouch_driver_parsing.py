@@ -20,7 +20,7 @@ class TestGT911Parsing(unittest.TestCase):
         buf[12] = 18
         self.assertEqual(
             parse_gt911_points(buf, 2),
-            [(None, 300, 200), (None, 20, 10)],
+            [(0, 300, 200), (1, 20, 10)],
         )
 
     def test_zero_padding_is_skipped(self):
@@ -28,7 +28,16 @@ class TestGT911Parsing(unittest.TestCase):
         buf[0] = 0x14
         buf[2] = 0x0A
         buf[4] = 18
-        self.assertEqual(parse_gt911_points(buf, 5), [(None, 20, 10)])
+        self.assertEqual(parse_gt911_points(buf, 5), [(0, 20, 10)])
+
+    def test_a_point_keeps_the_id_of_its_slot(self):
+        # Slot numbers are the only identity the panel gives, so a live point
+        # in the second slot must not become point 0 when the first one lifts.
+        buf = bytearray(5 * 8)
+        buf[8] = 0x14
+        buf[10] = 0x0A
+        buf[12] = 18
+        self.assertEqual(parse_gt911_points(buf, 5), [(1, 20, 10)])
 
 
 class FakeIndevDrv:
@@ -87,7 +96,7 @@ class TestGT911MultiTouch(unittest.TestCase):
         self.assertEqual(gt911.GT911.get_touch_count(fake), 2)
         self.assertEqual(
             gt911.GT911.get_touches(fake),
-            [(None, 100, 100), (None, 140, 120)],
+            [(0, 100, 100), (1, 140, 120)],
         )
 
     def test_sustained_two_fingers_wait_release_once(self):
@@ -116,7 +125,7 @@ class TestGT911MultiTouch(unittest.TestCase):
         fake = FakeGT911()
         fake.reports = [(0x81, [(None, 50, 60)])]
         self.assertEqual(gt911.GT911._get_coords(fake), (1, 50, 60))
-        self.assertEqual(gt911.GT911.get_touches(fake), [(None, 50, 60)])
+        self.assertEqual(gt911.GT911.get_touches(fake), [(0, 50, 60)])
 
 
 class TestFocalTechParsing(unittest.TestCase):
@@ -133,7 +142,7 @@ class TestFocalTechParsing(unittest.TestCase):
         buf[10] = 0x0A
         self.assertEqual(
             parse_focaltech_points(buf, 2, None),
-            [(None, 300, 200), (None, 20, 10)],
+            [(0, 300, 200), (1, 20, 10)],
         )
 
     def test_factors(self):
@@ -144,5 +153,5 @@ class TestFocalTechParsing(unittest.TestCase):
         buf[4] = 0x32
         self.assertEqual(
             parse_focaltech_points(buf, 1, (2.0, 2.0)),
-            [(None, 50, 25)],
+            [(0, 50, 25)],
         )

@@ -7,6 +7,7 @@ from .gesture_navigation import handle_back_swipe, handle_top_swipe
 from .appearance_manager import AppearanceManager
 from .input_manager import InputManager
 from .multitouch import MultiTouchGesture
+from .native_input import TouchMonitor
 from .topmenu import open_bar, close_bar, open_drawer, drawer_open
 
 set_back_screen_disabled = InputManager.set_back_screen_disabled
@@ -68,6 +69,7 @@ __all__ = [
     "get_foreground_app",
     "InputManager",
     "MultiTouchGesture",
+    "TouchMonitor",
     "InputActivity",
     "SettingActivity",
     "SettingsActivity",

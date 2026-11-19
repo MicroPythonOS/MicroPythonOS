@@ -15,6 +15,7 @@ import mpos.ui
 import mpos.ui.native_activity as native_activity
 from mpos import InputManager
 from mpos.ui.native_activity import NativeActivity
+from mpos.ui.native_input import TouchMonitor
 
 WIDTH = 320
 HEIGHT = 200
@@ -66,6 +67,28 @@ class _FakeSurface:
     def present(self, bands, render, flush=True):
         for band in bands:
             render(band)
+
+
+class _FakePanel:
+    """A pointer device with get_touches(): the GT911/FT6x36 shape."""
+
+    def __init__(self, touches=(), rotation=0, width=240, height=320):
+        self.touches = list(touches)
+        self.rotation = rotation
+        self.width = width
+        self.height = height
+
+    def get_touches(self):
+        return self.touches
+
+    def get_rotation(self):
+        return self.rotation
+
+    def get_width(self):
+        return self.width
+
+    def get_height(self):
+        return self.height
 
 
 class _FakeEngine:
@@ -138,6 +161,19 @@ class _Game(NativeActivity):
 
     def on_paused(self):
         self.hooks.append("paused")
+
+
+class _MultiGame(_Game):
+    """A game that asks for every finger of a multi-point panel."""
+
+    touch_fingers = True
+
+    def __init__(self):
+        super().__init__()
+        self.fingers = []
+
+    def on_touch_finger(self, finger, event_code, x, y):
+        self.fingers.append((finger, event_code, x, y))
 
 
 class TestNativeActivity(unittest.TestCase):
@@ -288,6 +324,51 @@ class TestNativeActivity(unittest.TestCase):
         self.assertEqual(self.game.get_stats()["keys"], 2)
 
     def test_pointer_events_carry_panel_coordinates(self):
+        self.game.pointer = []
+        InputManager.pointer_xy = staticmethod(lambda: (120, 40))
+        self.game._on_touch(_Event(code=lv.EVENT.PRESSED))
+        self.assertEqual(self.game.pointer, [(lv.EVENT.PRESSED, 120, 40)])
+
+    # -- multi-point panels ------------------------------------------------
+
+    def _multi_game(self, touches):
+        game = _MultiGame()
+        game._started = True
+        game.onCreate()
+        game.engine = self.engine
+        game._surface = _FakeSurface()
+        game._paused = False
+        panel = _FakePanel(list(touches))
+        game.touch = TouchMonitor(panel)
+        self.addCleanup(mpos.ui.task_handler.remove_event_cb, game._drawframe)
+        self.addCleanup(game._clear_hint)
+        return game, panel
+
+    def _step(self, game):
+        game._next_frame_ms = 0
+        game._drawframe()
+
+    def test_a_multi_point_panel_delivers_every_finger_to_the_app(self):
+        game, panel = self._multi_game([(None, 30, 100), (None, 220, 180)])
+        self._step(game)
+        self.assertEqual(
+            [(phase, x, y) for _, phase, x, y in game.fingers],
+            [(lv.EVENT.PRESSED, 30, 100), (lv.EVENT.PRESSED, 220, 180)])
+        self.assertNotEqual(game.fingers[0][0], game.fingers[1][0])
+
+        panel.touches = [(None, 30, 100), (None, 220, 180)]
+        self._step(game)
+        self.assertEqual(len(game.fingers), 2, "a still finger sent an event")
+
+    def test_a_multi_point_panel_does_not_also_send_lvgl_pointer_events(self):
+        game, _ = self._multi_game([(None, 30, 100)])
+        game.pointer = []
+        InputManager.pointer_xy = staticmethod(lambda: (30, 100))
+        game._on_touch(_Event(code=lv.EVENT.PRESSED))
+        self.assertEqual(game.pointer, [], "the finger was handled twice")
+
+    def test_a_single_point_panel_keeps_using_lvgl_events(self):
+        self.game.touch = None
         self.game.pointer = []
         InputManager.pointer_xy = staticmethod(lambda: (120, 40))
         self.game._on_touch(_Event(code=lv.EVENT.PRESSED))

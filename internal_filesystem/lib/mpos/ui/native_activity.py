@@ -42,7 +42,7 @@ import lvgl as lv
 import mpos.ui
 from mpos import Activity, InputManager
 from mpos.ui.native_display import NativeDisplay
-from mpos.ui.native_input import KeyHolds
+from mpos.ui.native_input import KeyHolds, TouchFingers, TouchMonitor
 
 # Doom's own tic rate is 35 and its frame is what limits a full redraw; a game
 # that presents whole frames wants ~30, one that presents dirty bands can go
@@ -50,6 +50,14 @@ from mpos.ui.native_input import KeyHolds
 DEFAULT_FPS = 30
 FRAME_SLACK_MS = 5
 HINT_MS = 6000
+
+# A finger's phase from TouchFingers is a plain name; an activity sees LVGL's
+# event codes, the same ones on_pointer() gets from a single-pointer panel.
+TOUCH_EVENTS = {
+    TouchFingers.PRESSED: lv.EVENT.PRESSED,
+    TouchFingers.MOVING: lv.EVENT.PRESSING,
+    TouchFingers.RELEASED: lv.EVENT.RELEASED,
+}
 
 
 class NativeActivity(Activity):
@@ -61,6 +69,12 @@ class NativeActivity(Activity):
     hint_ms = HINT_MS
     surface_width = None
     surface_height = None
+    # A panel that can report more than one point can drive two thumbs at
+    # once, but LVGL's pointer device only ever shows one of them (a second
+    # finger is reported as a release, on purpose, so a pinch cannot click).
+    # A game that wants both sets this and receives every finger through
+    # on_touch_finger() instead of on_pointer().
+    touch_fingers = False
     # Set audio_rate when the engine has a mixer: the base then opens a PCM sink
     # and pulls `engine.audio_mix(buffer)` at that rate, every frame.
     audio_rate = None
@@ -85,6 +99,7 @@ class NativeActivity(Activity):
     _sink = None
     _audio_buffer = None
     _audio_ms = 0
+    touch = None
 
     # -- lifecycle --------------------------------------------------------
 
@@ -100,6 +115,7 @@ class NativeActivity(Activity):
         self._frame_interval_ms = 1000 // self.target_fps
         self._keys_sent = 0
         self.holds = KeyHolds(self.key)
+        self.touch = TouchMonitor() if self.touch_fingers else None
         self.on_screen(self.screen)
         self.setContentView(self.screen)
 
@@ -129,6 +145,10 @@ class NativeActivity(Activity):
         # released now instead of being replayed on resume.
         if self.holds is not None:
             self.holds.release_all()
+        if self.touch is not None:
+            # A finger that is still on the panel across the pause is a new
+            # press when the game comes back, not a held one.
+            self.touch.reset()
         if self.engine is not None:
             self.engine.pause()
         self._close_audio()
@@ -212,6 +232,14 @@ class NativeActivity(Activity):
     def on_pointer(self, event_code, x, y):
         """PRESSED / PRESSING / RELEASED at a panel point."""
 
+    def on_touch_finger(self, finger, event_code, x, y):
+        """One finger of a multi-point panel, when ``touch_fingers`` is set.
+
+        ``finger`` stays the same while it is down, so an activity can keep a
+        control state per thumb. The points are the same logical panel
+        coordinates ``on_pointer()`` gets.
+        """
+
     # -- frame loop -------------------------------------------------------
 
     def _drawframe(self, arg1=None, arg2=None):
@@ -224,6 +252,7 @@ class NativeActivity(Activity):
         self._next_frame_ms = time.ticks_add(now, self._frame_interval_ms)
 
         self.holds.tick(now)
+        self._poll_touch()
         self._expire_hint(now)
         try:
             self.on_frame(now)
@@ -349,6 +378,12 @@ class NativeActivity(Activity):
         indev = lv.indev_active()
         if indev is not None and indev.get_type() != lv.INDEV_TYPE.POINTER:
             return
+        touches = self.touch
+        if touches is not None and touches.available:
+            # The frame loop reports every finger instead, including the first
+            # one: LVGL's pointer only ever shows one point of a multi-touch
+            # panel, so handling its events as well would double the presses.
+            return
         # setContentView loads the screen before onResume starts the engine, so
         # events can arrive when there is nothing to map them on to yet.
         if self._surface is None:
@@ -356,6 +391,15 @@ class NativeActivity(Activity):
         x, y = InputManager.pointer_xy()
         self._expire_hint(time.ticks_ms())
         self.on_pointer(event.get_code(), x, y)
+
+    def _poll_touch(self):
+        touches = self.touch
+        if touches is None or not touches.available:
+            return
+        if self._surface is None:
+            return
+        for finger, phase, x, y in touches.poll():
+            self.on_touch_finger(finger, TOUCH_EVENTS[phase], x, y)
 
     def to_game(self, x, y):
         """Panel point -> the engine's own frame.

@@ -4,7 +4,7 @@ import math
 import os
 import lvgl as lv
 
-from mpos import Activity, WidgetAnimator, DisplayMetrics, Intent, MultiTouchGesture, add_focus_border
+from mpos import Activity, WidgetAnimator, DisplayMetrics, Intent, TouchMonitor, add_focus_border
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,8 @@ class ImageView(Activity):
     open_button = None
 
     def onCreate(self):
-        self._gesture = MultiTouchGesture()
+        self._touch = TouchMonitor()
+        self._gesture = self._touch.gesture
         self._gesture_timer = None
         self._fit_scale = 256
         self._image_w = 0
@@ -211,9 +212,9 @@ class ImageView(Activity):
         self._pan_distance = 0
 
     def _start_gesture_polling(self):
-        if self._gesture is None or self._gesture.indev is None:
+        if self._touch is None or not self._touch.available:
             return
-        self._gesture.reset()
+        self._touch.reset()
         self._pinch_base = None
         self._pan_distance = 0
         if self._gesture_timer is None:
@@ -334,11 +335,11 @@ class ImageView(Activity):
 
     def _poll_gesture(self, timer):
         gesture = self._gesture
-        if gesture is None or gesture.indev is None:
+        if self._touch is None or not self._touch.available:
             return
         if self._image_w == 0 or self._image_h == 0:
             return
-        gesture.poll()
+        self._touch.poll()
         if gesture.fingers >= 2:
             if not gesture.active:
                 return

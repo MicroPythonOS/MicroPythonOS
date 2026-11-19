@@ -283,10 +283,23 @@ Critical gotchas:
 ### Multi-touch
 
 - Only the controllers that report more than one point can do it: `gt911` (MaTouch, Waveshare P4 4.3, D-Shell; 5 points, config `Touch Number` at 0x804C is 5 on the MaTouch) and FocalTech FT6x36 (Waveshare 3.5; 2 points). `CST816S` (fri3d 2026, Waveshare 2" and 1.54") is single-touch — no software can add a second finger.
-- Driver contract: `get_touches()` returns `[(id, x, y), ...]` for the points of the last report, already passed through `_calc_coords` (i.e. in LVGL's pre-display-rotation coordinate space); `get_touch_count()` is the same list's length. `PointerDriver._read` still gets the raw first point, so single-finger behavior is unchanged.
+- Driver contract: `get_touches()` returns `[(id, x, y), ...]` for the points of the last report, already passed through `_calc_coords` (i.e. in LVGL's pre-display-rotation coordinate space); `get_touch_count()` is the same list's length. `PointerDriver._read` still gets the raw first point, so single-finger behavior is unchanged. **The id is the driver's slot number** (GT911 record index, FT6x36 record index), which stays with a finger until it lifts; it is not a hardware id, so do not renumber the records after dropping empty slots — a point must keep the id of the slot it was read from.
 - **GT911 record layout on the MaTouch is X-first, not id-first:** `[xlo, xhi, ylo, yhi, size_lo, size_hi, ...]`. The pre-multitouch single-point code read bytes 0-1 as X, and that is correct; parsing the datasheet's id-first layout gives ids 10/14 and coordinates in the tens of thousands. The status nibble can also say 5 while only two slots are live, with the rest zeroed — filter records whose x/y/size are all zero, don't trust the count.
 - **Keep the two-finger suppression.** On the first report with 2+ points the driver calls `indev.wait_release()` and returns `RELEASED` until all fingers lift. Without it, the first finger clicks the widget under it when the pinch ends, and a pinch starting near the edge triggers the back-swipe overlay (`gesture_navigation` handles `PRESS_LOST` to hide its ghost button).
-- `mpos.ui.multitouch.MultiTouchGesture(indev=None)` polls that driver and reports `scale` (cumulative since the pair became active), `rotation` (radians, normalized), `center` (logical), `delta_x/delta_y`, `fingers`, `active`, `just_started/just_ended`. It applies LVGL's display rotation itself (`display_to_logical`), keeps the pair in matching order by nearest previous point (the GT911 path reports no ids) or by id when a driver provides them, and starts only after the fingers are `_MIN_PAIR_DISTANCE` apart.
+- `mpos.ui.multitouch.MultiTouchGesture(indev=None)` polls that driver and reports `scale` (cumulative since the pair became active), `rotation` (radians, normalized), `center` (logical), `delta_x/delta_y`, `fingers`, `active`, `just_started/just_ended`. It applies LVGL's display rotation itself (`display_to_logical`), keeps the pair in matching order by id when the driver reports one (GT911/FT6x36 slot numbers) or by nearest previous point when it does not, and starts only after the fingers are `_MIN_PAIR_DISTANCE` apart.
+- **A game that needs two thumbs polls the driver, it does not wait for LVGL.** The
+  pointer device is single-point by design and reports the panel as released while
+  2+ fingers are down, so `NativeActivity.touch_fingers = True` polls a
+  `mpos.TouchMonitor` in the frame loop and delivers every finger to
+  `on_touch_finger(finger, event_code, x, y)`; `on_pointer()` is not called on such a
+  panel (no double handling). `TouchMonitor` reads the driver once per tick and feeds
+  both the per-finger events and `MultiTouchGesture`; `ThumbZones` keeps one state per
+  finger and one owner per zone (a second finger in the same band is ignored, so the
+  first to lift cannot release the other's key). On the MaTouch, LVGL's indev timer
+  reads the GT911 29.6 times a second (34 ms gaps, 37 ms worst), `_get_coords()` costs
+  at most 2.3 ms (0.5 ms status + 1.7 ms for five records), and a press reaches the
+  frame loop in ~40-80 ms; `tests/test_native_input.py` covers the identity and
+  ownership rules with a fake panel.
 - Image zoom/rotate model: `set_inner_align(lv.image.ALIGN.CENTER)` + `set_size(viewport)` makes the decoded image centered inside a clipping viewport; `set_scale`/`set_rotation` transform around the decoded image's center pivot (default 50/50) and `set_offset_x/y` pan it. Anchor the content point under the gesture midpoint with `offset = M - base - pivot - R(θ)·(q - pivot)·scale` (see `imageview.py`); `lv.IMAGE_ALIGN` does not exist, the enum is `lv.image.ALIGN`.
 
 ### MicroPython @native / @viper

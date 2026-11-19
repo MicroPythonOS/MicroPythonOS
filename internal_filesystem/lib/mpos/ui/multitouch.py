@@ -15,6 +15,47 @@ def display_to_logical(rotation, width, height, x, y):
     return (x, y)
 
 
+def find_touch_indev():
+    """The pointer device that can report every finger, or None.
+
+    Only the drivers that implement ``get_touches()`` know more than one
+    point; a single-touch controller (CST816S) and the SDL mouse do not.
+    """
+    from mpos.ui.input_manager import InputManager
+
+    for indev in InputManager.list_indevs():
+        if hasattr(indev, "get_touches"):
+            return indev
+    return None
+
+
+def read_touches(indev):
+    """Every finger the driver reports, as ``(id, x, y)`` in logical points.
+
+    The drivers already applied the touch calibration and their own startup
+    rotation; the display rotation is applied here, which is what puts the
+    points in the same space as LVGL's own pointer events.
+    """
+    if indev is None:
+        return []
+    rotation = indev.get_rotation()
+    width = indev.get_width()
+    height = indev.get_height()
+    points = []
+    for touch in indev.get_touches():
+        if len(touch) >= 3:
+            point_id = touch[0]
+            x = touch[1]
+            y = touch[2]
+        else:
+            point_id = None
+            x = touch[0]
+            y = touch[1]
+        logical_x, logical_y = display_to_logical(rotation, width, height, x, y)
+        points.append((point_id, logical_x, logical_y))
+    return points
+
+
 class MultiTouchGesture:
     """Tracks pinch, rotation and pan from a pointer indev with get_touches()."""
 
@@ -37,12 +78,7 @@ class MultiTouchGesture:
 
     @staticmethod
     def find_indev():
-        from mpos.ui.input_manager import InputManager
-
-        for indev in InputManager.list_indevs():
-            if hasattr(indev, "get_touches"):
-                return indev
-        return None
+        return find_touch_indev()
 
     def reset(self):
         self.fingers = 0
@@ -60,7 +96,7 @@ class MultiTouchGesture:
         self._start_angle = 0.0
         self._pair_ids = None
 
-    def poll(self):
+    def poll(self, points=None):
         self.just_started = False
         self.just_ended = False
         self.delta_x = 0
@@ -69,24 +105,9 @@ class MultiTouchGesture:
         if self.indev is None:
             return self
 
-        rotation = self.indev.get_rotation()
-        width = self.indev.get_width()
-        height = self.indev.get_height()
-
-        points = []
-        for touch in self.indev.get_touches():
-            if len(touch) >= 3:
-                point_id = touch[0]
-                x = touch[1]
-                y = touch[2]
-            else:
-                point_id = None
-                x = touch[0]
-                y = touch[1]
-            logical_x, logical_y = display_to_logical(
-                rotation, width, height, x, y
-            )
-            points.append((point_id, logical_x, logical_y))
+        points = (read_touches(self.indev)
+                  if points is None else points)
+        points = [(point_id, x, y) for point_id, x, y in points]
 
         previous_fingers = self.fingers
         previous_points = self.points

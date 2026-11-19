@@ -9,16 +9,29 @@ needs two different rules for the same key, which is what ``KeyHolds`` encodes.
 ``ThumbZones`` is the handheld layout: a joystick anchored under the left thumb
 and action bands under the right. The zones are in the *game's* frame, not the
 panel's, so they still work when the engine rotated the picture for a portrait
-panel - see ``NativeActivity.to_game()``.
+panel - see ``NativeActivity.to_game()``. Every finger keeps its own state, so a
+left thumb can hold a direction while the right thumb fires.
+
+``TouchFingers`` is what makes that possible on a panel that reports more than
+one point: LVGL's pointer device only ever shows one of them, so a game that
+wants both thumbs reads the driver's own points instead.
 """
 
 import time
+
+from .multitouch import (
+    MultiTouchGesture, find_touch_indev, read_touches)
 
 # A keypad press is released after this long unless the input repeats it.
 HOLD_MS = 180
 # A pointer that lands on the joystick and lifts within this window has not
 # dragged anywhere; a caller can use that as a tap.
 TAP_MS = 450
+# How far a finger may move between two polls and still be the same finger.
+# The GT911 and FT6x36 drivers report their slot number, so this only applies
+# to a driver that reports no point number at all; a poll is one frame
+# (28-33 ms) and a thumb covers a few tens of pixels in that time.
+MATCH_DISTANCE = 60
 
 
 class KeyHolds:
@@ -74,6 +87,145 @@ class KeyHolds:
                 del self._held[code]
 
 
+class TouchFingers:
+    """Every finger a multi-point panel reports, as press/move/release events.
+
+    LVGL's pointer device is single-point on purpose: when a second finger
+    lands, the driver reports the whole panel as released so that a pinch
+    cannot click the widget under it. That is the right rule for the UI, but it
+    means a game cannot wait for LVGL events if it wants two thumbs at once.
+    This reads the driver's own points instead.
+
+    ``poll()`` returns ``[(finger, phase, x, y), ...]`` where the phase is
+    ``PRESSED``, ``MOVING`` or ``RELEASED`` and the point is in logical panel
+    coordinates. A finger number stays the same for as long as the finger is
+    down, which is what lets a caller keep one control state per thumb.
+    """
+
+    PRESSED = "pressed"
+    MOVING = "moving"
+    RELEASED = "released"
+
+    def __init__(self, indev=None, match_distance=MATCH_DISTANCE):
+        self.indev = indev if indev is not None else find_touch_indev()
+        self.match_distance = match_distance
+        self._down = {}
+        self._next_finger = 0
+
+    @property
+    def available(self):
+        """True when the panel can report more than one point."""
+        return self.indev is not None
+
+    def reset(self):
+        """Forget the fingers that were down; the next poll starts clean."""
+        self._down = {}
+        self._next_finger = 0
+
+    def poll(self, points=None):
+        if self.indev is None:
+            return []
+        if points is None:
+            points = read_touches(self.indev)
+
+        events = []
+        free = dict(self._down)
+        down = {}
+        for point_id, x, y in points:
+            if point_id is not None:
+                finger = point_id
+                previous = self._down.get(finger)
+                free.pop(finger, None)
+            else:
+                finger = self._nearest(free, x, y)
+                previous = None
+                if finger is not None:
+                    previous = free.pop(finger)
+            if finger is None:
+                # A number that is neither down nor being released in this
+                # poll, so the press and its release never collide.
+                finger = self._allocate(down, free)
+            if previous is None:
+                events.append((finger, self.PRESSED, x, y))
+            elif (x, y) != previous:
+                events.append((finger, self.MOVING, x, y))
+            down[finger] = (x, y)
+
+        for finger, (x, y) in free.items():
+            events.append((finger, self.RELEASED, x, y))
+
+        self._down = down
+        return events
+
+    def _nearest(self, free, x, y):
+        """The finger already down closest to a point, if it is still the same one."""
+        limit = self.match_distance * self.match_distance
+        best = None
+        best_distance = limit
+        for finger, (old_x, old_y) in free.items():
+            distance = (x - old_x) * (x - old_x) + (y - old_y) * (y - old_y)
+            if distance <= best_distance:
+                best = finger
+                best_distance = distance
+        return best
+
+    def _allocate(self, down, free):
+        finger = self._next_finger
+        while finger in down or finger in free:
+            finger += 1
+        self._next_finger = finger + 1
+        return finger
+
+
+class TouchMonitor:
+    """One activity's view of a multi-point panel: fingers and gesture.
+
+    Both views come from the same poll, so an app that wants a pinch zoom *and*
+    two thumbs does not run two pollers over one device at different rates. An
+    activity with a frame loop polls this there (``NativeActivity`` does); one
+    without drives it from a timer (Image View does).
+    """
+
+    def __init__(self, indev=None):
+        self.fingers = TouchFingers(indev)
+        self.gesture = MultiTouchGesture(self.fingers.indev)
+        self.events = []
+
+    @property
+    def indev(self):
+        return self.fingers.indev
+
+    @property
+    def available(self):
+        return self.fingers.available
+
+    def poll(self):
+        """Read the panel once; returns the finger events of this poll."""
+        if self.fingers.indev is None:
+            return []
+        points = read_touches(self.fingers.indev)
+        self.events = self.fingers.poll(points)
+        self.gesture.poll(points)
+        return self.events
+
+    def reset(self):
+        self.fingers.reset()
+        self.gesture.reset()
+        self.events = []
+
+
+class _FingerState:
+    """Where one finger is and which direction keys it holds."""
+
+    __slots__ = ("zone", "anchor", "horizontal", "vertical")
+
+    def __init__(self):
+        self.zone = None
+        self.anchor = None
+        self.horizontal = 0
+        self.vertical = 0
+
+
 class ThumbZones:
     """A joystick under the left thumb and three action bands under the right.
 
@@ -81,6 +233,10 @@ class ThumbZones:
     left half is the joystick, anchored where the thumb lands, and the right
     half is split into menu / use / fire bands. Coordinates go through
     ``NativeActivity.to_game()`` first.
+
+    Each finger keeps its own state, so the two thumbs are independent: the
+    left one can hold a direction while the right one holds fire. Only one
+    finger can own the joystick (two would fight over the same two keys).
 
     ``keys`` is a dict with ``left``, ``right``, ``up``, ``down``, ``menu``,
     ``use`` and ``fire`` engine key codes.
@@ -100,66 +256,112 @@ class ThumbZones:
         self.menu_bottom = menu_bottom
         self.use_bottom = use_bottom
         self.deadzone = deadzone
-        self.zone = None
-        self.stick = None
-        self._stick_h = 0
-        self._stick_v = 0
+        self._fingers = {}
+        self._band_fingers = {}
 
-    def pressed(self, sx, sy):
-        """The pointer went down at a point in the game's frame."""
+    def zone(self, finger=0):
+        """The zone ``finger`` is in, or None."""
+        state = self._fingers.get(finger)
+        return state.zone if state is not None else None
+
+    def pressed(self, sx, sy, finger=0):
+        """A finger went down at a point in the game's frame.
+
+        Returns the zone it landed in, or None when it is ignored (a second
+        finger on a zone that already has an owner).
+        """
         hold = self.hold
+        state = self._fingers.get(finger)
+        if state is None:
+            state = self._fingers[finger] = _FingerState()
         if sx < self.stick_width:
+            if not self._claim("stick", finger):
+                state.zone = None
+                return None
             # Anchored, not a fixed pad: any touch on the left half starts a
             # turn, so the thumb does not have to hit a target.
-            self.zone = "stick"
-            self.stick = (sx, sy)
-            self._apply(0, 0)
+            state.zone = "stick"
+            state.anchor = (sx, sy)
         elif sy < self.menu_bottom:
-            self.zone = "menu"
+            if not self._claim("menu", finger):
+                state.zone = None
+                return None
+            state.zone = "menu"
             hold.tap(self.keys["menu"])
         elif sy < self.use_bottom:
-            self.zone = "use"
+            if not self._claim("use", finger):
+                state.zone = None
+                return None
+            state.zone = "use"
             hold.press(self.keys["use"])
         else:
-            self.zone = "fire"
+            if not self._claim("fire", finger):
+                state.zone = None
+                return None
+            state.zone = "fire"
             hold.press(self.keys["fire"])
+        return state.zone
 
-    def moving(self, sx, sy):
-        """The pointer moved while down."""
-        if self.zone != "stick" or self.stick is None:
+    def moving(self, sx, sy, finger=0):
+        """A finger moved while down."""
+        state = self._fingers.get(finger)
+        if state is None or state.zone != "stick" or state.anchor is None:
             return
         horizontal = 0
-        if sx < self.stick[0] - self.deadzone:
+        if sx < state.anchor[0] - self.deadzone:
             horizontal = self.keys["left"]
-        elif sx > self.stick[0] + self.deadzone:
+        elif sx > state.anchor[0] + self.deadzone:
             horizontal = self.keys["right"]
         vertical = 0
-        if sy < self.stick[1] - self.deadzone:
+        if sy < state.anchor[1] - self.deadzone:
             vertical = self.keys["up"]
-        elif sy > self.stick[1] + self.deadzone:
+        elif sy > state.anchor[1] + self.deadzone:
             vertical = self.keys["down"]
-        self._apply(horizontal, vertical)
+        self._apply(state, horizontal, vertical)
 
-    def released(self, sx, sy):
-        """The pointer lifted; returns how long it was down (ms) or None."""
-        hold = self.hold
-        if self.zone == "stick":
-            self._apply(0, 0)
-            self.stick = None
-        elif self.zone == "use":
-            hold.release(self.keys["use"])
-        elif self.zone == "fire":
-            hold.release(self.keys["fire"])
-        self.zone = None
+    def released(self, sx, sy, finger=0):
+        """A finger lifted; returns the zone it was in, or None."""
+        state = self._fingers.pop(finger, None)
+        if state is None:
+            return None
+        if state.zone is not None and self._band_fingers.get(state.zone) == finger:
+            del self._band_fingers[state.zone]
+        if state.zone == "stick":
+            self._apply(state, 0, 0)
+        elif state.zone == "use":
+            self.hold.release(self.keys["use"])
+        elif state.zone == "fire":
+            self.hold.release(self.keys["fire"])
+        return state.zone
 
-    def _apply(self, horizontal, vertical):
+    def reset(self):
+        """Let go of every zone and forget the fingers that owned them."""
+        for finger in list(self._fingers):
+            self.released(None, None, finger)
+        self._fingers = {}
+        self._band_fingers = {}
+
+    def _claim(self, zone, finger):
+        """Give a zone to the first finger that landed in it.
+
+        Two fingers in one band would otherwise share a key: the first one to
+        lift would release it for both. The joystick has the same rule, and it
+        is also what stops a second finger from turning the same stick.
+        """
+        owner = self._band_fingers.get(zone)
+        if owner is not None and owner != finger:
+            return False
+        self._band_fingers[zone] = finger
+        return True
+
+    def _apply(self, state, horizontal, vertical):
         hold = self.hold
-        for code in (self._stick_h, self._stick_v):
+        for code in (state.horizontal, state.vertical):
             if code and code != horizontal and code != vertical:
                 hold.release(code)
-        if horizontal and horizontal != self._stick_h:
+        if horizontal and horizontal != state.horizontal:
             hold.press(horizontal)
-        if vertical and vertical != self._stick_v:
+        if vertical and vertical != state.vertical:
             hold.press(vertical)
-        self._stick_h = horizontal
-        self._stick_v = vertical
+        state.horizontal = horizontal
+        state.vertical = vertical

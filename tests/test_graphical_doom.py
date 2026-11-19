@@ -711,6 +711,10 @@ class TestDoomActivity(unittest.TestCase):
 
     # -- touch ------------------------------------------------------------
 
+    def test_the_game_asks_for_every_finger_the_panel_reports(self):
+        # A multi-point panel would otherwise hand Doom one finger at a time.
+        self.assertTrue(doom.Doom.touch_fingers)
+
     def _touch(self, code, x, y):
         InputManager.pointer_xy = staticmethod(lambda: (x, y))
         self.activity.on_pointer(code, x, y)
@@ -758,6 +762,28 @@ class TestDoomActivity(unittest.TestCase):
         self.assertEqual(self.engine.keys[-1], (doom.KEY_FIRE, False))
         self.assertEqual(self.activity.holds.held(), {})
 
+    def test_two_thumbs_walk_and_fire_at_once(self):
+        # The left thumb owns the joystick, the right one the fire band: both
+        # keys are held, and lifting one does not let go of the other.
+        self.activity.on_touch_finger(
+            0, lv.EVENT.PRESSED, *self._panel(80, 100))
+        self.activity.on_touch_finger(
+            1, lv.EVENT.PRESSED, *self._panel(240, 180))
+
+        self.activity.on_touch_finger(
+            0, lv.EVENT.PRESSING, *self._panel(40, 100))
+        self.assertTrue(self.activity.holds.is_held(doom.KEY_LEFT))
+        self.assertTrue(self.activity.holds.is_held(doom.KEY_FIRE))
+
+        self.activity.on_touch_finger(
+            0, lv.EVENT.RELEASED, *self._panel(40, 100))
+        self.assertFalse(self.activity.holds.is_held(doom.KEY_LEFT))
+        self.assertTrue(self.activity.holds.is_held(doom.KEY_FIRE))
+
+        self.activity.on_touch_finger(
+            1, lv.EVENT.RELEASED, *self._panel(240, 180))
+        self.assertEqual(self.activity.holds.held(), {})
+
     def test_the_use_band_holds_use(self):
         self._touch_game(lv.EVENT.PRESSED, 240, 90)
         self.assertEqual(self.engine.keys, [(doom.KEY_USE, True)])
@@ -774,12 +800,12 @@ class TestDoomActivity(unittest.TestCase):
         # must land in a button band, not on the joystick.
         x = self.activity._surface._image_x + 100
         self._touch(lv.EVENT.PRESSED, x, SURFACE_HEIGHT - 10)
-        self.assertEqual(self.activity.zones.zone, "use")
+        self.assertEqual(self.activity.zones.zone(), "use")
 
     def test_a_thumb_at_the_panel_top_is_the_joystick(self):
         x = self.activity._surface._image_x + 100
         self._touch(lv.EVENT.PRESSED, x, 10)
-        self.assertEqual(self.activity.zones.zone, "stick")
+        self.assertEqual(self.activity.zones.zone(), "stick")
         self.assertEqual(self.engine.keys, [])
 
     # -- lifecycle --------------------------------------------------------

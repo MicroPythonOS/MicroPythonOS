@@ -19,6 +19,15 @@ Frameworks:
 
 Builtin Apps:
 - OSUpdate: an update check tries the remaining mirror when the first one is unreachable. A single failed request used to abort the whole check, so a device that picked a down mirror never saw the available update.
+- Native games can drive two thumbs at once: `NativeActivity.touch_fingers` polls a
+  multi-point panel and delivers every finger to `on_touch_finger()`, because LVGL's
+  pointer device is single-point by design (a second finger is reported as a release
+  so a pinch cannot click). `mpos.TouchMonitor` feeds that and the pinch/rotation
+  gesture from one read of the driver, and `ThumbZones` keeps one control state per
+  finger, so walking and firing at the same time works and lifting one thumb does not
+  release the other's key.
+- The GT911 and FT6x36 drivers keep each point's slot number as its identity instead
+  of throwing it away, so a finger no longer has to be matched by position.
 
 Testing:
 - connectivity tests: the machine/socket/thread/WifiService mocks are installed per

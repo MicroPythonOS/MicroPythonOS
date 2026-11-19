@@ -58,6 +58,7 @@ from .ui.testing import (
 from .ui.display_metrics import DisplayMetrics
 from .ui.input_manager import InputManager
 from .ui.multitouch import MultiTouchGesture
+from .ui.native_input import TouchMonitor
 from .ui.appearance_manager import AppearanceManager
 from .ui.event import get_event_name, print_event
 from .ui.view import setContentView, back_screen
@@ -106,6 +107,7 @@ __all__ = (
     "DisplayMetrics",
     "InputManager",
     "MultiTouchGesture",
+    "TouchMonitor",
     "AppearanceManager",
     "SensorManager",
     "USBManager",
