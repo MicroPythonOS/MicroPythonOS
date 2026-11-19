@@ -37,6 +37,22 @@ _PANEL_ID_REG = const(0xA8)
 
 _G_MODE = const(0xA4)
 
+_MAX_TOUCH_POINTS = const(2)
+_TOUCH_POINT_SIZE = const(6)
+
+
+def parse_touch_points(buf, count, factors):
+    points = []
+    for index in range(count):
+        offset = 1 + index * _TOUCH_POINT_SIZE
+        x = ((buf[offset] & 0x0F) << 8) | buf[offset + 1]
+        y = ((buf[offset + 2] & 0x0F) << 8) | buf[offset + 3]
+        if factors is not None:
+            x = round(x / factors[0])
+            y = round(y / factors[1])
+        points.append((None, x, y))
+    return points
+
 
 class FocalTechTouch(pointer_framework.PointerDriver):
 
@@ -51,11 +67,13 @@ class FocalTechTouch(pointer_framework.PointerDriver):
     ):  # NOQA
         self._tx_buf = bytearray(5)
         self._tx_mv = memoryview(self._tx_buf)
-        self._rx_buf = bytearray(5)
+        self._rx_buf = bytearray(1 + _MAX_TOUCH_POINTS * _TOUCH_POINT_SIZE)
         self._rx_mv = memoryview(self._rx_buf)
 
         self._device = device
         self._factors = factors
+        self._touch_points = []
+        self._multi_touch_active = False
 
         self._read_reg(_PANEL_ID_REG)
         print("Touch Device ID: 0x%02x" % self._rx_buf[0])
@@ -93,24 +111,46 @@ class FocalTechTouch(pointer_framework.PointerDriver):
     def _get_coords(self):
         self._tx_buf[0] = _TD_STAT_REG
         try:
-            self._device.write_readinto(self._tx_mv, self._rx_mv)
+            self._device.write_readinto(self._tx_mv[:1], self._rx_mv)
         except OSError:
             return None
 
-        buf = self._rx_buf
+        touch_pnt_cnt = self._rx_buf[0] & 0x0F
+        if touch_pnt_cnt > _MAX_TOUCH_POINTS:
+            touch_pnt_cnt = _MAX_TOUCH_POINTS
 
-        touch_pnt_cnt = buf[0]
-        if touch_pnt_cnt != 1:
+        if touch_pnt_cnt:
+            self._touch_points = parse_touch_points(
+                self._rx_buf, touch_pnt_cnt, self._factors
+            )
+        else:
+            self._touch_points = []
+
+        if len(self._touch_points) >= 2:
+            if not self._multi_touch_active:
+                self._multi_touch_active = True
+                self._indev_drv.wait_release()
             return None
 
-        x = ((buf[1] & _MSB_MASK) << 8) | buf[2]
-        y = ((buf[3] & _MSB_MASK) << 8) | buf[4]
+        if self._multi_touch_active:
+            if not self._touch_points:
+                self._multi_touch_active = False
+            return None
 
-        if self._factors is not None:
-            x = round(x / self._factors[0])
-            y = round(y / self._factors[1])
+        if not self._touch_points:
+            return None
 
-        return self.PRESSED, x, y
+        return self.PRESSED, self._touch_points[0][1], self._touch_points[0][2]
+
+    def get_touches(self):
+        touches = []
+        for point_id, x, y in self._touch_points:
+            logical_x, logical_y = self._calc_coords(x, y)
+            touches.append((point_id, logical_x, logical_y))
+        return touches
+
+    def get_touch_count(self):
+        return len(self._touch_points)
 
     def _read_reg(self, reg):
         self._tx_buf[0] = reg

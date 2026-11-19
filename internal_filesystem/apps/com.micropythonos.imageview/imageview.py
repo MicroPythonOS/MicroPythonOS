@@ -1,13 +1,18 @@
 import logging
 import gc
+import math
 import os
 import lvgl as lv
 
-from mpos import Activity, WidgetAnimator, DisplayMetrics, Intent, add_focus_border
+from mpos import Activity, WidgetAnimator, DisplayMetrics, Intent, MultiTouchGesture, add_focus_border
 
 logger = logging.getLogger(__name__)
 
 class ImageView(Activity):
+
+    MAX_ZOOM = 4.0
+    GESTURE_POLL_MS = 30
+    PAN_THRESHOLD = 12
 
     imagedir = "data/images"
     images = []
@@ -20,11 +25,29 @@ class ImageView(Activity):
     open_button = None
 
     def onCreate(self):
+        self._gesture = MultiTouchGesture()
+        self._gesture_timer = None
+        self._fit_scale = 256
+        self._image_w = 0
+        self._image_h = 0
+        self._zoom = 1.0
+        self._rotation = 0
+        self._offset_x = 0
+        self._offset_y = 0
+        self._applied_scale = None
+        self._applied_rotation = None
+        self._applied_offset_x = None
+        self._applied_offset_y = None
+        self._pinch_base = None
+        self._pan_distance = 0
+
         screen = lv.obj()
         screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
         self.image = lv.image(screen)
         self.image.center()
         self.image.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.image.set_inner_align(lv.image.ALIGN.CENTER)
+        self.image.add_event_cb(self._on_image_pressed,lv.EVENT.PRESSED,None)
         self.image.add_event_cb(lambda e: self.toggle_fullscreen(),lv.EVENT.CLICKED,None)
         add_focus_border(self.image, 2)
         self.label = lv.label(screen)
@@ -70,6 +93,7 @@ class ImageView(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
+        self._start_gesture_polling()
         self.images.clear()
 
         # If we were launched via "Open With", start at that file but still
@@ -97,6 +121,9 @@ class ImageView(Activity):
             # Begin with one image:
             self.show_next_image()
             self.stop_fullscreen()
+
+    def onPause(self, screen):
+        self._stop_gesture_polling()
 
     def no_image_mode(self):
         self.label.set_text(f"No images found in {self.imagedir}...")
@@ -172,10 +199,159 @@ class ImageView(Activity):
         self.show_image(name)
 
     def toggle_fullscreen(self, event=None):
+        if self._pan_distance > self.PAN_THRESHOLD:
+            self._pan_distance = 0
+            return
         if self.fullscreen:
             self.stop_fullscreen()
         else:
             self.start_fullscreen()
+
+    def _on_image_pressed(self, event=None):
+        self._pan_distance = 0
+
+    def _start_gesture_polling(self):
+        if self._gesture is None or self._gesture.indev is None:
+            return
+        self._gesture.reset()
+        self._pinch_base = None
+        self._pan_distance = 0
+        if self._gesture_timer is None:
+            self._gesture_timer = lv.timer_create(self._poll_gesture, self.GESTURE_POLL_MS, None)
+            self._gesture_timer.set_repeat_count(-1)
+
+    def _stop_gesture_polling(self):
+        if self._gesture_timer is not None:
+            self._gesture_timer.delete()
+            self._gesture_timer = None
+
+    def _image_geometry(self):
+        width = self.image.get_width()
+        height = self.image.get_height()
+        base_x = self.image.get_x() + (width - self._image_w) / 2.0
+        base_y = self.image.get_y() + (height - self._image_h) / 2.0
+        return base_x, base_y, self._image_w / 2.0, self._image_h / 2.0
+
+    def _begin_pinch(self):
+        gesture = self._gesture
+        base_x, base_y, pivot_x, pivot_y = self._image_geometry()
+        scale = self._fit_scale * self._zoom
+        angle = math.radians(self._rotation / 10.0)
+        cos = math.cos(-angle)
+        sin = math.sin(-angle)
+        dx = gesture.center[0] - base_x - self._offset_x - pivot_x
+        dy = gesture.center[1] - base_y - self._offset_y - pivot_y
+        self._pinch_base = (
+            self._zoom,
+            self._rotation,
+            (dx * cos - dy * sin) * 256.0 / scale,
+            (dx * sin + dy * cos) * 256.0 / scale,
+        )
+
+    def _update_pinch(self):
+        gesture = self._gesture
+        if self._pinch_base is None:
+            return
+        base_zoom, base_rotation, vector_x, vector_y = self._pinch_base
+
+        zoom = base_zoom * gesture.scale
+        if zoom < 1.0:
+            zoom = 1.0
+        elif zoom > self.MAX_ZOOM:
+            zoom = self.MAX_ZOOM
+
+        rotation = base_rotation + round(math.degrees(gesture.rotation) * 10)
+        while rotation > 1800:
+            rotation -= 3600
+        while rotation < -1800:
+            rotation += 3600
+
+        angle = math.radians(rotation / 10.0)
+        cos = math.cos(angle)
+        sin = math.sin(angle)
+        scale = self._fit_scale * zoom / 256.0
+        base_x, base_y, pivot_x, pivot_y = self._image_geometry()
+
+        self._zoom = zoom
+        self._rotation = rotation
+        self._offset_x = gesture.center[0] - base_x - pivot_x - (vector_x * cos - vector_y * sin) * scale
+        self._offset_y = gesture.center[1] - base_y - pivot_y - (vector_x * sin + vector_y * cos) * scale
+        self._clamp_offsets()
+        self._apply_view()
+
+    def _pan_by(self, dx, dy):
+        self._offset_x += dx
+        self._offset_y += dy
+        self._clamp_offsets()
+        self._apply_view()
+
+    def _clamp_offsets(self):
+        if self._image_w == 0 or self._image_h == 0:
+            self._offset_x = 0
+            self._offset_y = 0
+            return
+        scale = self._fit_scale * self._zoom / 256.0
+        angle = math.radians(self._rotation / 10.0)
+        cos = abs(math.cos(angle))
+        sin = abs(math.sin(angle))
+        half_width = (cos * self._image_w + sin * self._image_h) * scale / 2.0
+        half_height = (sin * self._image_w + cos * self._image_h) * scale / 2.0
+        max_x = half_width - self.image.get_width() / 2.0
+        max_y = half_height - self.image.get_height() / 2.0
+        if max_x < 0:
+            max_x = 0
+        if max_y < 0:
+            max_y = 0
+        if self._offset_x > max_x:
+            self._offset_x = max_x
+        elif self._offset_x < -max_x:
+            self._offset_x = -max_x
+        if self._offset_y > max_y:
+            self._offset_y = max_y
+        elif self._offset_y < -max_y:
+            self._offset_y = -max_y
+
+    def _apply_view(self):
+        if self._image_w == 0 or self._image_h == 0:
+            return
+        scale = round(self._fit_scale * self._zoom)
+        if scale < 1:
+            scale = 1
+        if scale != self._applied_scale:
+            self.image.set_scale(scale)
+            self._applied_scale = scale
+        if self._rotation != self._applied_rotation:
+            self.image.set_rotation(self._rotation)
+            self._applied_rotation = self._rotation
+        offset_x = round(self._offset_x)
+        offset_y = round(self._offset_y)
+        if offset_x != self._applied_offset_x:
+            self.image.set_offset_x(offset_x)
+            self._applied_offset_x = offset_x
+        if offset_y != self._applied_offset_y:
+            self.image.set_offset_y(offset_y)
+            self._applied_offset_y = offset_y
+
+    def _poll_gesture(self, timer):
+        gesture = self._gesture
+        if gesture is None or gesture.indev is None:
+            return
+        if self._image_w == 0 or self._image_h == 0:
+            return
+        gesture.poll()
+        if gesture.fingers >= 2:
+            if not gesture.active:
+                return
+            if gesture.just_started:
+                self._begin_pinch()
+            else:
+                self._update_pinch()
+            return
+        self._pinch_base = None
+        if gesture.fingers == 1 and (gesture.delta_x or gesture.delta_y):
+            self._pan_distance += abs(gesture.delta_x) + abs(gesture.delta_y)
+            if self._zoom > 1.0 or self._rotation != 0:
+                self._pan_by(gesture.delta_x, gesture.delta_y)
 
     def stop_fullscreen(self):
         self.fullscreen = False
@@ -295,19 +471,34 @@ class ImageView(Activity):
         lvgl_w = DisplayMetrics.pct_of_width(pct)
         lvgl_h = DisplayMetrics.pct_of_height(pct)
         print(f"scaling to size: {lvgl_w}x{lvgl_h}")
-        header = lv.image_header_t()
-        self.image.decoder_get_info(self.image.get_src(), header)
-        image_w = header.w
-        image_h = header.h
+        image_w = 0
+        image_h = 0
+        if self.image.get_src() is not None:
+            header = lv.image_header_t()
+            self.image.decoder_get_info(self.image.get_src(), header)
+            image_w = header.w
+            image_h = header.h
         if image_w == 0 or image_h == 0:
             print("WARNING: original image has width or height 0, returning!")
+            self._image_w = 0
+            self._image_h = 0
             return
-        print(f"the real image has size: {header.w}x{header.h}")
-        scale_factor_w = round(lvgl_w * 256 / image_w)
-        scale_factor_h = round(lvgl_h * 256 / image_h)
-        print(f"scale_factors: {scale_factor_w},{scale_factor_h}")
+        print(f"the real image has size: {image_w}x{image_h}")
+        self._image_w = image_w
+        self._image_h = image_h
         self.image.set_size(lvgl_w, lvgl_h)
-        self.image.set_scale(min(scale_factor_w,scale_factor_h))
+        self.image.set_inner_align(lv.image.ALIGN.CENTER)
+        self._fit_scale = min(lvgl_w * 256 // image_w, lvgl_h * 256 // image_h)
+        self._zoom = 1.0
+        self._rotation = 0
+        self._offset_x = 0
+        self._offset_y = 0
+        self._applied_scale = None
+        self._applied_rotation = None
+        self._applied_offset_x = None
+        self._applied_offset_y = None
+        self._pinch_base = None
+        self._apply_view()
         print(f"after set_scale, the LVGL image has size: {self.image.get_width()}x{self.image.get_height()}")
 
     def clear_image(self):

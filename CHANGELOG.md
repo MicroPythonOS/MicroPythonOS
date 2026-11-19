@@ -2,6 +2,7 @@ Future release (next version)
 =====
 
 Frameworks:
+- Multi-touch: the GT911 and FocalTech drivers read every touch point (`get_touches()`) instead of only the first, and `mpos.ui.multitouch.MultiTouchGesture` reports pinch scale, rotation and pan from two fingers. A second finger is gesture-only: the driver sends the contact to LVGL as released until every finger lifts, so a pinch cannot click the widget under it or trigger the back-swipe.
 - AudioManager: `get()` rebuilds a singleton whose initialisation never finished. A
   constructor call that raised (a wrong keyword argument, a preferences read failing
   at boot) used to leave a half-built instance behind, and every later audio call

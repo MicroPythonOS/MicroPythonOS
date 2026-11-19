@@ -6,6 +6,7 @@ from .view import (
 from .gesture_navigation import handle_back_swipe, handle_top_swipe
 from .appearance_manager import AppearanceManager
 from .input_manager import InputManager
+from .multitouch import MultiTouchGesture
 from .topmenu import open_bar, close_bar, open_drawer, drawer_open
 
 set_back_screen_disabled = InputManager.set_back_screen_disabled
@@ -66,6 +67,7 @@ __all__ = [
     "get_event_name", "print_event",
     "get_foreground_app",
     "InputManager",
+    "MultiTouchGesture",
     "InputActivity",
     "SettingActivity",
     "SettingsActivity",

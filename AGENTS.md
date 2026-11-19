@@ -265,6 +265,7 @@ Critical gotchas:
 - `event.get_target_obj()` not `get_current_target()` (returns blob → hang).
 - `lv.timer_create()` defaults to infinite. `set_repeat_count(0)` = one-shot + auto-delete → double-free on `.delete()`. Use `-1` for infinite, `1` for one-shot.
 - `buttonmatrix`: no `set_button_text/set_button_ctrl` → use `set_map()`. `set_map()` fires async `VALUE_CHANGED` → 50ms debounce.
+- Widget-class enums live on the class: `lv.image.ALIGN.CENTER` (also `.CONTAIN`, `.COVER`, `.TILE`), **not** `lv.IMAGE_ALIGN.CENTER` — the top-level name does not exist (the generated type `LV_IMAGE_ALIGN` is exported as `lv.image.ALIGN`). Check `dir(lv.image)` before assuming a top-level enum. Related: `image.set_inner_align(lv.image.ALIGN.CENTER)` is what positions a scaled/rotated image in its object.
 - Keyboard: always `MposKeyboard` from `mpos`, never raw `lv.keyboard()`.
 - Flex layout + alignment: add `lv.obj.FLAG.FLOATING` to escape flow.
 - SDL keyboard: no key-release event. Use timeout-based approach for games.
@@ -278,6 +279,15 @@ Critical gotchas:
 - `lv.OPA` values at steps of 10 only. No `_5` — use nearest step or raw int.
 - Never take a snapshot from inside a draw callback: an imgfont/style callback runs while LVGL draws, and `lv.snapshot_take_to_buf` waits for that draw forever (silent whole-system hang). Defer it with `lv.async_call` (see `FontManager._defer_scale`).
 - Make UI uniform: buttons in same flex row = same height.
+
+### Multi-touch
+
+- Only the controllers that report more than one point can do it: `gt911` (MaTouch, Waveshare P4 4.3, D-Shell; 5 points, config `Touch Number` at 0x804C is 5 on the MaTouch) and FocalTech FT6x36 (Waveshare 3.5; 2 points). `CST816S` (fri3d 2026, Waveshare 2" and 1.54") is single-touch — no software can add a second finger.
+- Driver contract: `get_touches()` returns `[(id, x, y), ...]` for the points of the last report, already passed through `_calc_coords` (i.e. in LVGL's pre-display-rotation coordinate space); `get_touch_count()` is the same list's length. `PointerDriver._read` still gets the raw first point, so single-finger behavior is unchanged.
+- **GT911 record layout on the MaTouch is X-first, not id-first:** `[xlo, xhi, ylo, yhi, size_lo, size_hi, ...]`. The pre-multitouch single-point code read bytes 0-1 as X, and that is correct; parsing the datasheet's id-first layout gives ids 10/14 and coordinates in the tens of thousands. The status nibble can also say 5 while only two slots are live, with the rest zeroed — filter records whose x/y/size are all zero, don't trust the count.
+- **Keep the two-finger suppression.** On the first report with 2+ points the driver calls `indev.wait_release()` and returns `RELEASED` until all fingers lift. Without it, the first finger clicks the widget under it when the pinch ends, and a pinch starting near the edge triggers the back-swipe overlay (`gesture_navigation` handles `PRESS_LOST` to hide its ghost button).
+- `mpos.ui.multitouch.MultiTouchGesture(indev=None)` polls that driver and reports `scale` (cumulative since the pair became active), `rotation` (radians, normalized), `center` (logical), `delta_x/delta_y`, `fingers`, `active`, `just_started/just_ended`. It applies LVGL's display rotation itself (`display_to_logical`), keeps the pair in matching order by nearest previous point (the GT911 path reports no ids) or by id when a driver provides them, and starts only after the fingers are `_MIN_PAIR_DISTANCE` apart.
+- Image zoom/rotate model: `set_inner_align(lv.image.ALIGN.CENTER)` + `set_size(viewport)` makes the decoded image centered inside a clipping viewport; `set_scale`/`set_rotation` transform around the decoded image's center pivot (default 50/50) and `set_offset_x/y` pan it. Anchor the content point under the gesture midpoint with `offset = M - base - pivot - R(θ)·(q - pivot)·scale` (see `imageview.py`); `lv.IMAGE_ALIGN` does not exist, the enum is `lv.image.ALIGN`.
 
 ### MicroPython @native / @viper
 - `@micropython.viper` is compile-time: `hasattr(micropython, "viper")` returns `False`. Check `hasattr(micropython, "native")`.
@@ -404,7 +414,7 @@ Read this before writing another one.
 - Assert drawn **rows**, not just "some pixels": the band-offset bug passes a naive check.
 
 **Packaging**
-- A released `.mpk` must run on firmware older than your tree. Do not import a frozen module you just added to `lib/mpos/`; ship a copy in the app folder — that is the rule for *helpers*. Framework infrastructure is the exception: `NativeDisplay` is imported from `mpos.ui.native_display` and not copied (the minimum firmware is the one that carries it).
+- `BuildInfo.version.api_level` is 0, so the framework API is not frozen: an app may require the latest OS and break on older firmware. Shared framework code (gestures, native display, ...) lives in `lib/mpos/` and apps import it — never ship a copy of a framework module in an app folder (copies drift; `tests/test_graphical_native_display.py` fails when a `native_display.py` reappears). An app that needs a new framework module is published only after the OS release that carries it is out (0.23.0 for anything added now), so AppStore users do not get an `ImportError`. This changes once API level 1 exists.
 
 ## Apps & docs
 

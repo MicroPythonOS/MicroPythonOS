@@ -53,6 +53,10 @@ def _back_swipe_cb(event):
             backbutton_visible = should_show
             WidgetAnimator.smooth_show(backbutton) if should_show else WidgetAnimator.smooth_hide(backbutton)
         backbutton.set_pos(round(x / 10), back_start_y)
+    elif event_code == lv.EVENT.PRESS_LOST:
+        if backbutton_visible:
+            backbutton_visible = False
+            WidgetAnimator.smooth_hide(backbutton)
     elif event_code == lv.EVENT.RELEASED:
         if backbutton_visible:
             backbutton_visible = False
@@ -88,6 +92,10 @@ def _top_swipe_cb(event):
             downbutton_visible = should_show
             WidgetAnimator.smooth_show(downbutton) if should_show else WidgetAnimator.smooth_hide(downbutton)
         downbutton.set_pos(down_start_x, round(y / 10))
+    elif event_code == lv.EVENT.PRESS_LOST:
+        if downbutton_visible:
+            downbutton_visible = False
+            WidgetAnimator.smooth_hide(downbutton)
     elif event_code == lv.EVENT.RELEASED:
         if downbutton_visible:
             downbutton_visible = False
@@ -119,6 +127,7 @@ def handle_back_swipe():
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESSED, None)
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESSING, None)
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.RELEASED, None)
+    rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESS_LOST, None)
     # button with label that shows up during the dragging:
     backbutton = lv.button(lv.layer_top())
     backbutton.set_pos(0, round(lv.layer_top().get_height() / 2))
@@ -153,6 +162,7 @@ def handle_top_swipe():
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESSED, None)
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESSING, None)
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.RELEASED, None)
+    rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESS_LOST, None)
     # button with label that shows up during the dragging:
     downbutton = lv.button(lv.layer_top())
     downbutton.set_pos(0, round(lv.layer_top().get_height() / 2))
