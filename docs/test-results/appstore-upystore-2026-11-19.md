@@ -64,6 +64,7 @@ touch confirmation and camera video.
 | Actual HTTP 404 | Passed: obsolete sample detail returned HTTP 404; the detail screen offered retry and return |
 | Real malformed packages | Passed: Danke failed the top-level identity check; Show Battery failed unsafe path validation; neither app was committed |
 | Final state | Passed: running firmware SHA256 re-read and matched; online event loop alive, no framework overlay, test apps removed, controlled transport disabled, installation stage/backup empty |
+| Fresh manual procedure | User confirmed the requested power-cycle, touch, scrolling, buttons, uninstall/install/open/calculation/return procedure had no problems; this is distinct from serial event injection |
 
 The controlled apps are `com.freakstudio.storetest_upgrade` and
 `com.freakstudio.storetest_peer`: 1.0.0/r1 to 1.1.0/r2. The Activity source stays
@@ -106,7 +107,7 @@ preview or a substitute for D-Shell testing.
 | Calculator single files | https://upystore.io/api/v1/apps/com-example-cc-skill-smoke/rev/1/files/assets/main.py and https://upystore.io/api/v1/apps/com-example-cc-skill-smoke/rev/1/files/MANIFEST.JSON return 404; whole-MPK installation works |
 | Firmware releases | https://upystore.io/api/v1/os/releases returns an empty published list; OTA is not accepted |
 | Real online helper upgrade | Publisher must provide a trusted helper-containing application with two published revisions; controlled tests do not replace this case |
-| New manual acceptance / video | Pending a fresh touch/scroll/install/open/uninstall confirmation and physical operation video for the official AppStore candidate; the prototype video is historical evidence |
+| New manual acceptance / video | Completed for this named candidate and procedure: user confirmed no problems and supplied VID_20261119_192213.mp4; the prototype video remains historical evidence |
 
 uPyStore supplies no rating-submission contract, so those rating controls are
 hidden rather than sending invented requests. Optional install-report and
@@ -132,5 +133,15 @@ Screenshots in the evidence bundle are actual RGB565 device framebuffer captures
 and corresponding PNG conversions, not camera photographs or operation videos.
 Raw serial logs, structured per-MPK case results, package hashes, controlled
 fixtures and host regression outputs are retained with the delivery evidence.
+
+The new physical operation video is `VID_20261119_192213.mp4`, 195145552 bytes,
+75.966533 seconds, SHA256
+`3cbbded53a4ac588bf9e3ab3057683b5ac2b7e8ab871612c6e2cb15c0c2dc5d0`.
+Reviewed frames show the official list, details, download progress, the installed
+calculator and return navigation. It is not presented as filming every accepted
+case: the exact arithmetic check, uninstall, helper upgrades and failure recovery
+also rely on their serial records and the scoped human confirmation. The original
+MP4 is attached separately to the progress report; it is not recompressed into
+the evidence ZIP.
 
 Installation and reproduction: `docs/appstore-upystore.md`.
