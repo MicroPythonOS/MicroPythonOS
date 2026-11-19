@@ -64,6 +64,8 @@ class TestCalibrationCheckBug(unittest.TestCase):
         accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
         gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
 
+        if accel is None or gyro is None:
+            self.skipTest("no accelerometer/gyroscope on this board")
         self.assertIsNotNone(accel, "Accelerometer should be available")
         self.assertIsNotNone(gyro, "Gyroscope should be available")
 

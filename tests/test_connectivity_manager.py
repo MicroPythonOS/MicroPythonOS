@@ -285,6 +285,16 @@ class TestConnectivityManagerWithoutNetwork(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        # A device firmware provides `network` as a frozen/builtin module, so
+        # deleting it here does not simulate its absence: the re-import brings
+        # it straight back and the manager sees a network module after all.
+        try:
+            import network  # noqa: F401
+        except ImportError:
+            pass
+        else:
+            self.skipTest("this firmware provides a network module")
+
         # Remove network module to simulate desktop environment
         if 'network' in sys.modules:
             del sys.modules['network']

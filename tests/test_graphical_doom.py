@@ -808,6 +808,10 @@ class TestDoomActivity(unittest.TestCase):
 class TestDoomOnTheRealApp(unittest.TestCase):
 
     def setUp(self):
+        if natmod is None:
+            # These drive the native module itself (its key constants and
+            # blit_band); on a badge the app runs the flash-resident core.
+            self.skipTest("no native module for this host")
         self.wad = _find_wad()
         if self.wad is None:
             self.skipTest("no WAD installed (put one at doom1.wad)")
@@ -879,6 +883,12 @@ class TestDoomOnTheRealDisplay(unittest.TestCase):
     def test_the_surface_is_letterboxed_on_the_panel(self):
         if mpos.ui.main_display is None:
             self.skipTest("no display")
+        display = mpos.ui.main_display
+        if (display.get_horizontal_resolution() < doom.GAME_WIDTH
+                or display.get_vertical_resolution() < doom.GAME_HEIGHT):
+            # A portrait badge is narrower than Doom's landscape frame; the app
+            # rotates it into a 200x320 surface instead (see surface_size).
+            self.skipTest("panel is smaller than Doom's landscape frame")
         screen = lv.obj()
         lv.screen_load(screen)
         try:
