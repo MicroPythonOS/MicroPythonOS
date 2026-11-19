@@ -4,9 +4,9 @@ The engine is doomgeneric, built twice because the two hosts need different
 things from it:
 
 * a badge gets the **flash-resident core**: the engine is linked for a fixed
-  address, lives in the ``retro-core`` partition and runs from flash through the
-  cache (``c_mpos/core_abi.h``), so a Doom-sized engine never has to fit in
-  executable RAM (~7 KB on an S3);
+  address, stored as a littlefs2e extent in the app directory and mapped from
+  flash through the cache (``c_mpos/core_abi.h``), so a Doom-sized engine never
+  has to fit in executable RAM (~7 KB on an S3);
 * a desktop gets the **native module** (``doom_x64.mpy``), an ordinary
   MicroPython module, because there is no MMU window to map a flash partition
   into and the blob is Xtensa code anyway.
@@ -41,6 +41,7 @@ import time
 
 import lvgl as lv
 
+from mpos import extent
 from mpos.ui.input_manager import InputManager
 from mpos.ui.native_activity import NativeActivity
 from mpos.ui.native_input import ThumbZones
@@ -49,8 +50,9 @@ from doom_overlay import TouchOverlay
 GAME_WIDTH = 320
 GAME_HEIGHT = 200
 
-CORE_PARTITION = "retro-core"
-CORE_PARTITION_SIZE = 0xF0000
+# The engine blob is stored as a littlefs2e extent in the app directory and
+# mapped from there; it is not read through the filesystem at run time.
+CORE_ALIGN_BLOCKS = 16  # 64 KiB with 4 KiB blocks: the ESP32 MMU page
 
 # Doom's own tic rate is 35, and the present is what limits a full-screen frame
 # to ~30fps on the badge.
@@ -96,6 +98,23 @@ WAD_CANDIDATES = (
 )
 
 
+def find_core():
+    """Path of the core blob, or None. The app directory is authoritative."""
+    candidates = (
+        _app_directory() + "/core.bin",
+        "apps/com.micropythonos.doom/core.bin",
+        "/apps/com.micropythonos.doom/core.bin",
+        "core.bin",
+    )
+    for path in candidates:
+        try:
+            open(path, "rb").close()
+            return path
+        except Exception:
+            continue
+    return None
+
+
 def find_wad(intent=None):
     """First WAD that exists, or None."""
     if intent is not None:
@@ -122,12 +141,15 @@ def find_wad(intent=None):
 
 
 class _CoreEngine:
-    """The engine as a blob in the ``retro-core`` partition (badge).
+    """The engine as a littlefs2e extent (badge).
 
-    The core draws straight into the surface buffer one display band at a time
-    and calls back for the panel transfer, so the previous band's SPI transfer
-    runs while the next one is being converted. It reads the WAD through
-    MicroPython file objects and mixes its own sound, which the host pulls.
+    The blob is a contiguous extent in the app directory; mpos_core maps the
+    run at the address it was linked for, so it executes from flash with no
+    copy and no executable RAM. The core draws straight into the surface
+    buffer one display band at a time and calls back for the panel transfer,
+    so the previous band's SPI transfer runs while the next one is being
+    converted. It reads the WAD through MicroPython file objects and mixes its
+    own sound, which the host pulls.
     """
 
     name = "core"
@@ -163,14 +185,22 @@ class _CoreEngine:
         self._callbacks = (
             self._present_band, self._palette, self._poll_key,
             self._read_file, self._file_size, self._log)
+        core = find_core()
+        if core is None:
+            raise OSError("doom: core.bin is missing")
+        offset, length, crc = extent.ensure(
+            core, align=CORE_ALIGN_BLOCKS, defrag_first=True)
+        self._core_file = core
         self._core.start(
-            CORE_PARTITION, 0, CORE_PARTITION_SIZE,
+            "vfs", offset, length,
             *self._callbacks,
             wad, surface.width, surface.height,
             surface.buffer, surface.rows_per_band)
         if __debug__:
-            print("doom: core at 0x%x, %d bytes of text, wad %s" % (
-                self._core.mapped(), self._core.mapped_size(), wad))
+            print("doom: core %s extent at 0x%x, %d bytes (crc %08x), "
+                  "mapped 0x%x, %d bytes, wad %s" % (
+                      core, offset, length, crc,
+                      self._core.mapped(), self._core.mapped_size(), wad))
 
     def resume(self):
         pass
