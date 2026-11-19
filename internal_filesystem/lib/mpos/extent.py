@@ -177,6 +177,30 @@ def defrag(need, align=1, budget=None):
                 occupants[path] = True
         if not ok:
             continue
+        # A file can only be moved if a run of its block count exists outside
+        # the window (the copy is made before the old blocks are freed). Skip
+        # windows whose occupants are too large for any available hole.
+        max_hole = 0
+        run = 0
+        for block in range(block_count):
+            if start <= block < start + need:
+                run = 0
+                continue
+            if _bit_get(used, block):
+                run = 0
+            else:
+                run += 1
+                if run > max_hole:
+                    max_hole = run
+        for path in occupants:
+            # The current file's block list is the exact count its copy will
+            # need (CTZ packing can need one more block than ceil(size/bs)).
+            blocks = len(files[path][1])
+            if blocks > max_hole:
+                ok = False
+                break
+        if not ok:
+            continue
         cost = 0
         for path in occupants:
             cost += files[path][0]
