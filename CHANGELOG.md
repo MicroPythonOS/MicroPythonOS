@@ -28,6 +28,14 @@ Builtin Apps:
   release the other's key.
 - The GT911 and FT6x36 drivers keep each point's slot number as its identity instead
   of throwing it away, so a finger no longer has to be matched by position.
+- Native games can read a held key instead of a key repeat. LVGL never delivers a key
+  release, so a keypad press used to live on a 180 ms timer that a repeat had to
+  refresh; the fri3d 2026 repeats only after 400 ms, so a held joystick turned for
+  200 ms, stopped and resumed - the "repeat delay" in Doom. `NativeActivity.key_state`
+  reads `InputManager.held_keys()` every frame (the expander and communicator drivers
+  report their physical state, and a keypad that keeps reporting PRESSED needs no
+  method), holds the key for as long as it is down, releases within a frame, and
+  switches off the keypad's typing repeats while the game is in the foreground.
 
 Testing:
 - connectivity tests: the machine/socket/thread/WifiService mocks are installed per

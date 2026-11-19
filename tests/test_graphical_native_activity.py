@@ -176,6 +176,18 @@ class _MultiGame(_Game):
         self.fingers.append((finger, event_code, x, y))
 
 
+class _RepeatDriver:
+    """A keypad that can synthesize repeats; only some track held state."""
+
+    def __init__(self, reports_state):
+        self.repeats = True
+        if reports_state:
+            self.held_keys = lambda: ()
+
+    def set_repeat_enabled(self, enabled):
+        self.repeats = enabled
+
+
 class TestNativeActivity(unittest.TestCase):
 
     def setUp(self):
@@ -230,6 +242,26 @@ class TestNativeActivity(unittest.TestCase):
         self.game.holds.press(7)
         self.game.onPause(None)
         self.assertEqual(self.engine.keys, [(7, True), (7, False)])
+
+    def test_key_state_switches_repeats_off_only_where_state_is_available(self):
+        # A repeat is the only refresh a driver without held state provides, so
+        # switching it off there would end every hold after HOLD_MS.
+        capable = _RepeatDriver(reports_state=True)
+        repeats_only = _RepeatDriver(reports_state=False)
+        saved = list(InputManager._registered_indevs)
+        try:
+            InputManager._registered_indevs[:] = [capable, repeats_only]
+            self.game.key_state = True
+            self.game._keypad_state(True)
+            self.assertFalse(capable.repeats)
+            self.assertTrue(repeats_only.repeats)
+
+            self.game._keypad_state(False)
+            self.assertTrue(capable.repeats, "repeats were not restored")
+        finally:
+            InputManager._registered_indevs[:] = saved
+            NativeActivity._keypad_state_users = 0
+            self.game._keypad_state_active = False
 
     def test_stopping_hands_the_engine_back(self):
         self.game.onStop(None)

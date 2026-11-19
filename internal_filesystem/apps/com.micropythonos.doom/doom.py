@@ -350,6 +350,11 @@ class Doom(NativeActivity):
     system_gestures_enabled = False
     # Both thumbs at once: walk with the left one and fire with the right one.
     touch_fingers = True
+    # A keypad press is only a press (LVGL has no key release), so without this
+    # holding the joystick turns for 180 ms and then waits for the keypad's
+    # first repeat at 400 ms. The drivers that can report their real state make
+    # it a continuous hold with no repeat delay.
+    key_state = True
     # Both engines export the same 11025 Hz mixer; a piezo is refused because
     # Doom's broadband effects become a screech on one.
     audio_rate = SAMPLE_RATE
@@ -418,13 +423,13 @@ class Doom(NativeActivity):
 
     def on_key_event(self, key):
         if key == lv.KEY.LEFT:
-            self.holds.hold(KEY_LEFT)
+            self.holds.hold(KEY_LEFT, key)
         elif key == lv.KEY.RIGHT:
-            self.holds.hold(KEY_RIGHT)
+            self.holds.hold(KEY_RIGHT, key)
         elif key == lv.KEY.UP:
-            self.holds.hold(KEY_UP)
+            self.holds.hold(KEY_UP, key)
         elif key == lv.KEY.DOWN:
-            self.holds.hold(KEY_DOWN)
+            self.holds.hold(KEY_DOWN, key)
         elif key == lv.KEY.NEXT:
             # The fri3d 2026 expander reports B as NEXT *and* as the letter
             # "B", because LVGL takes NEXT for focus tabbing and the app would
@@ -435,11 +440,11 @@ class Doom(NativeActivity):
             # B would move and select at once - this is why confirm felt
             # different from fire).
             if self._letter_key is None:
-                self.holds.hold(KEY_RIGHT)
+                self.holds.hold(KEY_RIGHT, key)
         elif key == lv.KEY.PREV:
             # Same for Y: the letter opens the menu, PREV would also turn left.
             if self._letter_key is None:
-                self.holds.hold(KEY_LEFT)
+                self.holds.hold(KEY_LEFT, key)
         elif key in (lv.KEY.ENTER, ord("A"), ord("a")):
             # Enter selects in a menu (the engine acts on the event itself) and
             # opens doors in game, where the key has to stay down for at least
@@ -447,10 +452,10 @@ class Doom(NativeActivity):
             # out before the tic is built. A keyboard gets the same action on
             # "A", which is the badge's use button.
             self.holds.tap(KEY_ENTER)
-            self.holds.hold(KEY_USE)
+            self.holds.hold(KEY_USE, key)
         elif key == ord("B") or key == ord("b") or key == 0x20:
             self._letter_key = key
-            self.holds.hold(KEY_FIRE)
+            self.holds.hold(KEY_FIRE, key)
         elif key in (lv.KEY.ESC, ord("Y"), ord("y"), lv.KEY.END):
             if key in (ord("Y"), ord("y")):
                 self._letter_key = key

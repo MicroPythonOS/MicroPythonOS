@@ -54,6 +54,32 @@ _KEY_MAP = {
     _IDX_BTN_Y:     lv.KEY.PREV,
 }
 
+# What an app is told is down while a button is held. B and Y are dual-delivered
+# (see _fire_nav_hook), and the letter is what a game maps, so the game's own
+# code is listed and not only the NEXT/PREV tab key.
+_HELD_MAP = {
+    _IDX_JOY_RIGHT: (lv.KEY.RIGHT,),
+    _IDX_JOY_LEFT:  (lv.KEY.LEFT,),
+    _IDX_JOY_DOWN:  (lv.KEY.DOWN,),
+    _IDX_JOY_UP:    (lv.KEY.UP,),
+    _IDX_BTN_MENU:  (lv.KEY.HOME,),
+    _IDX_BTN_B:     (ord("B"),),
+    _IDX_BTN_A:     (lv.KEY.ENTER, ord("A")),
+    _IDX_BTN_Y:     (ord("Y"),),
+    _IDX_BTN_X:     (lv.KEY.ESC,),
+}
+
+
+def held_keys_from_digital(digital):
+    """The app codes physically down in an expander ``digital`` tuple."""
+    if digital is None:
+        return ()
+    keys = []
+    for index, codes in _HELD_MAP.items():
+        if index < len(digital) and digital[index]:
+            keys.extend(codes)
+    return tuple(keys)
+
 
 class Fri3d2026Expander(keypad_framework.KeypadDriver):
     """LVGL indev keypad driver for the Fri3d Camp 2026 badge expander.
@@ -89,6 +115,7 @@ class Fri3d2026Expander(keypad_framework.KeypadDriver):
         self._repeat_idx = None
         self._repeat_start_ms = 0
         self._repeat_last_emit_ms = 0
+        self._repeat_enabled = True
 
         if int_pin is not None:
             def _irq_cb(_):
@@ -140,7 +167,29 @@ class Fri3d2026Expander(keypad_framework.KeypadDriver):
         self._repeat_start_ms = 0
         self._repeat_last_emit_ms = 0
 
+    def held_keys(self):
+        """The keys physically down, from the state the last read already saw.
+
+        No bus traffic: ``_last_digital`` is refreshed by ``_poll_state`` on
+        every input read, which is the same read that feeds the repeats. It is
+        therefore at most one read period (~33 ms) old.
+        """
+        return held_keys_from_digital(self._last_digital)
+
+    def set_repeat_enabled(self, enabled):
+        """Stop synthesizing repeats while a game is in the foreground.
+
+        A repeat is a typing affordance: a game wants one press and one release,
+        and a repeated press on the menu button would open and close the menu
+        ten times a second. It is re-enabled when the game pauses.
+        """
+        self._repeat_enabled = bool(enabled)
+        if not self._repeat_enabled:
+            self._reset_repeat()
+
     def _maybe_enqueue_repeat(self):
+        if not self._repeat_enabled:
+            return
         if self._repeat_idx is None:
             return
         if self._last_digital is None or not self._last_digital[self._repeat_idx]:

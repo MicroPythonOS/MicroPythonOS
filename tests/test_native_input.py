@@ -5,8 +5,12 @@ a stable finger number, and ``ThumbZones`` keeps one control state per finger
 so a left thumb can walk while the right one fires.
 """
 
+import time
 import unittest
 
+import lvgl as lv
+
+from mpos.ui.input_manager import InputManager
 from mpos.ui.native_input import (
     KeyHolds, ThumbZones, TouchFingers, TouchMonitor)
 
@@ -149,6 +153,140 @@ class TestTouchMonitor(unittest.TestCase):
         self.assertEqual(monitor.poll(), [])
 
 
+class TestKeyHoldsState(unittest.TestCase):
+    """The keypad's real held state, when a driver can report it.
+
+    LVGL never delivers a key release, so without a source a key lives on a
+    180 ms deadline. A keypad that repeats after 400 ms therefore lets the key
+    go 220 ms before the repeat could refresh it - that gap is the "repeat
+    delay" a game shows.
+    """
+
+    def setUp(self):
+        self.keys = []
+        self.down = ()
+        self.hold = KeyHolds(
+            lambda code, pressed: self.keys.append((code, pressed)),
+            source=lambda: self.down)
+
+    def test_a_key_stays_down_while_the_hardware_reports_it(self):
+        self.down = ("LEFT",)
+        self.hold.hold(1, "LEFT")
+        for _ in range(6):
+            self.hold.tick(time.ticks_add(time.ticks_ms(), 1000))
+        self.assertTrue(self.hold.is_held(1))
+        self.assertEqual(self.keys, [(1, True)])
+
+    def test_releasing_the_key_releases_the_engine_key(self):
+        self.down = ("LEFT",)
+        self.hold.hold(1, "LEFT")
+        self.hold.tick(time.ticks_ms())
+        self.down = ()
+        self.hold.tick(time.ticks_add(time.ticks_ms(), 1000))
+        self.assertFalse(self.hold.is_held(1))
+        self.assertEqual(self.keys, [(1, True), (1, False)])
+
+    def test_a_quick_tap_last_long_enough_for_one_tic(self):
+        self.hold.hold(1, "LEFT")
+        self.down = ()
+        self.hold.tick(time.ticks_ms())
+        self.assertTrue(self.hold.is_held(1), "a tap must outlive one engine tic")
+        self.hold.tick(time.ticks_add(time.ticks_ms(), 1000))
+        self.assertFalse(self.hold.is_held(1))
+
+    def test_a_pointer_hold_ignores_the_keypad_state(self):
+        # ThumbZones presses a key without a source key; it ends on release,
+        # not because the keypad reports nothing down.
+        self.hold.press(1)
+        self.down = ()
+        self.hold.tick(time.ticks_add(time.ticks_ms(), 10000))
+        self.assertTrue(self.hold.is_held(1))
+
+    def test_without_a_source_the_deadline_still_ends_the_press(self):
+        hold = KeyHolds(lambda code, pressed: self.keys.append((code, pressed)))
+        hold.hold(1)
+        hold.tick(time.ticks_add(time.ticks_ms(), hold.hold_ms + 1))
+        self.assertFalse(hold.is_held(1))
+
+
+class FakeKeypad:
+    def __init__(self, keys=()):
+        self.keys = keys
+
+    def held_keys(self):
+        return self.keys
+
+
+class FakeStateKeypad:
+    """A driver that keeps reporting PRESSED while a button is down."""
+
+    def __init__(self, state, key, indev_type=None):
+        self.state = state
+        self.key = key
+        self.indev_type = (lv.INDEV_TYPE.KEYPAD if indev_type is None
+                           else indev_type)
+
+    def get_type(self):
+        return self.indev_type
+
+    def get_state(self):
+        return self.state
+
+    def get_key(self):
+        return self.key
+
+
+class TestInputManagerHeldKeys(unittest.TestCase):
+
+    def setUp(self):
+        self.saved = list(InputManager._registered_indevs)
+
+    def tearDown(self):
+        InputManager._registered_indevs[:] = self.saved
+
+    def test_none_when_no_device_can_report_it(self):
+        InputManager._registered_indevs[:] = [
+            FakeStateKeypad(lv.INDEV_STATE.RELEASED, lv.KEY.LEFT,
+                            indev_type=lv.INDEV_TYPE.POINTER)]
+        self.assertIsNone(InputManager.held_keys())
+
+    def test_every_device_that_can_report_contributes(self):
+        InputManager._registered_indevs[:] = [
+            FakeStateKeypad(lv.INDEV_STATE.RELEASED, lv.KEY.LEFT,
+                            indev_type=lv.INDEV_TYPE.POINTER),
+            FakeKeypad(("LEFT", "ENTER")), FakeKeypad(("B",))]
+        self.assertEqual(
+            InputManager.held_keys(), ("LEFT", "ENTER", "B"))
+
+    def test_a_device_with_nothing_down_is_still_authoritative(self):
+        InputManager._registered_indevs[:] = [FakeKeypad(())]
+        self.assertEqual(InputManager.held_keys(), ())
+
+    def test_a_keypad_that_reports_its_state_needs_no_method(self):
+        InputManager._registered_indevs[:] = [
+            FakeStateKeypad(lv.INDEV_STATE.PRESSED, lv.KEY.LEFT)]
+        self.assertEqual(InputManager.held_keys(), (lv.KEY.LEFT,))
+
+    def test_a_released_keypad_contributes_nothing(self):
+        InputManager._registered_indevs[:] = [
+            FakeStateKeypad(lv.INDEV_STATE.RELEASED, lv.KEY.LEFT)]
+        self.assertEqual(InputManager.held_keys(), ())
+
+    def test_a_pointer_state_is_not_a_key(self):
+        InputManager._registered_indevs[:] = [
+            FakeStateKeypad(lv.INDEV_STATE.PRESSED, lv.KEY.LEFT,
+                            indev_type=lv.INDEV_TYPE.POINTER)]
+        self.assertIsNone(InputManager.held_keys())
+
+    def test_a_drivers_own_answer_wins_over_lvgl_state(self):
+        # The expander synthesizes a press/release pair for its repeats, so
+        # LVGL has already seen the release while the button is still down.
+        InputManager._registered_indevs[:] = [
+            FakeKeypad(("B",)), FakeStateKeypad(
+                lv.INDEV_STATE.RELEASED, lv.KEY.NEXT)]
+        self.assertEqual(InputManager.held_keys(), ("B",))
+
+
 class ThumbZonesTest(unittest.TestCase):
 
     def setUp(self):
@@ -163,8 +301,8 @@ class ThumbZonesTest(unittest.TestCase):
         self.assertEqual(self.keys, [(KEYS["fire"], True)])
 
         self.zones.moving(40, 100, 0)
-        self.assertEqual(self.hold.held(), {
-            KEYS["left"]: None, KEYS["fire"]: None})
+        self.assertEqual(
+            sorted(self.hold.held()), sorted([KEYS["left"], KEYS["fire"]]))
 
         # The directional key is the one the stick owns, not the finger that
         # last touched.

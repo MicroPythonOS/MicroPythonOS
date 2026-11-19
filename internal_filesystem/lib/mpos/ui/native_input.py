@@ -24,6 +24,12 @@ from .multitouch import (
 
 # A keypad press is released after this long unless the input repeats it.
 HOLD_MS = 180
+# The shortest time a key may stay down when the hardware reports its real
+# state. A tap has to outlive one engine tic or the engine drains the press and
+# the release before it builds the tic's input, so a very quick tap would do
+# nothing. One frame is ~50 ms at Doom's measured rate; 60 ms covers a tic at
+# the 35 fps the loop asks for.
+MIN_HOLD_MS = 60
 # A pointer that lands on the joystick and lifts within this window has not
 # dragged anywhere; a caller can use that as a tap.
 TAP_MS = 450
@@ -39,12 +45,22 @@ class KeyHolds:
 
     ``send(code, pressed)`` is the app's key sink. A key is either *held* (a
     pointer is still down) or *timed* (a keypad press that has to be released
-    after a deadline because no release will ever arrive).
+    after a deadline because no release will ever arrive). LVGL never delivers
+    a key release, so the deadline is what a keypad-only board has.
+
+    ``source`` is the escape hatch from timers: a callable returning the keys
+    the hardware says are down right now, or None when no device can report it
+    (``InputManager.held_keys``). A held key that carries its physical key as
+    ``source_key`` is then refreshed while it is in that container and released
+    one frame after it leaves, instead of living on a 180 ms deadline that ends
+    before the keypad's first repeat arrives.
     """
 
-    def __init__(self, send, hold_ms=HOLD_MS):
+    def __init__(self, send, hold_ms=HOLD_MS, source=None):
         self._send = send
         self.hold_ms = hold_ms
+        self.min_hold_ms = MIN_HOLD_MS
+        self.source = source
         self._held = {}
 
     def held(self):
@@ -53,17 +69,29 @@ class KeyHolds:
     def is_held(self, code):
         return code in self._held
 
-    def hold(self, code):
-        """Press for ``hold_ms`` unless refreshed: a keypad reports presses only."""
-        if code not in self._held:
+    def hold(self, code, source_key=None):
+        """Press for ``hold_ms`` unless refreshed: a keypad reports presses only.
+
+        ``source_key`` is the key as the hardware reports it, when that differs
+        from the engine code (``ord("B")`` fires, ``KEY_FIRE`` is the engine's
+        name for it). It is what :attr:`source` is asked about.
+        """
+        entry = self._held.get(code)
+        now = time.ticks_ms()
+        deadline = time.ticks_add(now, self.hold_ms)
+        if entry is None:
             self._send(code, True)
-        self._held[code] = time.ticks_add(time.ticks_ms(), self.hold_ms)
+            self._held[code] = [deadline, source_key, now]
+        else:
+            entry[0] = deadline
+            if source_key is not None:
+                entry[1] = source_key
 
     def press(self, code):
         """Press and keep down until :meth:`release`: a pointer reports both edges."""
         if code not in self._held:
             self._send(code, True)
-        self._held[code] = None
+        self._held[code] = [None, None, time.ticks_ms()]
 
     def tap(self, code):
         """Press and release at once: an event-driven action (a menu select)."""
@@ -81,7 +109,19 @@ class KeyHolds:
         self._held = {}
 
     def tick(self, now):
-        for code, deadline in list(self._held.items()):
+        down = self.source() if self.source is not None else None
+        for code, entry in list(self._held.items()):
+            deadline, source_key, pressed_at = entry
+            if source_key is not None and down is not None:
+                if source_key in down:
+                    entry[0] = time.ticks_add(now, self.hold_ms)
+                    continue
+                # The hardware says it is up. Keep it just long enough for an
+                # engine tic to see it, then let the deadline below release it.
+                deadline = time.ticks_add(pressed_at, self.min_hold_ms)
+                entry[0] = deadline
+                if time.ticks_diff(now, deadline) < 0:
+                    continue
             if deadline is not None and time.ticks_diff(now, deadline) >= 0:
                 self._send(code, False)
                 del self._held[code]

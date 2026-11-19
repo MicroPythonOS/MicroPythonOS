@@ -80,6 +80,14 @@ class NativeActivity(Activity):
     # A game that wants both sets this and receives every finger through
     # on_touch_finger() instead of on_pointer().
     touch_fingers = False
+    # LVGL never delivers a key release, so a keypad press is normally a timed
+    # hold that a repeat has to refresh. A game sets this to use the keypad's
+    # real held state instead, when the driver can report it: pressing turns at
+    # once, releasing stops within a frame, and the keypad's typing repeats are
+    # switched off while the game is in the foreground (a repeated menu press
+    # would open and close the menu). A driver that cannot report held state
+    # keeps the timed behaviour, so this is safe on every board.
+    key_state = False
     # Set audio_rate when the engine has a mixer: the base then opens a PCM sink
     # and pulls `engine.audio_mix(buffer)` at that rate, every frame.
     audio_rate = None
@@ -105,6 +113,10 @@ class NativeActivity(Activity):
     _audio_buffer = None
     _audio_ms = 0
     touch = None
+    # Games stack (a game under a settings dialog), so typing repeats come back
+    # only when the last activity that wanted key state pauses.
+    _keypad_state_users = 0
+    _keypad_state_active = False
 
     # -- lifecycle --------------------------------------------------------
 
@@ -119,13 +131,15 @@ class NativeActivity(Activity):
 
         self._frame_interval_ms = 1000 // self.target_fps
         self._keys_sent = 0
-        self.holds = KeyHolds(self.key)
+        self.holds = KeyHolds(
+            self.key, source=InputManager.held_keys if self.key_state else None)
         self.touch = TouchMonitor() if self.touch_fingers else None
         self.on_screen(self.screen)
         self.setContentView(self.screen)
 
     def onResume(self, screen):
         self._paused = False
+        self._keypad_state(True)
         if not self._started:
             self._started = True
             self._begin_session()
@@ -144,6 +158,7 @@ class NativeActivity(Activity):
 
     def onPause(self, screen):
         self._paused = True
+        self._keypad_state(False)
         mpos.ui.task_handler.remove_event_cb(self._drawframe)
         self.on_paused()
         # Nothing ticks the engine while paused, so a half-pressed direction is
@@ -161,6 +176,7 @@ class NativeActivity(Activity):
             self._surface.end()
 
     def onStop(self, screen):
+        self._keypad_state(False)
         # Leave the shared focus group clean: the framework also does this, but
         # an activity that is torn down without it leaves a widget behind.
         try:
@@ -176,6 +192,30 @@ class NativeActivity(Activity):
         # A resumed activity starts a fresh engine; see _begin_session().
         self.engine = None
         self._started = False
+
+    def _keypad_state(self, active):
+        """Turn the keypads' typing repeats off (or back on) for this activity.
+
+        Only drivers that can also report their held state are touched: for one
+        that cannot, a repeat is the only thing that keeps a press alive, so
+        switching it off would make every hold stop after HOLD_MS.
+        """
+        if not self.key_state or active == self._keypad_state_active:
+            return
+        self._keypad_state_active = active
+        if active:
+            NativeActivity._keypad_state_users += 1
+        elif NativeActivity._keypad_state_users > 0:
+            NativeActivity._keypad_state_users -= 1
+        enabled = NativeActivity._keypad_state_users == 0
+        for indev in InputManager.list_indevs():
+            setter = getattr(indev, "set_repeat_enabled", None)
+            if setter is None or getattr(indev, "held_keys", None) is None:
+                continue
+            try:
+                setter(enabled)
+            except Exception:
+                pass
 
     def _begin_session(self):
         self._frame_interval_ms = 1000 // self.target_fps

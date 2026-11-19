@@ -689,7 +689,11 @@ class TestDoomActivity(unittest.TestCase):
         # A keypad reports presses and no releases, so the frame loop lets a
         # direction go when nobody refreshed it.
         self.activity.on_key_event(lv.KEY.LEFT)
-        self.activity.holds.held()[doom.KEY_LEFT] = time.ticks_add(time.ticks_ms(), -1)
+        # Pretend the keypad reports the key up: the frame loop then lets go
+        # once the press has outlived its one-tic minimum.
+        self.activity.holds.source = lambda: ()
+        self.activity.holds.held()[doom.KEY_LEFT][2] = time.ticks_add(
+            time.ticks_ms(), -1000)
         self.activity._next_frame_ms = 0
         self.activity._drawframe()
 

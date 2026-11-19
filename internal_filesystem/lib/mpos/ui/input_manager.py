@@ -82,6 +82,41 @@ class InputManager:
         return cls._registered_indevs
     
     @classmethod
+    def held_keys(cls):
+        """The keys the hardware reports as down right now, or None.
+
+        LVGL only delivers key *presses*: for anything but ENTER it sends no
+        release event at all, so a game can only guess with a timer how long a
+        key is held. Some keypad drivers can do better because they already
+        track the physical state (the fri3d 2026 expander reads it to synthesize
+        its own repeats, the communicator keyboard has the HID report). Those
+        implement ``held_keys()`` and this collects them.
+
+        A keypad that keeps reporting PRESSED while a button is down needs no
+        method of its own: the last state LVGL read is the answer. A driver
+        with ``held_keys()`` is trusted instead, because it may synthesize
+        press/release pairs and then look released to LVGL a moment later.
+
+        Returns None when no registered device can report it; a caller then has
+        to keep its timed holds. An empty tuple means every device that can
+        report says nothing is down.
+        """
+        down = None
+        for indev in cls._registered_indevs:
+            getter = getattr(indev, "held_keys", None)
+            if getter is not None:
+                keys = getter()
+                if keys is None:
+                    continue
+            else:
+                if indev.get_type() != lv.INDEV_TYPE.KEYPAD:
+                    continue
+                keys = ((indev.get_key(),)
+                        if indev.get_state() == lv.INDEV_STATE.PRESSED else ())
+            down = keys if down is None else down + tuple(keys)
+        return down
+
+    @classmethod
     def has_indev_type(cls, indev_type):
         """
         Check if any registered input device has the specified type.
