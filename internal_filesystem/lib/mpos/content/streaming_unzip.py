@@ -17,6 +17,15 @@ MPK file format assumptions (strict)
 - Local file headers contain accurate ``compressed_size`` and
   ``uncompressed_size`` (data descriptor flag must NOT be set).
 
+Native files
+------------
+A manifest may carry a ``"native"`` map (platform key -> file names). This
+extractor installs only the files selected for the running host (see
+``mpos.platform``) and skips the ones built for other platforms, so one .mpk
+serves every target. A ``*.xip`` selected that way is streamed straight into
+a littlefs2e extent instead of a normal file: the engine is then mapped from
+flash without a first-launch conversion.
+
 Any archive violating these rules is rejected with ``RuntimeError`` so the
 user knows the package is malformed or out of spec.
 
@@ -33,9 +42,13 @@ Usage:
 """
 
 import io
+import json
 import logging
 import os
 import struct
+
+from .. import extent as extent_files
+from .. import platform as mpos_platform
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +68,10 @@ _FH_EXTRA_FIELD_LENGTH = 11
 
 ZIP_STORED = 0
 ZIP_DEFLATED = 8
+
+MANIFEST_NAME = "MANIFEST.JSON"
+# A manifest is a few KB; refuse to buffer something that is not one.
+_MANIFEST_MAX = 64 * 1024
 
 
 def _check_compression(method):
@@ -130,13 +147,18 @@ class StreamingUnzip:
         The app fullname that must appear as the single top-level directory.
         Example: ``"com.micropythonos.helloworld"``.
     free_space_limit : int or callable
-        Bytes required before extraction begins, or a callable that receives
-        the *total* archive bytes (sum of all ``uncompressed_size`` fields)
-        and raises an exception if space is insufficient.
-        When ``None`` (default), no pre-extraction space check is performed.
+        Bytes required per extracted entry, or a callable that receives each
+        entry's uncompressed size and raises an exception if space is
+        insufficient. Checked as each entry starts, so the check reflects the
+        free space that is actually left. When ``None`` (default), no
+        pre-extraction space check is performed.
+    native_keys : list of str
+        Platform keys (``mpos.platform.native_keys()``) whose native files are
+        installed. The parameter exists so tests can pretend to be a board.
     """
 
-    def __init__(self, dest_folder, expected_app_name, free_space_limit=None):
+    def __init__(self, dest_folder, expected_app_name, free_space_limit=None,
+                 native_keys=None):
         if not dest_folder:
             raise ValueError("dest_folder required")
         if not expected_app_name:
@@ -144,6 +166,8 @@ class StreamingUnzip:
         self.dest_folder = dest_folder.rstrip(os.sep)
         self.expected_app_name = expected_app_name
         self.free_space_limit = free_space_limit
+        self.native_keys = (mpos_platform.native_keys()
+                            if native_keys is None else list(native_keys))
         self._buf = bytearray()
         self._state = "idle"
         self._current_header = None
@@ -151,23 +175,46 @@ class StreamingUnzip:
         self._deflate_buf = None
         self._crc = 0
         self._files_extracted = 0
+        self._files_skipped = 0
         self._first_header_checked = False
-        self._total_uncompressed_estimate = 0
+        # The manifest's "native" map: None until the manifest is extracted,
+        # then a dict (empty when the app ships no native files).
+        self._native = None
+        self._native_files = ()
+        self._selected_native = ()
+        self._manifest_buf = None
+        # The running extent sink for a selected .xip, if any.
+        self._extent = None
+        self._extent_target = None
+        self._skip_remaining = 0
 
     def feed(self, data):
         """Inject the next download chunk (bytes)."""
         if not data:
             return
         self._buf += data
-        while True:
-            if self._state == "idle":
-                if not self._parse_next_header():
+        try:
+            while True:
+                if self._state == "idle":
+                    if not self._parse_next_header():
+                        break
+                elif self._state == "data":
+                    if not self._consume_data():
+                        break
+                elif self._state == "skip":
+                    if not self._consume_skip():
+                        break
+                else:
                     break
-            elif self._state == "data":
-                if not self._consume_data():
-                    break
-            else:
-                break
+        except Exception:
+            self._abort_extent()
+            if self._file_fd is not None:
+                try:
+                    self._file_fd.close()
+                except OSError:
+                    pass
+                self._file_fd = None
+            raise
 
     def finish(self):
         """Called when the download stream is closed.
@@ -185,7 +232,20 @@ class StreamingUnzip:
             except OSError:
                 pass
             self._file_fd = None
+        if self._extent is not None:
+            logger.warning(
+                "finish() called with an extent still open: %s (truncated download?)",
+                self._extent_target,
+            )
+            self._abort_extent()
         self._state = "idle"
+
+    def _abort_extent(self):
+        writer = self._extent
+        self._extent = None
+        self._extent_target = None
+        if writer is not None:
+            writer.abort()
 
     def _parse_next_header(self):
         """Try to parse a local file header from ``self._buf``.
@@ -235,14 +295,6 @@ class StreamingUnzip:
                 self._first_header_checked = True
                 _makedirs(self.dest_folder)
 
-                # After validation of the top dir, sanity-check free space
-                # by summing all headers we can currently see.
-                if self.free_space_limit is not None:
-                    self._total_uncompressed_estimate = _estimate_remaining(
-                        self._buf[header_total:], vals[_FH_UNCOMPRESSED_SIZE]
-                    )
-                    _run_free_space_check(self.free_space_limit, self._total_uncompressed_estimate)
-
                 # The top-level directory entry itself is consumed (skip)
                 self._buf = self._buf[header_total:]
                 continue
@@ -251,7 +303,6 @@ class StreamingUnzip:
 
             # Every subsequent entry must live under the top-level dir
             if not filename.startswith(self.expected_app_name + "/"):
-                extra = filename.split("/")[0] if "/" in filename else filename
                 raise RuntimeError(
                     "Out-of-spec archive: entry '%s' is outside top-level dir '%s'"
                     % (filename, self.expected_app_name)
@@ -274,14 +325,31 @@ class StreamingUnzip:
                 self._files_extracted += 1
                 continue
 
-            # File entry
+            action = self._classify(filename, vals[_FH_UNCOMPRESSED_SIZE])
+
+            if action == "skip":
+                self._skip_remaining = vals[_FH_COMPRESSED_SIZE]
+                self._current_header = {"filename": filename}
+                if self._skip_remaining <= 0:
+                    # Nothing to discard: keep parsing headers in this buffer.
+                    self._finish_skip()
+                    continue
+                self._state = "skip"
+                return True
+
             target = self.dest_folder + os.sep + filename
             parent = target.rsplit(os.sep, 1)[0]
             if parent and parent != self.dest_folder:
                 _makedirs(parent)
 
-            self._file_fd = open(target, "wb")
             self._crc = 0
+            if action == "xip":
+                self._extent_target = target
+                self._extent = extent_files.Writer(
+                    vals[_FH_UNCOMPRESSED_SIZE], extent_files.XIP_ALIGN_BLOCKS)
+                self._file_fd = None
+            else:
+                self._file_fd = open(target, "wb")
             self._current_header = {
                 "filename": filename,
                 "target": target,
@@ -290,12 +358,106 @@ class StreamingUnzip:
                 "crc": vals[_FH_CRC],
                 "method": comp_method,
                 "header_total": header_total,
+                "action": action,
             }
+            if filename == MANIFEST_NAME:
+                self._manifest_buf = bytearray()
             self._state = "data"
             return True
 
+    def _classify(self, filename, uncompressed_size):
+        """Decide what to do with an entry: extract, xip, or skip.
+
+        Native files are the ones listed under any ``"native"`` key. The
+        selected ones belong to this host; the others are for another board or
+        desktop and are not installed.
+        """
+        native = self._native
+        if native is not None and filename in self._native_files:
+            if filename not in self._selected_native:
+                self._files_skipped += 1
+                return "skip"
+
+        # The manifest must come before the files it describes: a native file
+        # that arrives earlier cannot be classified, and extracting it "just in
+        # case" would leave a file for the wrong platform on the device.
+        if native is None and self._looks_native(filename):
+            raise RuntimeError(
+                "Out-of-spec archive: '%s' comes before %s"
+                % (filename, MANIFEST_NAME)
+            )
+
+        if self.free_space_limit is not None:
+            _run_free_space_check(self.free_space_limit, uncompressed_size)
+
+        if filename.endswith(".xip") and extent_files.available():
+            return "xip"
+        return "extract"
+
+    @staticmethod
+    def _looks_native(filename):
+        return filename.endswith(".xip") or (
+            filename.startswith("module_") and filename.endswith(".mpy"))
+
+    def _parse_manifest(self):
+        data = self._manifest_buf
+        self._manifest_buf = None
+        if not data:
+            self._native = {}
+            return
+        try:
+            manifest = json.loads(bytes(data).decode("utf-8"))
+        except Exception as error:
+            raise RuntimeError(
+                "Invalid %s in %s: %s"
+                % (MANIFEST_NAME, self.expected_app_name, error))
+        native = manifest.get("native")
+        if not isinstance(native, dict):
+            self._native = {}
+            return
+        files = {}
+        selected = {}
+        for key in native:
+            entries = native[key]
+            if not isinstance(entries, list):
+                raise RuntimeError(
+                    "Invalid native list for '%s' in %s"
+                    % (key, self.expected_app_name))
+            for name in entries:
+                files[name] = True
+                if key in self.native_keys:
+                    selected[name] = True
+        self._native = native
+        self._native_files = tuple(files)
+        self._selected_native = tuple(selected)
+
+    def _consume_skip(self):
+        """Discard the body of an entry that is for another platform."""
+        if self._skip_remaining <= 0:
+            self._finish_skip()
+            return True
+        available = min(len(self._buf), self._skip_remaining)
+        if available == 0:
+            return False
+        self._buf = self._buf[available:]
+        self._skip_remaining -= available
+        if self._skip_remaining <= 0:
+            self._finish_skip()
+        return True
+
+    def _finish_skip(self):
+        self._current_header = None
+        self._state = "idle"
+        self._files_extracted += 1
+
+    def _write_out(self, data):
+        if self._extent is not None:
+            self._extent.write(data)
+        elif self._file_fd is not None:
+            self._file_fd.write(data)
+
     def _consume_data(self):
-        """Write file data from ``self._buf`` into the current output file.
+        """Write file data from ``self._buf`` into the current output sink.
 
         Returns ``True`` if more work may be possible; ``False`` to wait for
         more data.
@@ -312,12 +474,10 @@ class StreamingUnzip:
             if available == 0:
                 return False
             data = bytes(self._buf[:available])
-            self._file_fd.write(data)
-            try:
-                import binascii
-                self._crc = binascii.crc32(data, self._crc)
-            except ImportError:
-                pass
+            self._write_out(data)
+            self._crc = _crc32(data, self._crc)
+            if info["filename"] == MANIFEST_NAME:
+                self._capture_manifest(data)
             self._buf = self._buf[available:]
             self._current_header["compressed_size"] = total_data - available
             if self._current_header["compressed_size"] <= 0:
@@ -337,28 +497,26 @@ class StreamingUnzip:
             self._buf = self._buf[available:]
             self._current_header["compressed_size"] = total_data - available
             if self._current_header["compressed_size"] <= 0:
-                try:
-                    import deflate
-                    comp_stream = io.BytesIO(self._deflate_buf)
-                    with deflate.DeflateIO(comp_stream, deflate.RAW, 15) as d:
-                        decompressed = d.read()
-                except ImportError:
-                    import zlib
-                    decompressed = zlib.decompress(bytes(self._deflate_buf), -15)
-                self._file_fd.write(decompressed)
-                try:
-                    import binascii
-                    self._crc = binascii.crc32(decompressed, self._crc)
-                except ImportError:
-                    pass
+                decompressed = _inflate(self._deflate_buf)
                 self._deflate_buf = None
+                self._write_out(decompressed)
+                self._crc = _crc32(decompressed, self._crc)
+                if info["filename"] == MANIFEST_NAME:
+                    self._capture_manifest(decompressed)
                 self._finish_file()
             return True
 
         return False
 
+    def _capture_manifest(self, data):
+        if self._manifest_buf is None:
+            return
+        if len(self._manifest_buf) + len(data) > _MANIFEST_MAX:
+            raise RuntimeError("%s in %s is too large" % (MANIFEST_NAME, self.expected_app_name))
+        self._manifest_buf += data
+
     def _finish_file(self):
-        """Close current file and validate CRC if possible."""
+        """Close the current sink, validate its CRC, and commit an extent."""
         if self._file_fd is not None:
             try:
                 self._file_fd.close()
@@ -376,62 +534,53 @@ class StreamingUnzip:
                     expected,
                     got,
                 )
+                if self._extent is not None:
+                    self._abort_extent()
                 raise RuntimeError(
                     "CRC mismatch for %s: expected %08x got %08x"
                     % (info["filename"], expected, got)
                 )
+        extent = self._extent
+        target = self._extent_target
+        self._extent = None
+        self._extent_target = None
+        if extent is not None:
+            try:
+                extent.commit(target, info["crc"] & 0xFFFFFFFF)
+            except Exception:
+                extent.abort()
+                raise
+        if info["filename"] == MANIFEST_NAME and self._manifest_buf is not None:
+            self._parse_manifest()
         self._current_header = None
         self._state = "idle"
         self._files_extracted += 1
+
+
+def _crc32(data, crc):
+    try:
+        import binascii
+        return binascii.crc32(data, crc)
+    except ImportError:
+        return crc
+
+
+def _inflate(compressed):
+    try:
+        import deflate
+        return deflate.DeflateIO(
+            io.BytesIO(compressed), deflate.RAW, 15).read()
+    except ImportError:
+        import zlib
+        return zlib.decompress(bytes(compressed), -15)
 
 
 # ------------------------------------------------------------------
 # Helpers for free-space checking
 # ------------------------------------------------------------------
 
-def _estimate_remaining(buf, first_uncompressed):
-    """Scan the remaining buffer for all local headers and sum uncompressed sizes.
-
-    Called immediately after validating the first header (which is the
-    top-level directory).  ``first_uncompressed`` is 0 for a directory entry.
-    This is a quick scan of headers already in ``buf``; it does NOT attempt
-    to parse across large file bodies that span future chunks.
-    """
-    total = first_uncompressed
-    b = bytearray(buf)
-    while True:
-        if len(b) < _LOCAL_HEADER_SIZE:
-            break
-        if bytes(b[:4]) != _LOCAL_HEADER_MAGIC:
-            idx = b.find(_LOCAL_HEADER_MAGIC, 1)
-            if idx == -1:
-                break
-            b = b[idx:]
-            continue
-        vals = struct.unpack(_LOCAL_HEADER_STRUCT, b[:_LOCAL_HEADER_SIZE])
-        fname_len = vals[_FH_FILENAME_LENGTH]
-        extra_len = vals[_FH_EXTRA_FIELD_LENGTH]
-        header_total = _LOCAL_HEADER_SIZE + fname_len + extra_len
-        if len(b) < header_total:
-            break
-        total += vals[_FH_UNCOMPRESSED_SIZE]
-        compressed_size = vals[_FH_COMPRESSED_SIZE]
-        if len(b) >= header_total + compressed_size:
-            b = b[header_total + compressed_size:]
-        else:
-            remainder = b[header_total:]
-            idx = remainder.find(_LOCAL_HEADER_MAGIC)
-            if idx >= 0:
-                b = b[header_total + idx:]
-            else:
-                break
-        if len(b) < _LOCAL_HEADER_SIZE:
-            break
-    return total
-
-
 def _run_free_space_check(limit_or_callable, required_bytes):
-    """Invoke the user's free-space check.
+    """Invoke the user's free-space check for one entry.
 
     If ``limit_or_callable`` is an integer, raise ``RuntimeError`` when
     ``required_bytes`` exceeds it.  If it is callable, call it with

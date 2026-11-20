@@ -77,6 +77,7 @@ from .ui import focus_direction
 
 # Utility modules
 from . import ui
+from . import platform
 from . import shared_preferences
 from . import net
 from . import content
@@ -134,7 +135,7 @@ __all__ = (
     "get_all_children", "simulate_long_press", "wait_for_text", "wait_for_widget",
     "retry_action_until", "wait_for_focus",
     # Submodules
-    "ui", "shared_preferences", "net", "content", "time", "sensor_manager",
+    "ui", "platform", "shared_preferences", "net", "content", "time", "sensor_manager",
     "camera_manager", "audio",
     # Timezone utilities
     "TimeZone"

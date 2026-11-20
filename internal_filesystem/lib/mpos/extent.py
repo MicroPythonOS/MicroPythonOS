@@ -25,6 +25,8 @@ _CHUNK = 4096
 # A window may not contain a directory pair: metadata is moved by littlefs
 # itself, not by the defragmenter.
 _NOCONTIG = 129
+# An XIP core is mapped into the ESP32 MMU, whose page is 64 KiB.
+XIP_ALIGN_BLOCKS = 16
 
 
 def _abs(path):
@@ -58,35 +60,88 @@ def largest_run(align=1):
     return lfs2e.largest_run(align)
 
 
-def _create(path, align):
+class Writer:
+    """A streaming extent: reserve the run, write chunks, then commit.
+
+    The installer writes a ZIP entry straight into flash as its bytes arrive,
+    so it cannot go through :meth:`ensure` (which streams a finished file).
+    The run is reserved up front because the ZIP header already says how long
+    the payload is; ``commit()`` then turns the reservation into the inode at
+    ``path``.
+    """
+
+    def __init__(self, length, align=1, defrag_first=True):
+        if lfs2e is None:
+            raise OSError("extent support is not available on this host")
+        length = int(length)
+        if length <= 0:
+            raise OSError("extent length must be positive")
+        self.length = length
+        self.offset = 0
+        self._crc = 0
+        self._done = False
+        try:
+            lfs2e.reserve(length, align)
+        except OSError as error:
+            block_size, _, _ = lfs2e.geometry()
+            need = (length + block_size - 1) // block_size
+            if not defrag_first or not error.args or error.args[0] != _NOCONTIG:
+                raise
+            if not defrag(need, align):
+                raise
+            lfs2e.reserve(length, align)
+
+    def write(self, data):
+        if self._done:
+            raise OSError("extent already committed")
+        if self.offset + len(data) > self.length:
+            raise OSError("extent write past its reserved length")
+        lfs2e.write(self.offset, data)
+        self._crc = binascii.crc32(data, self._crc)
+        self.offset += len(data)
+
+    def commit(self, path, crc=None):
+        """Turn the reservation into an extent inode, and return its info."""
+        if self._done:
+            raise OSError("extent already committed")
+        if self.offset != self.length:
+            raise OSError("extent has %d of %d bytes" % (self.offset, self.length))
+        if crc is None:
+            crc = self._crc & 0xFFFFFFFF
+        lfs2e.commit(_abs(path), crc)
+        self._done = True
+        return info(path)
+
+    def abort(self):
+        """Release the reservation (a no-op after a successful commit)."""
+        if self._done:
+            return
+        self._done = True
+        try:
+            lfs2e.abort()
+        except Exception:
+            pass
+
+
+def _create(path, align, defrag_first=True):
     path = _abs(path)
     size = os.stat(path)[6]
     if size <= 0:
         raise OSError("extent source is empty")
 
-    lfs2e.reserve(size, align)
+    writer = Writer(size, align, defrag_first)
     try:
-        crc = 0
-        offset = 0
         with open(path, "rb") as source:
             while True:
                 chunk = source.read(_CHUNK)
                 if not chunk:
                     break
-                lfs2e.write(offset, chunk)
-                crc = binascii.crc32(chunk, crc)
-                offset += len(chunk)
-        if offset != size:
+                writer.write(chunk)
+        if writer.offset != size:
             raise OSError("extent source changed while reading")
-        lfs2e.commit(path, crc & 0xFFFFFFFF)
-        # The descriptor is the authority for the payload length; read it back
-        # so callers always get (offset, length, crc).
-        return info(path)
+        return writer.commit(path)
     except Exception:
-        try:
-            lfs2e.abort()
-        except Exception:
-            pass
+        writer.abort()
         raise
 
 
@@ -282,13 +337,4 @@ def ensure(path, align=1, defrag_first=True):
     if size <= 0:
         raise OSError("empty file is not an extent: %s" % path)
 
-    try:
-        return _create(path, align)
-    except OSError as error:
-        if not defrag_first or not error.args or error.args[0] != _NOCONTIG:
-            raise
-        block_size, _, _ = lfs2e.geometry()
-        need = (size + block_size - 1) // block_size
-        if not defrag(need, align):
-            raise
-        return _create(path, align)
+    return _create(path, align, defrag_first)
