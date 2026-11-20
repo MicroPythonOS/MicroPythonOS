@@ -1,12 +1,13 @@
 #!/bin/bash
 # Build the Doom engine as an mpos_core blob.
 #
-#   ./build_doom_core.sh          -> doom_core.bin / .elf / .map
+#   ./build_doom_core.sh          -> build_core/esp32s3.xip / .elf / .map
 #
-# The blob is linked for fixed addresses (see doom_core.ld) and written into the
-# retro-core partition:
+# The blob is linked for fixed addresses (see doom_core.ld). In a release it is
+# shipped in the app package as esp32s3.xip and installed as a littlefs2e
+# extent; for a stand-in partition it can still be flashed instead:
 #
-#   esptool.py write_flash 0x710000 doom_core.bin
+#   esptool.py write_flash 0x710000 build_core/esp32s3.xip
 #
 # The engine sources are the same generated tree the native module uses
 # (tools/dataless.py rewrites doomgeneric so it has no initialised data), so
@@ -73,16 +74,16 @@ xtensa-esp32-elf-gcc -nostdlib -nostartfiles \
     -Wl,-Map,"$build/doom_core.map" \
     -o "$build/doom_core.elf" "$build"/*.o -lgcc
 
-xtensa-esp32-elf-objcopy -O binary "$build/doom_core.elf" "$build/doom_core.bin"
+xtensa-esp32-elf-objcopy -O binary "$build/doom_core.elf" "$build/esp32s3.xip"
 
 echo "--- sections (name size vma lma)"
 xtensa-esp32-elf-objdump -h "$build/doom_core.elf" |
     awk '$2 ~ /^\./ && $2 != ".debug" {print $2, $3, $4, $5}'
-echo "--- size: $(stat -c%s "$build/doom_core.bin") bytes"
+echo "--- size: $(stat -c%s "$build/esp32s3.xip") bytes"
 
 # The entry table states where the loader must map the blob; the data offset
 # depends on the text size, so it is patched here from the linked sections.
-python3 - "$build/doom_core.elf" "$build/doom_core.bin" <<'PYEOF'
+python3 - "$build/doom_core.elf" "$build/esp32s3.xip" <<'PYEOF'
 import struct, subprocess, sys
 
 elf, blob = sys.argv[1], sys.argv[2]

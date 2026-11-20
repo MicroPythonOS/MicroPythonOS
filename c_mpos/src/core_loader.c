@@ -16,7 +16,8 @@
 // Python API:
 //
 //     mpos_core.start(label, offset, size, present_band, palette, poll_key,
-//                     read_file, alloc, log, wad_path, width, height)
+//                     read_file, alloc, log, wad_path, width, height, frame,
+//                     band_rows[, expected_crc[, config_dir]])
 //     mpos_core.tick(now_ms)
 //     mpos_core.stop()
 //     mpos_core.abi_version
@@ -30,6 +31,7 @@
 
 #include "esp_partition.h"
 #include "esp_heap_caps.h"
+#include "esp_rom_crc.h"
 #include "esp_mmu_map.h"
 #include "hal/mmu_hal.h"
 #include "hal/mmu_types.h"
@@ -326,9 +328,10 @@ static void abi_log(void *host, const char *text) {
 
 static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     // start(label, offset, size, present_band, palette, poll_key, read_file,
-    //       file_size, log, wad_path, width, height, frame, band_rows)
-    if (n_args != 14) {
-        mp_raise_TypeError(MP_ERROR_TEXT("start() takes 14 arguments"));
+    //       file_size, log, wad_path, width, height, frame, band_rows,
+    //       expected_crc=0, config_dir=None)
+    if (n_args < 14 || n_args > 16) {
+        mp_raise_TypeError(MP_ERROR_TEXT("start() takes 14 to 16 arguments"));
     }
     if (s_active) {
         mp_raise_ValueError(MP_ERROR_TEXT("a core is already running"));
@@ -355,12 +358,29 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     // Read the entry table through a temporary data mapping to learn where the
     // blob wants to live. The paddr must be page aligned: the blob is mapped
     // at exactly load_addr, so the flash page must start there too.
+    uint32_t expected_crc = 0;
+    if (n_args > 14 && args[14] != mp_const_none) {
+        expected_crc = (uint32_t)mp_obj_get_int_truncated(args[14]);
+    }
+
     const void *tmp = NULL;
     esp_partition_mmap_handle_t tmp_handle = 0;
     esp_err_t err = esp_partition_mmap(partition, offset, size,
                                        ESP_PARTITION_MMAP_DATA, &tmp, &tmp_handle);
     if (err != ESP_OK || tmp == NULL) {
         mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("core read failed: %d"), (int)err);
+    }
+    // Verify the payload through the temporary mapping, before anything is
+    // mapped executable: a corrupt or overwritten core (a stock littlefs write
+    // may treat an extent's blocks as free) is refused here rather than run.
+    if (expected_crc != 0) {
+        uint32_t got = (uint32_t)esp_rom_crc32_le(0, (const uint8_t *)tmp, (uint32_t)size);
+        if (got != expected_crc) {
+            esp_partition_munmap(tmp_handle);
+            mp_raise_msg_varg(&mp_type_OSError,
+                              MP_ERROR_TEXT("core CRC mismatch: expected %08x, got %08x"),
+                              (unsigned)expected_crc, (unsigned)got);
+        }
     }
     const mpos_core_entry_t *probe = (const mpos_core_entry_t *)tmp;
     if (probe->abi_version != MPOS_CORE_ABI_VERSION || probe->init == NULL) {
@@ -572,7 +592,11 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     s_abi.frame = s_frame;
     s_abi.band_rows = s_band_rows;
 
-    int result = s_entry->init(&s_abi, mp_obj_str_get_str(args[9]));
+    const char *config_dir = NULL;
+    if (n_args > 15 && args[15] != mp_const_none) {
+        config_dir = mp_obj_str_get_str(args[15]);
+    }
+    int result = s_entry->init(&s_abi, mp_obj_str_get_str(args[9]), config_dir);
     if (result != 0) {
         s_entry->stop(&s_abi);
         unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size, s_text_alias);
@@ -592,7 +616,7 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     }
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mpos_core_start_obj, 14, 14, mpos_core_start);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mpos_core_start_obj, 14, 16, mpos_core_start);
 
 static mp_obj_t mpos_core_tick(mp_obj_t now_obj) {
     if (!s_active || s_entry == NULL) {

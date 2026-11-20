@@ -528,6 +528,18 @@ class NativeActivity(Activity):
         self.hint = self._add_label(text)
         self._hint_until = 0
 
+    def set_message(self, text):
+        """Replace the standing message's text, reusing its label.
+
+        A launch that reports progress would otherwise create and delete a
+        label for every update.
+        """
+        if self.hint is None:
+            self.hint = self._add_label(text)
+            self._hint_until = 0
+        else:
+            self.hint.set_text(text)
+
     def _expire_hint(self, now):
         if (self.hint is not None and self._hint_until
                 and time.ticks_diff(now, self._hint_until) >= 0):

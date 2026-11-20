@@ -3,6 +3,9 @@ MPY_DIR = ../../lvgl_micropython/lib/micropython/
 # The engine sources are vendored pristine in doomgeneric/ and rewritten into
 # gen/ by tools/dataless.py at build time (a natmod has no data section and no
 # static BSS). gen/ is generated, not committed.
+#
+# MOD is the file name the app imports: module_<mpy-arch>.mpy, the name the
+# installer selects from the manifest's "native" map.
 ENGINE = \
 	gen/dummy.c gen/am_map.c gen/doomdef.c gen/doomstat.c gen/dstrings.c \
 	gen/d_event.c gen/d_items.c gen/d_iwad.c gen/d_loop.c gen/d_main.c \
@@ -60,8 +63,8 @@ ifeq ($(ARCH),)
 .PHONY: all $(ARCHES) clean
 
 all:
-	$(MAKE) -f $(lastword $(MAKEFILE_LIST)) ARCH=x64 MOD=doom_x64 BUILD=build_x64
-	$(MAKE) -f $(lastword $(MAKEFILE_LIST)) ARCH=xtensawin MOD=doom_xtensawin BUILD=build_xtensawin
+	$(MAKE) -f $(lastword $(MAKEFILE_LIST)) ARCH=x64 MOD=module_x64 BUILD=build_x64
+	$(MAKE) -f $(lastword $(MAKEFILE_LIST)) ARCH=xtensawin MOD=module_xtensawin BUILD=build_xtensawin
 
 clean:
 	rm -rf build_x64 build_xtensawin gen *.mpy

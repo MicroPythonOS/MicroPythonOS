@@ -70,7 +70,6 @@ fi
 # These apps are for testing, or aren't ready yet:
 blacklist="com.quasikili.quasidoodle" # com.quasikili.quasidoodle doesn't work on touch screen devices
 blacklist="$blacklist com.micropythonos.errortest com.micropythonos.errortest_delayed com.micropythonos.errortest_resume" # intentional bad apps for testing
-blacklist="$blacklist com.micropythonos.doom" # not ready yet
 blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.weather" # not ready yet
 
 echo "[" | tee -a "$outjson"

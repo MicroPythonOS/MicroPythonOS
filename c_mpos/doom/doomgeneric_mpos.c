@@ -35,6 +35,7 @@
 #include "i_video.h"
 #include "doomstat.h"
 #include "d_main.h"
+#include "m_config.h"
 #include "m_menu.h"
 
 #include "doom_data_init.h"
@@ -64,6 +65,9 @@ int g_palette_ready;
 char *g_argv[8];
 char g_mb_buf[8];
 mp_obj_t g_wad_obj;
+// The engine keeps M_SetConfigDir's pointer for the whole session, so the
+// Python string it came from has to stay alive too.
+mp_obj_t g_config_obj;
 
 // Presentation target: the host's RGB565 surface, and the Python callback that
 // flushes each band. A borrowed reference - the app holds the bound method for
@@ -154,7 +158,15 @@ void DG_SetWindowTitle(const char *title) {
 
 // ---- module functions -----------------------------------------------------
 
-static mp_obj_t create(mp_obj_t wad_obj, mp_obj_t mb_obj) {
+static mp_obj_t create(size_t n_args, const mp_obj_t *args) {
+    mp_obj_t wad_obj = args[0];
+    mp_obj_t mb_obj = args[1];
+    if (n_args > 2 && args[2] != mp_const_none) {
+        // Where .default.cfg and .savegame/ go, absolute: the host does not
+        // change the process working directory for the engine.
+        g_config_obj = args[2];
+        M_SetConfigDir((char *)mp_obj_str_get_str(args[2]));
+    }
     if (g_created) {
         // The app was started again after quitting: the module outlives the
         // activity, so the engine is still loaded. Clear the request and put
@@ -193,7 +205,7 @@ static mp_obj_t create(mp_obj_t wad_obj, mp_obj_t mb_obj) {
     doomgeneric_Create(5, g_argv);
     mpos_sound_report();
     return mp_const_none;
-}static MP_DEFINE_CONST_FUN_OBJ_2(create_obj, create);
+}static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(create_obj, 2, 3, create);
 
 static void present_frame(void);
 

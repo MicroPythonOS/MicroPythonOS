@@ -1317,9 +1317,14 @@ void D_DoomMain (void)
     else
 #endif
     {
-        // Auto-detect the configuration dir.
-
-        M_SetConfigDir(NULL);
+        // Auto-detect the configuration dir, unless the port already chose
+        // one: a badge has no home directory, and its engine must write
+        // .default.cfg and savegames under the app's prefs without relying on
+        // the process working directory.
+        if (configdir == NULL)
+        {
+            M_SetConfigDir(NULL);
+        }
     }
 
     //!

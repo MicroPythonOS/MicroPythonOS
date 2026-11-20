@@ -21,6 +21,7 @@
 #include "i_video.h"
 #include "doomstat.h"
 #include "d_main.h"
+#include "m_config.h"
 #include "m_menu.h"
 
 
@@ -70,6 +71,7 @@ static uint16_t s_surface[DOOMGENERIC_RESY * DOOMGENERIC_RESX];  // rotated, RGB
 static uint16_t s_tile[32][32];
 
 static char s_wad_path[128];
+static char s_config_dir[128];
 static char s_zone_buf[8];
 static char *s_argv[8];
 
@@ -279,7 +281,8 @@ static int core_quit_requested(void) {
     return mpos_quit_requested;
 }
 
-static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
+static int core_init(const mpos_core_abi_t *abi, const char *wad_path,
+                     const char *config_dir) {
     mpos_libc_init(abi);
     mpos_sound_set_abi(abi);
     mpos_sound_module_init();
@@ -293,6 +296,17 @@ static int core_init(const mpos_core_abi_t *abi, const char *wad_path) {
         return -1;
     }
     memcpy(s_wad_path, wad_path, len + 1);
+
+    // Where .default.cfg and .savegame/ go. Absolute, because the host keeps
+    // the process working directory; d_main only defaults it when it is unset.
+    if (config_dir != NULL && config_dir[0] != '\0') {
+        size_t dir_len = strlen(config_dir);
+        if (dir_len >= sizeof(s_config_dir)) {
+            return -2;
+        }
+        memcpy(s_config_dir, config_dir, dir_len + 1);
+        M_SetConfigDir(s_config_dir);
+    }
 
     s_argv[0] = "doom";
     s_argv[1] = "-iwad";

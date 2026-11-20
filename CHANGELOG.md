@@ -11,6 +11,26 @@ Frameworks:
   `open(path, "wb")` converts an extent back to an ordinary file, and extent
   creation defragments a fragmented filesystem by relocating the files in the
   target window. Native cores can be stored and executed this way.
+- App packages can carry a `"native"` map in `MANIFEST.JSON` (platform key to
+  file names) and the App Store installs only the files for the running host:
+  `<soc>.xip` for a flash-resident core, `module_<arch>.mpy` for a native
+  module. One package then serves badges and desktops. A selected `.xip` is
+  streamed straight into a littlefs2e extent at install time, so a large engine
+  has no first-launch conversion step; its entry CRC is stored with the extent
+  and checked before the core is mapped. `mpos.platform` is the single place
+  that derives the two keys from `sys.implementation`.
+- `mpos.zipasset` reads one entry out of a `.zip` into a buffer, with progress
+  and a CRC check, so an app can ship its read-only data deflated and unpack it
+  into PSRAM at launch instead of keeping it expanded on flash.
+- `mpos.extent.Writer` streams data into a reserved extent (reserve, write
+  chunks, commit) for callers that produce the bytes as they arrive; the
+  installer uses it for `.xip` entries.
+- `mpos_core.start()` takes an optional expected CRC32 and refuses a corrupt
+  engine before mapping it executable. A stock littlefs write can overwrite an
+  extent's blocks (it sees them as free), and this turns that into a clear
+  "engine is corrupt, reinstall" instead of a crash.
+- `NativeActivity.set_message()` replaces the standing message text in place, so
+  a launch can report progress without creating a label per update.
 - Multi-touch: the GT911 and FocalTech drivers read every touch point (`get_touches()`) instead of only the first, and `mpos.ui.multitouch.MultiTouchGesture` reports pinch scale, rotation and pan from two fingers. A second finger is gesture-only: the driver sends the contact to LVGL as released until every finger lifts, so a pinch cannot click the widget under it or trigger the back-swipe.
 - AudioManager: `get()` rebuilds a singleton whose initialisation never finished. A
   constructor call that raised (a wrong keyword argument, a preferences read failing

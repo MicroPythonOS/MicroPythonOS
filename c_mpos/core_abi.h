@@ -42,7 +42,7 @@
 
 #include <stdint.h>
 
-#define MPOS_CORE_ABI_VERSION 7
+#define MPOS_CORE_ABI_VERSION 8
 
 /* Flags for mpos_core_entry_t.flags. */
 #define MPOS_CORE_FLAG_FRAMEBUFFER_PALETTED (1u << 0)  /* 8-bit indices */
@@ -127,8 +127,10 @@ typedef struct mpos_core_abi {
  * copies the table out through a temporary data mapping before it maps
  * anything, so this struct is never read through the instruction window.
  *
- * init(abi, wad_path): return 0 on success; the loader turns a negative value
- *     into an OSError. The ABI pointer stays valid until stop().
+ * init(abi, wad_path, config_dir): return 0 on success; the loader turns a
+ *     negative value into an OSError. The ABI pointer stays valid until
+ *     stop(). `config_dir` is where the engine writes its configuration and
+ *     savegames (absolute), or NULL/"" for the engine's own default.
  * tick(abi, now_ms): run one engine frame; the ABI pointer is passed again so a
  *     core with no writable memory of its own still works.
  * stop(abi): release the core's resources; the partition may then be remapped.
@@ -176,7 +178,8 @@ typedef struct mpos_core_entry {
      */
     uint32_t arena_addr;
     uint32_t arena_size;
-    int (*init)(const mpos_core_abi_t *abi, const char *wad_path);
+    int (*init)(const mpos_core_abi_t *abi, const char *wad_path,
+                const char *config_dir);
     void (*tick)(const mpos_core_abi_t *abi, uint32_t now_ms);
     void (*stop)(const mpos_core_abi_t *abi);
     void (*audio_mix)(int16_t *dst, int frames);

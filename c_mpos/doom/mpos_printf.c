@@ -284,10 +284,20 @@ static int mpos_vformat(mpos_emit_t emit, void *ctx, const char *fmt,
                 while (s[max] && (precision < 0 || max < precision)) {
                     max++;
                 }
-                for (int i = 0; i < max; i++) {
-                    text[len++] = s[i];
+                // A path or a message can be longer than `text`, so emit it
+                // instead of copying it into that fixed buffer.
+                const int padding = (width > max) ? width - max : 0;
+                if (!left) {
+                    emit_repeat(emit, ctx, ' ', padding);
                 }
-                break;
+                for (int i = 0; i < max; i++) {
+                    emit(ctx, s[i]);
+                }
+                if (left) {
+                    emit_repeat(emit, ctx, ' ', padding);
+                }
+                written += max + padding;
+                continue;
             }
             case 'f':
             case 'F':

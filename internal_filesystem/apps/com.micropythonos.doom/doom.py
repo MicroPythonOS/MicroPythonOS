@@ -3,11 +3,11 @@
 The engine is doomgeneric, built twice because the two hosts need different
 things from it:
 
-* a badge gets the **flash-resident core**: the engine is linked for a fixed
-  address, stored as a littlefs2e extent in the app directory and mapped from
-  flash through the cache (``c_mpos/core_abi.h``), so a Doom-sized engine never
-  has to fit in executable RAM (~7 KB on an S3);
-* a desktop gets the **native module** (``doom_x64.mpy``), an ordinary
+* a badge gets the **flash-resident core** (``<soc>.xip``): the engine is
+  linked for a fixed address, stored as a littlefs2e extent in the app
+  directory and mapped from flash through the cache (``c_mpos/core_abi.h``), so
+  a Doom-sized engine never has to fit in executable RAM (~7 KB on an S3);
+* a desktop gets the **native module** (``module_<arch>.mpy``), an ordinary
   MicroPython module, because there is no MMU window to map a flash partition
   into and the blob is Xtensa code anyway.
 
@@ -17,13 +17,17 @@ flag), so everything above them is shared: ``mpos.ui.native_activity`` owns the
 surface, the pacing, the labels and the frame loop, and this file is the game's
 own business - which engine, which WAD, which controls.
 
+The WAD ships deflated (``doom1.wad.zip``) and is unpacked into a RAM buffer at
+launch: the core reads it through the host's file callbacks, so the engine
+touches PSRAM instead of littlefs.
+
 Controls - touch (any touch panel). Hold the device sideways while playing:
 the left thumb gets a joystick and the right thumb three bands.
 
     left half       joystick: drag left/right to turn, up/down to walk
     right, bottom   fire (hold to keep shooting)
     right, middle   use / open
-    right, top      menu / back
+    right, top      menu / back (hold it for the licenses)
 
 Controls - keyboard, mouse and badge buttons:
 
@@ -36,23 +40,40 @@ Controls - keyboard, mouse and badge buttons:
                         Doom sees it (on a badge that is the X button)
 """
 
+import os
 import sys
 import time
 
 import lvgl as lv
 
-from mpos import extent
 from mpos.ui.input_manager import InputManager
 from mpos.ui.native_activity import NativeActivity
 from mpos.ui.native_input import ThumbZones
 from doom_overlay import TouchOverlay
 
+try:
+    # The host's platform keys (mpos.platform): which engine file this firmware
+    # installs. A firmware before it cannot run a multi-platform package.
+    from mpos import platform as mpos_platform
+except ImportError:
+    mpos_platform = None
+
+try:
+    from mpos import extent
+except ImportError:
+    extent = None
+
+try:
+    from mpos import zipasset
+except ImportError:
+    zipasset = None
+
 GAME_WIDTH = 320
 GAME_HEIGHT = 200
 
-# The engine blob is stored as a littlefs2e extent in the app directory and
-# mapped from there; it is not read through the filesystem at run time.
-CORE_ALIGN_BLOCKS = 16  # 64 KiB with 4 KiB blocks: the ESP32 MMU page
+# The partition the core loader reads the extent from. The app's extent lives
+# in the littlefs partition, not in a dedicated core partition.
+CORE_PARTITION = "vfs"
 
 # Doom's own tic rate is 35, and the present is what limits a full-screen frame
 # to ~30fps on the badge.
@@ -79,6 +100,16 @@ HINT_TEXT = "Hold sideways: the outlined areas are touch controls"
 # The zone map is a hint, not chrome: it is shown at start and whenever the
 # menu opens, then hidden so a heavy frame keeps its whole refresh slot.
 TOUCH_HINT_MS = 6000
+# Holding the menu band instead of tapping it opens the licenses screen.
+LICENSE_HOLD_MS = 600
+
+WAD_ZIP_NAME = "doom1.wad.zip"
+# The engine writes .default.cfg and .savegame/ relative to the working
+# directory, so it runs inside the app's prefs.
+PREFS_DIR = "prefs/com.micropythonos.doom"
+# The desktop module reads the WAD with stdio (no host callbacks), so its
+# deflated WAD has to exist as a file.
+CACHE_DIR = "cache/com.micropythonos.doom"
 
 
 def _app_directory():
@@ -86,6 +117,29 @@ def _app_directory():
     if path and "/" in path:
         return path.rsplit("/", 1)[0]
     return "apps/com.micropythonos.doom"
+
+
+def _absolute(path):
+    """An absolute VFS path, resolved against the current directory."""
+    if path.startswith("/"):
+        return path
+    cwd = os.getcwd()
+    if cwd.endswith("/"):
+        return cwd + path
+    return cwd + "/" + path
+
+
+def _makedirs(path):
+    parts = path.split("/")
+    acc = ""
+    for part in parts:
+        if not part:
+            continue
+        acc += "/" + part
+        try:
+            os.mkdir(acc)
+        except OSError:
+            pass
 
 
 WAD_CANDIDATES = (
@@ -98,32 +152,48 @@ WAD_CANDIDATES = (
 )
 
 
-def find_core():
-    """Path of the core blob, or None. The app directory is authoritative."""
-    candidates = (
-        _app_directory() + "/core.bin",
-        "apps/com.micropythonos.doom/core.bin",
-        "/apps/com.micropythonos.doom/core.bin",
-        "core.bin",
-    )
-    for path in candidates:
+def engine_candidates():
+    """The engine file names this host installs (see mpos.platform)."""
+    names = []
+    if mpos_platform is not None:
+        chip = mpos_platform.soc()
+        if chip is not None:
+            names.append(chip + ".xip")
+        arch = mpos_platform.natmod_arch()
+        if arch is not None:
+            names.append("module_" + arch + ".mpy")
+    return names
+
+
+def find_engine():
+    """(path, file name) of the installed engine, or a RuntimeError saying why."""
+    if mpos_platform is None:
+        raise RuntimeError(
+            "Doom needs a newer MicroPythonOS (mpos.platform is missing)")
+    names = engine_candidates()
+    if not names:
+        raise RuntimeError("Doom has no engine for this platform")
+    for name in names:
+        path = _absolute(_app_directory() + "/" + name)
         try:
             open(path, "rb").close()
-            return path
-        except Exception:
+        except OSError:
             continue
-    return None
+        return path, name
+    raise RuntimeError(
+        "Doom's engine (%s) is not installed; reinstall Doom"
+        % (", ".join(names),))
 
 
 def find_wad(intent=None):
-    """First WAD that exists, or None."""
+    """First WAD that exists, as an absolute path, or None."""
     if intent is not None:
         try:
             extra = intent.extras.get("wad") if hasattr(intent, "extras") else None
         except Exception:
             extra = None
         if extra:
-            return extra
+            return _absolute(extra)
     for path in WAD_CANDIDATES:
         if path.startswith("/sdcard/"):
             try:
@@ -133,11 +203,95 @@ def find_wad(intent=None):
             except Exception:
                 continue
         try:
-            open(path, "rb").close()
-            return path
+            open(_absolute(path), "rb").close()
+            return _absolute(path)
         except Exception:
             continue
     return None
+
+
+class _WadSource:
+    """The WAD the engine reads: a real file, or a buffer served by the host.
+
+    The core's file callbacks are answered from ``buffer`` when it is set, so
+    the engine reads the WAD from PSRAM; ``name`` is the path it asks for. The
+    native module has no callbacks and always needs ``path``.
+    """
+
+    def __init__(self, name, size, path=None, buffer=None):
+        self.name = name
+        self.size = size
+        self.path = path
+        self.buffer = buffer
+
+    def read_into(self, offset, into):
+        """Serve ``into`` from the buffer; returns the byte count."""
+        if offset < 0 or offset >= self.size:
+            return 0
+        count = self.size - offset
+        if count > len(into):
+            count = len(into)
+        into[:count] = self.buffer[offset:offset + count]
+        return count
+
+
+def _wad_source_from_file(path):
+    try:
+        size = os.stat(path)[6]
+    except OSError:
+        return None
+    return _WadSource(path, size, path=path)
+
+
+def _wad_zip():
+    path = _absolute(_app_directory() + "/" + WAD_ZIP_NAME)
+    try:
+        open(path, "rb").close()
+    except OSError:
+        return None
+    return path
+
+
+def prepare_wad(intent, engine_name, loading):
+    """The WAD source for this launch, or None when there is no WAD at all.
+
+    A plain ``doom1.wad`` next to the app or on the SD card wins (it needs no
+    unpack). Otherwise the bundled ``doom1.wad.zip`` is inflated into a buffer
+    for the core, and extracted to a cache file for the desktop module.
+    """
+    path = find_wad(intent)
+    if path is not None:
+        return _wad_source_from_file(path)
+
+    archive = _wad_zip()
+    if archive is None:
+        return None
+    if zipasset is None:
+        raise RuntimeError(
+            "Doom needs a newer MicroPythonOS (no zipasset support)")
+
+    def progress(done, total):
+        loading("Unpacking WAD", done, total)
+
+    if engine_name == "core":
+        buffer, size = zipasset.load(archive, progress=progress)
+        return _WadSource(WAD_ZIP_NAME[:-4], size, buffer=buffer)
+
+    # A native module reads the WAD with stdio, so it needs a real file.
+    cache_dir = _absolute(CACHE_DIR)
+    target = cache_dir + "/" + WAD_ZIP_NAME[:-4]
+    buffer, size = zipasset.load(archive, progress=progress)
+    _makedirs(cache_dir)
+    with open(target, "wb") as out:
+        out.write(buffer)
+    return _WadSource(target, size, path=target)
+
+
+def prefs_dir():
+    """The engine's config/save directory, absolute and created."""
+    path = _absolute(PREFS_DIR)
+    _makedirs(path)
+    return path
 
 
 class _CoreEngine:
@@ -161,6 +315,7 @@ class _CoreEngine:
         self._surface = None
         self._keys = []
         self._files = {}
+        self._wad = None
         # ABI 7 added the request; an older core cannot make one.
         self._quit_query = getattr(mpos_core, "quit_requested", None)
 
@@ -180,27 +335,36 @@ class _CoreEngine:
             self._core.stop()
         except Exception:
             pass
+        if extent is None or not extent.available():
+            raise RuntimeError(
+                "Doom needs a newer MicroPythonOS (no littlefs2e extent support)")
+        path, name = find_engine()
+        if not name.endswith(".xip"):
+            raise RuntimeError("Doom has no XIP core for this SoC")
         # MicroPython does not trace C statics, so the callbacks live here for
         # as long as the core does.
         self._callbacks = (
             self._present_band, self._palette, self._poll_key,
             self._read_file, self._file_size, self._log)
-        core = find_core()
-        if core is None:
-            raise OSError("doom: core.bin is missing")
+        # A sideloaded (or older-installer) engine is a normal file: convert it
+        # once. The AppStore writes it as an extent at install time.
         offset, length, crc = extent.ensure(
-            core, align=CORE_ALIGN_BLOCKS, defrag_first=True)
-        self._core_file = core
+            path, align=extent.XIP_ALIGN_BLOCKS, defrag_first=True)
+        self._core_file = path
+        self._wad = wad
+        # The engine writes .default.cfg and .savegame/ here; it is absolute,
+        # so the engine never needs the process working directory.
+        self._config_dir = prefs_dir()
         self._core.start(
-            "vfs", offset, length,
+            CORE_PARTITION, offset, length,
             *self._callbacks,
-            wad, surface.width, surface.height,
-            surface.buffer, surface.rows_per_band)
+            wad.name, surface.width, surface.height,
+            surface.buffer, surface.rows_per_band, crc, self._config_dir)
         if __debug__:
             print("doom: core %s extent at 0x%x, %d bytes (crc %08x), "
                   "mapped 0x%x, %d bytes, wad %s" % (
-                      core, offset, length, crc,
-                      self._core.mapped(), self._core.mapped_size(), wad))
+                      path, offset, length, crc,
+                      self._core.mapped(), self._core.mapped_size(), wad.name))
 
     def resume(self):
         pass
@@ -233,8 +397,7 @@ class _CoreEngine:
                 pass
         self._files = {}
         self._keys = []
-
-    # -- audio ------------------------------------------------------------
+        self._wad = None
 
     # -- ABI callbacks ----------------------------------------------------
 
@@ -264,6 +427,8 @@ class _CoreEngine:
         return (code & 0xFF) | (0x100 if pressed else 0)
 
     def _read_file(self, path, offset, into):
+        if self._wad is not None and path == self._wad.name and self._wad.buffer is not None:
+            return self._wad.read_into(offset, into)
         file = self._files.get(path)
         if file is None:
             try:
@@ -277,9 +442,9 @@ class _CoreEngine:
         except Exception:
             return -1
 
-    @staticmethod
-    def _file_size(path):
-        import os
+    def _file_size(self, path):
+        if self._wad is not None and path == self._wad.name and self._wad.buffer is not None:
+            return self._wad.size
         try:
             return os.stat(path)[6]
         except Exception:
@@ -303,8 +468,11 @@ class _NatmodEngine:
     name = "natmod"
 
     def __init__(self):
-        import doom_x64
-        self._doom = doom_x64
+        _path, name = find_engine()
+        if not name.startswith("module_") or not name.endswith(".mpy"):
+            raise RuntimeError("Doom has no native module for this platform")
+        module = name[:-4]
+        self._doom = __import__(module)
         self._surface = None
         # The module holds the callback in C, which the collector does not
         # trace: keep the bound method alive here for as long as it is set.
@@ -318,12 +486,15 @@ class _NatmodEngine:
 
     def start(self, wad, surface):
         self._surface = surface
-        self._doom.create(wad, ZONE_MB)
+        if wad.path is None:
+            raise RuntimeError("the native Doom engine needs the WAD on disk")
+        self._config_dir = prefs_dir()
+        self._doom.create(wad.path, ZONE_MB, self._config_dir)
         self._present = self._present_band
         self._doom.surface(surface.buffer, surface.width, surface.height,
                            surface.rows_per_band, self._present)
         if __debug__:
-            print("doom: native module, wad %s" % (wad,))
+            print("doom: native module, wad %s" % (wad.path,))
 
     def resume(self):
         pass
@@ -349,6 +520,7 @@ class _NatmodEngine:
             pass
         self._present = None
         self._surface = None
+        self._config_dir = None
 
     def _present_band(self, y, rows):
         # y is the row offset of the band the module just drew into the buffer.
@@ -358,6 +530,9 @@ class _NatmodEngine:
 
 def _make_engine():
     """The engine this host can run, or a RuntimeError saying why not."""
+    if mpos_platform is None:
+        raise RuntimeError(
+            "Doom needs a newer MicroPythonOS (mpos.platform is missing)")
     if sys.platform == "esp32":
         try:
             return _CoreEngine()
@@ -397,21 +572,43 @@ class Doom(NativeActivity):
     # The letter a button sent, when the board sends both the letter and the
     # NEXT/PREV it rides on (see on_key_event).
     _letter_key = None
+    # When the menu band went down, for the licenses long press.
+    _menu_since = 0
 
     # -- engine -----------------------------------------------------------
 
     def make_engine(self):
         return _make_engine()
 
+    def _loading(self, text, done=0, total=0):
+        """Show (and draw) what the launch is waiting for."""
+        if total:
+            text = "%s %d%%" % (text, (done * 100) // total)
+        self.set_message(text)
+        try:
+            lv.refr_now()
+        except Exception:
+            pass
+
     def start_engine(self, surface):
-        wad = find_wad(getattr(self, "intent", None))
+        self._loading("Checking the Doom engine")
+        try:
+            wad = prepare_wad(
+                getattr(self, "intent", None), self.engine.name, self._loading)
+        except Exception as error:
+            self.show_message("Doom cannot start:\n%s" % (error,))
+            return False
         if wad is None:
             self.show_message(
                 "Doom needs a WAD file.\n"
-                "Put doom1.wad next to the app, or at /doom1.wad.")
+                "Reinstall Doom, or put doom1.wad at /doom1.wad.")
             return False
         self._wad = wad
+        self._loading("Starting the engine")
         self.engine.start(wad, surface)
+        if self.hint is not None:
+            self._clear_hint()
+            self.show_hint(self.hint_text)
         if InputManager.has_pointer():
             self.overlay = TouchOverlay(
                 self, self.zones, GAME_WIDTH, GAME_HEIGHT)
@@ -485,6 +682,12 @@ class Doom(NativeActivity):
             self.holds.hold(KEY_USE, key)
         elif key == ord("B") or key == ord("b") or key == 0x20:
             self._letter_key = key
+            # Fire also confirms: Doom's menus and the save-name prompt only
+            # take Enter, and a gamepad player has one "action" button. Enter
+            # is harmless while playing; a key repeat must not repeat it, or a
+            # held button would step through a whole menu.
+            if not self.holds.is_held(KEY_FIRE):
+                self.holds.tap(KEY_ENTER)
             self.holds.hold(KEY_FIRE, key)
         elif key in (lv.KEY.ESC, ord("Y"), ord("y"), lv.KEY.END):
             if key in (ord("Y"), ord("y")):
@@ -510,18 +713,37 @@ class Doom(NativeActivity):
             zone = self.zones.pressed(sx, sy, finger)
             self._last_touch = (finger, "p", x, y, sx, sy)
             if zone == "menu":
+                self._menu_since = time.ticks_ms()
                 self._show_touch_hints()
+            if zone == "fire":
+                # Every touch control that means "act" also means Enter, so a
+                # save name can be confirmed without a keyboard.
+                self.holds.tap(KEY_ENTER)
         elif event_code == lv.EVENT.PRESSING:
             self.zones.moving(sx, sy, finger)
         elif event_code == lv.EVENT.RELEASED:
             zone = self.zones.released(sx, sy, finger)
             self._last_touch = (finger, "r", zone, x, y, sx, sy)
+            if (zone == "menu" and self._menu_since
+                    and time.ticks_diff(time.ticks_ms(), self._menu_since)
+                    >= LICENSE_HOLD_MS):
+                self._menu_since = 0
+                self._show_licenses()
+            if zone == "menu":
+                self._menu_since = 0
+
+    def _show_licenses(self):
+        try:
+            import doom_legal
+            doom_legal.start(self)
+        except Exception as error:
+            self.show_message("Cannot show the licenses: %s" % (error,))
 
     # -- measurements -----------------------------------------------------
 
     def get_stats(self):
         stats = self.native_stats()
         stats["engine"] = self.engine.name if self.engine else None
-        stats["wad"] = self._wad
+        stats["wad"] = self._wad.name if self._wad else None
         stats["touch"] = self._last_touch
         return stats

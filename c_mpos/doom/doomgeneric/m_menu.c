@@ -640,7 +640,12 @@ void M_SaveSelect(int choice)
     saveSlot = choice;
     M_StringCopy(saveOldString,savegamestrings[choice], SAVESTRINGSIZE);
     if (!strcmp(savegamestrings[choice], EMPTYSTRING))
-	savegamestrings[choice][0] = 0;
+    {
+        // A badge has no keyboard to type a name with, and Enter does nothing
+        // while the name is empty. Prefill a usable name so saving works with
+        // the touch controls alone; on a desktop it can still be edited.
+        M_StringCopy(savegamestrings[choice], "DOOMPERSON", SAVESTRINGSIZE);
+    }
     saveCharIndex = strlen(savegamestrings[choice]);
 }
 
