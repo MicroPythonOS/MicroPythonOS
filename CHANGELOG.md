@@ -1,21 +1,99 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- AppStore: connect the existing built-in UI and update service to uPyStore by default in this project build, retaining selectable BadgeHub; verify and stage installs, validate source/compiled launchers, clear helper caches and obsolete files on upgrade, migrate receipts to app preferences, and clean up page timers and widgets.
+
+Frameworks:
+- Multi-touch: the GT911 and FocalTech drivers read every touch point (`get_touches()`) instead of only the first, and `mpos.ui.multitouch.MultiTouchGesture` reports pinch scale, rotation and pan from two fingers. A second finger is gesture-only: the driver sends the contact to LVGL as released until every finger lifts, so a pinch cannot click the widget under it or trigger the back-swipe.
+- AudioManager: `get()` rebuilds a singleton whose initialisation never finished. A
+  constructor call that raised (a wrong keyword argument, a preferences read failing
+  at boot) used to leave a half-built instance behind, and every later audio call
+  then failed with `AttributeError: 'AudioManager' object has no attribute ...`.
+- `mpos.ui.native_display.NativeDisplay.flush()` checks the render headroom before drawing. A native engine presents from inside its own tick, where a full LVGL pass runs on top of the engine's C frames; when the stack is nearly full the invalidation is left to LVGL's refresh timer instead, because an overflow there resets or hangs the board without a traceback.
+- `mpos.ui.native_activity.NativeActivity` closes the audio sink before stopping the engine, so a device is not left writing into a buffer whose owner is gone.
+- `mpos.ui.native_display.NativeDisplay`: a way to run a native (C) renderer at panel speed. It owns one RGB565 surface shown by a full-screen `lv_image` and presents only the bands of rows a frame changed, so LVGL stays the only writer of the panel; on a 320x240 badge that took Breakout from 7.6 to 56 fps with no flicker. Pausing LVGL's refresh or stealing its display buffers does not work and is documented, with the measurements, in `docs/apps/native-apps.md`.
+- Activities can opt out of the OS edge swipes with
+  `Activity.system_gestures_enabled = False`: the top and left gesture strips leave the
+  hit test (hidden *and* non-clickable) so a full-screen game receives those touches,
+  while the hardware back key keeps working. `NativeActivity` gained
+  `game_to_panel()`/`game_rect_to_panel()`, the inverse of `to_game()`, so an app can
+  draw a hint or HUD over the rotated picture in its own coordinates.
+
+Builtin Apps:
+- OSUpdate: an update check tries the remaining mirror when the first one is unreachable. A single failed request used to abort the whole check, so a device that picked a down mirror never saw the available update.
+- Native games can drive two thumbs at once: `NativeActivity.touch_fingers` polls a
+  multi-point panel and delivers every finger to `on_touch_finger()`, because LVGL's
+  pointer device is single-point by design (a second finger is reported as a release
+  so a pinch cannot click). `mpos.TouchMonitor` feeds that and the pinch/rotation
+  gesture from one read of the driver, and `ThumbZones` keeps one control state per
+  finger, so walking and firing at the same time works and lifting one thumb does not
+  release the other's key.
+- The GT911 and FT6x36 drivers keep each point's slot number as its identity instead
+  of throwing it away, so a finger no longer has to be matched by position.
+- Native games can read a held key instead of a key repeat. LVGL never delivers a key
+  release, so a keypad press used to live on a 180 ms timer that a repeat had to
+  refresh; the fri3d 2026 repeats only after 400 ms, so a held joystick turned for
+  200 ms, stopped and resumed - the "repeat delay" in Doom. `NativeActivity.key_state`
+  reads `InputManager.held_keys()` every frame (the expander and communicator drivers
+  report their physical state, and a keypad that keeps reporting PRESSED needs no
+  method), holds the key for as long as it is down, releases within a frame, and
+  switches off the keypad's typing repeats while the game is in the foreground.
+
+Testing:
+- connectivity tests: the machine/socket/thread/WifiService mocks are installed per
+  test instead of at module import. On a device the whole suite runs in one
+  interpreter, so the module-level `_thread` mock was still in place for every later
+  test and About/AppStore failed with "'MockThreadModule' object has no attribute
+  'get_ident'".
+- test runner: a device run stages `internal_filesystem/lib/unittest` first. Release
+  firmware freezes its bytecode at -O3, which strips `assert`, and a stripped
+  unittest passes every test vacuously; the runner's own self-check then repairs
+  the module it imported. The runner also installs its asyncio wrappers once
+  instead of once per test, so a whole suite in one interpreter no longer ends at
+  `maximum recursion depth exceeded`.
+- screen camera: `cell_ncc_min` skips cells that are one flat colour, so a mostly blank screen such as the About app no longer fails webcam verification with `cell_ncc_min 0`.
+- native rendering: `mpos.ui.native_display` band geometry, invalidation areas and flush contract; Breakout's surface, dirty-band loop, per-band row offsets (a band drawn at the wrong offset still shows bricks but moves the paddle to the top of the screen), the no-import tick budget, pause/resume callback handling and the buzzer tone path.
+
+0.22.0
+======
+
 Boards:
 - Add D-Shell ESP32-S3 N16R8 support: ST7789V display, GT911 touch, keys, WS2812 LEDs, QMI8658 IMU, MAX98357A audio and buzzer, with automatic board detection.
 
 Frameworks:
+- AudioManager: WAV and MP3 streams support pause/resume and seeking — sample-accurate for WAV (ADPCM rounds to a block), frame-accurate for MP3 including VBR — and the native mixer keeps its progress across a seek.
+- Chooser: picking a handler closes the chooser before launching the target, so the target is not popped by the chooser's own `finish()`.
 - aiorepl: the console no longer freezes every asyncio task when a host program opens the USB-CDC port and writes bytes that are not a REPL session (device-detection probes send CBOR such as `0xA6` + `get_version_info` and then hold the port, previously stalling the loop for ~28 s per probe). Such bytes are discarded instead of echoing and blocking a text-mode read (#297).
+- FileExplorerActivity: in pick mode, tapping a folder now enters it instead of selecting it, so a picker can reach nested folders; long-pressing an entry selects it (a folder as a whole), and the release that follows a long press no longer navigates. Confirming without a selection still returns the current folder.
+- fonts: the two most used Montserrat faces (12px, the theme default, and 16px) are no longer RLE-compressed. Compression costs a per-glyph decode on every draw: measured on the badge, 0.062 -> 0.037ms per glyph at 12px and 0.056 -> 0.034ms at 16px, so a full text screen (about 800 glyphs) redraws 20ms faster. Firmware grows by 6.7KB; the other sizes stay compressed.
+- adpcm_ima: also keeps a plain-Python reference decoder and picks it when the `@micropython.viper` decorator is not in effect (CI comments those decorators out), so the module no longer raises `NameError: ptr8` there.
+- adpcm_ima: IMA ADPCM WAV decoding is about 17x faster on the badge (33.6 -> 1.9 us per sample, i.e. 42 ms of CPU per second of audio instead of 741 ms): the per-sample `@native` helpers are replaced by one viper loop over byte-table copies of the step and index tables, so a 4-bit sidecar costs 2.3 ms of each 320x240 video frame instead of 49. Output is bit-identical to the reference vectors and a truncated block still raises `IndexError`.
 - AudioManager: MP3 playback through the native `mp3dec` module (minimp3) — MPEG-1/2/2.5 Layer III, CBR and VBR, mono/stereo, 8-48 kHz. Decoding releases the GIL so the UI keeps rendering, the file's own sample rate is used (no resampling), and volume is applied as a fixed-point right shift. ID3v2/ID3v1 tags are skipped. `get_info()` reads rate, channels and duration in pure Python, and the music player lists `.mp3` files when the firmware has `mp3dec`. On desktop, MP3 is played by `ffplay`/`mpg123`/`afplay`, or decoded to a temporary WAV when only `aplay`/`paplay` exists.
-
-Builtin Apps:
-- AppStore: connect the existing built-in UI and update service to uPyStore by default in this project build, retaining selectable BadgeHub; verify and stage installs, validate source/compiled launchers, clear helper caches and obsolete files on upgrade, migrate receipts to app preferences, and clean up page timers and widgets.
-- Music Player: `.mp3` files are only offered in the file picker and only accepted when the firmware provides the `mp3dec` module, so updating the app on an older build does not offer files it cannot play; opening one anyway shows a clear message instead of an audio-device error.
+- st7789: the panel init sequence is selectable with `DisplayDriver.init(type=N)`. The default matches upstream again; the Waveshare-tuned sequence that every ST7789 board used implicitly moved to `PROFILE_LEGACY` with identical commands (no behavior change), and `PROFILE_ST7789V` adds the `0xB4` inversion command used by ST7789V panels.
+- DisplayMetrics: `density_bucket()` and `density_factor()` let an app pick a bitmap variant for its screen (mdpi/hdpi, chosen by the shorter screen dimension, so portrait and landscape variants of the same panel resolve identically). The table is data-driven, mdpi art stays the universal fallback, and launcher icons and resource resolution are unchanged (#289).
+- AppManager: every flat app gets its own same-named helper modules. Before importing an app, cached `sys.modules` entries for the bare names it provides are dropped when they came from another directory, and install/update/uninstall drop the modules loaded from that app's directory, so two apps with their own `lora.py` no longer share the first one and an updated app stops running the previous version's helper code (#262).
+- AppStore: the list re-syncs installed state from the refreshed app cache when it resumes, so an app uninstalled from its detail page leaves the Installed category and a newly installed one appears (#255); and the install button regains focus when the detail fetch rebuilds the button row, so keypad users can still press A to install (#256).
+- MposKeyboard: the selected key is highlighted for keypad users — `FOCUS_KEY` is set once the user navigates with direction keys, and on a touch-opened keyboard that is then driven with buttons, so touch-only use keeps a clean keyboard (#274).
+- AudioManager: a passive piezo buzzer is now a playback output. A native `buzzer` module drives an LEDC channel at 78 kHz from an 8 KB int16 ring refilled by a timer ISR, so WAV and MP3 play on the badge's buzzer; because the disc only responds near ~4 kHz, an optional per-output piezo exciter (`buzzer_gain`) overdrives harmonic-poor material. Apps that pace their own PCM can open the same streaming sink the video player uses, the audio settings expose the tuning knobs, and the interrupt/pin/duty bugs that made the first bring-up silent are fixed.
 
 Testing:
+- media player: playback, pause/resume, seek, loop, playlist advance, sidecar and embedded audio, AVI demuxing, and readable errors for an unsupported container, codec or soundtrack.
+- ESP32 on-device suite: host-only tests skip on `esp32`, and a reset without the relay drains the boot log instead of blocking in `print()`.
+- preload: `tests/cpython_preload_fs.py` covers the shared app list parser, BadgeHub `.mpk` extraction (including path traversal), staging, and a littlefs round-trip.
+- video: tap-to-pause and resume, the control bar showing while paused and hiding after its timeout, the play/pause icon, deferred close, loop and seek (a loop restarts the clip, a seek extra starts mid-clip and presents roughly half the frames), engine and pacer tests, AVI demuxing (chunk order, drop seeks, PCM/IMA extraction, 8-bit widening, and the readable errors for a non-AVI file, a non-MJPEG codec and an unsupported soundtrack), WAV sidecar parsing and decoding (8/16/24/32-bit PCM, IMA ADPCM, rejected MS ADPCM/MP3), ring-buffer regressions for a queue drained to its very end and for a refill that no longer fits, intent handling, desktop playback with a streamed sidecar and with the audio inside an AVI, and the viper IMA decoder checked against the ffmpeg reference sidecars.
+- acoustic checks: one microphone is enough for both the buzzer and the DAC/speaker — `mpos_buzzer_acoustic.py` and `mpos_dac_acoustic.py` default to a USB microphone (the webcam one sees the desk) instead of the on-board line input, and `--channels` follows the device because USB microphones refuse mono. Measured on zbox1: the C925e at 15 cm passes both the buzzer note sequence and the DAC tones (worst frequency error 0.01%, no cable to the badge).
+- mpos_controller: `write_file` gets a payload-scaled timeout, so pushing a multi-MB test asset no longer dies at the old 60 s cap.
 - mp3: frame-accurate streaming decoder tests over five generated fixtures (MPEG-1/2/2.5, CBR/VBR, mono/stereo, 8/22.05/44.1/48 kHz) that must give identical frame and sample totals for any feed chunk size, a CPython header/Xing/ID3 parser test checked against ffprobe, AudioManager `.mp3` routing tests, and `--file` support in the DAC acoustic check.
 - buzzer: acoustic verification from a host USB microphone — the badge plays a known note sequence and `scripts/mpos_buzzer_acoustic.py` segments the recording and folds each strongest spectral peak to the expected harmonic, so low notes work despite the piezo resonance; manual entry point `tests/manual_test_buzzer.py`, synthetic tests `tests/cpython_buzzer_acoustic.py`, and `MPOSController.buzzer_acoustic_measure/verify()`.
 - dac: acoustic verification of the headphone/DAC jack through a host capture input — `scripts/mpos_dac_acoustic.py` renders a tone WAV on the badge, plays it through an i2s output and checks the recording (optionally `--file` to score an existing audio file); manual entry point `tests/manual_test_dac.py`, synthetic tests `tests/cpython_dac_acoustic.py`, and `MPOSController.dac_acoustic_measure/verify()`.
+
+Build:
+- Full flash images ship a filesystem: `scripts/preload_fs.py` stages the sample media and a shared set of apps, precompiles them and packs them into a littlefs image merged into the vfs partition. The same staging feeds the web bundle. `--no-preload-fs` (`MPOS_PRELOAD_FS=0`) builds a firmware-only image; the 4 MB targets skip it.
+- Partition tables: full images use the compact badge preamble and a 7 MB filesystem at `0x900000` on the 16 MB layout; `.ota` images stay partition-offset independent, so in-place updates keep working.
+- littlefs-python 0.19.0 is only needed to pack the device filesystem (CI installs it in a venv, pointed at with `MPOS_PRELOAD_PYTHON`).
+- ESP32-P4: images stay compatible with rev <3.0 chips — the esp32p4 build sets `CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y` (a no-op on ESP-IDF 5.5.1; from 5.5.3 its default would build a v3-only image and a v1.x board would refuse the OTA update), and lvgl_micropython lets ESP-IDF pick the MIPI-DSI PHY PLL reference clock, which a rev 3.x LL build no longer accepts and would abort on (#376).
+- App releases: `bundle_apps.sh --app <fullname>` packages only the named apps and merges just their entries into the existing index, preserving index-only fixes and every other entry; `make check-app-versions` and a CI job for PRs touching `internal_filesystem/apps/` report apps with commits after their last `MANIFEST.JSON` version bump (and uncommitted edits), so a source change can no longer miss users silently (#388).
 
 0.21.2
 ======

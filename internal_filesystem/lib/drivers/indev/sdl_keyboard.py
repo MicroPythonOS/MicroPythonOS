@@ -409,3 +409,9 @@ class MposSDLKeyboard(keypad_framework.KeypadDriver):
 
     def _get_key(self):
         return self.__current_state, self.__last_key
+
+    def held_keys(self):
+        """The key SDL last reported down (a desktop keyboard sends both edges)."""
+        if self.__current_state == self.PRESSED:
+            return (self.__last_key,)
+        return ()

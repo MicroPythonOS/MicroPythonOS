@@ -53,8 +53,9 @@ class MP3Stream(WAVStream):
             self._total_samples = info["total_samples"]
             self._duration_ms = info["duration_ms"]
             self._playback_rate = self._original_rate
+            self._mp3_info = info
 
-            if sys.platform != "esp32":
+            if sys.platform != "esp32" and not self.force_pcm:
                 self._play_desktop()
                 return
 
@@ -84,12 +85,32 @@ class MP3Stream(WAVStream):
                         self._progress_samples = 0
                         decoder.reset()
                         eof = False
-                        while self._keep_running and not eof:
+                        while self._keep_running and (not eof or self._seek_ms is not None):
+                            if self._seek_ms is not None:
+                                from mpos.audio.mp3 import frame_offset_for_ms
+                                offset, samples = frame_offset_for_ms(
+                                    f, self._seek_ms, info)
+                                self._seek_ms = None
+                                decoder.reset()
+                                eof = False
+                                self._progress_samples = samples
+                                if self._progress_samples > self._total_samples:
+                                    self._progress_samples = self._total_samples
+                                played_samples = samples
+                                continue
+                            if self._paused:
+                                time.sleep_ms(10)
+                                continue
                             data = f.read(chunk_size)
                             if not data:
                                 eof = True
                                 decoder.finish()
                             while self._keep_running:
+                                if self._seek_ms is not None:
+                                    break
+                                if self._paused:
+                                    time.sleep_ms(10)
+                                    continue
                                 shift = WAVStream._volume_percent_to_shift(self.volume)
                                 written = decoder.decode_into(data, out, shift)
                                 data = b""
@@ -120,6 +141,11 @@ class MP3Stream(WAVStream):
                 elapsed_ms = time.ticks_diff(time.ticks_ms(), play_start_ms)
                 played_ms = played_samples * 1000 // self._playback_rate
                 drain_ms = WAVStream.compute_drain_ms(played_ms, elapsed_ms)
+                # A seek makes played_samples jump ahead of wall time; the
+                # ring, not that estimate, is the real upper bound.
+                max_drain_ms = ibuf * 1000 // (self._playback_rate * self._channels * 2)
+                if drain_ms > max_drain_ms:
+                    drain_ms = max_drain_ms
                 if drain_ms > 0:
                     time.sleep_ms(drain_ms)
 

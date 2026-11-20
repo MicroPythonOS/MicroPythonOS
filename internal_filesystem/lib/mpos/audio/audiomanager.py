@@ -45,6 +45,10 @@ class AudioManager:
             channels=1,
             i2s_pins=None,
             buzzer_pin=None,
+            buzzer_gain=800,
+            buzzer_carrier=0,
+            buzzer_emphasis=0,
+            buzzer_mod=0,
             preferred_sample_rate=None,
             on_open=None,
             on_close=None,
@@ -63,6 +67,10 @@ class AudioManager:
             self.name = name
             self.kind = kind
             self.channels = channels
+            self.buzzer_gain = int(buzzer_gain)
+            self.buzzer_carrier = int(buzzer_carrier)
+            self.buzzer_emphasis = int(buzzer_emphasis)
+            self.buzzer_mod = int(buzzer_mod)
             self.preferred_sample_rate = preferred_sample_rate
             self.on_open = on_open
             self.on_close = on_close
@@ -182,7 +190,12 @@ class AudioManager:
 
     @classmethod
     def get(cls):
-        if cls._instance is None:
+        # __new__ caches the singleton before __init__ runs, so a constructor
+        # call that raises (a wrong keyword argument, a preferences read that
+        # fails at boot) would leave a half-built instance behind every later
+        # caller. Rebuild one that never finished initialising.
+        if cls._instance is None or not getattr(cls._instance, "_initialized", False):
+            cls._instance = None
             cls._instance = cls()
         return cls._instance
 
@@ -193,6 +206,9 @@ class AudioManager:
     def _add_device(self, device):
         if isinstance(device, AudioManager.Output):
             self._outputs.append(device)
+            if device.kind == "buzzer":
+                self._reserve_buzzer_driver()
+                self._load_buzzer_tuning(device)
             if self._default_output is None:
                 self._default_output = device
             return device
@@ -211,6 +227,25 @@ class AudioManager:
     def get_inputs(cls):
         return list(cls.get()._inputs)
 
+    @staticmethod
+    def _reserve_buzzer_driver():
+        """Reserve the piezo PCM driver's timer interrupt.
+
+        Registering a buzzer output happens at boot, while CPU interrupt
+        vectors are still available; by the time an app actually plays a file
+        the low/medium pool can be exhausted by the rest of the firmware. The
+        driver keeps the vector for the lifetime of the firmware, so reserving
+        it here makes playback fail-proof.
+        """
+        if sys.platform != "esp32":
+            return
+        try:
+            import buzzer
+
+            buzzer.reserve()
+        except Exception as e:
+            logger.warning("could not reserve the buzzer driver: %s", e)
+
     @classmethod
     def get_default_output(cls):
         return cls.get()._resolve_default_output()
@@ -218,6 +253,23 @@ class AudioManager:
     @classmethod
     def get_default_input(cls):
         return cls.get()._resolve_default_input()
+
+    @classmethod
+    def open_pcm(cls, rate, channels=1, output=None):
+        """A ``write(buf)`` sink for audio the app synthesises itself.
+
+        The app says "here are samples"; the device is the user's choice in
+        Settings -> Audio unless the app names one (an ``Output`` or its name),
+        because an app should not have to know whether this board has a DAC, a
+        piezo, or both.
+        """
+        from mpos.audio.pcm_stream import PcmSink
+
+        if isinstance(output, str):
+            output = cls.find_output_by_name(output)
+        if output is None:
+            output = cls.get_default_output()
+        return PcmSink(rate, channels=channels, output=output)
 
     @classmethod
     def set_default_output(cls, output):
@@ -262,6 +314,74 @@ class AudioManager:
             editor.commit()
         except Exception as exc:
             logger.error("Could not persist %s: %s", key, exc)
+
+    # Buzzer-as-speaker tuning knobs, exposed by the audio settings app and
+    # persisted in the audio preferences (name -> (min, max)):
+    #   buzzer_gain     source overdrive before the PWM; 100 keeps the samples
+    #                   untouched, higher values hard-clip them into the square
+    #                   waves a piezo disc can reproduce
+    #   buzzer_carrier  PWM carrier as a multiple of the sample rate (0 = auto,
+    #                   which is one multiple, or more when that is below
+    #                   16 kHz). It has to be a whole multiple: a carrier that
+    #                   is not (78 kHz for a 22.05 kHz file) makes the duty
+    #                   updates drift against the carrier and the disc squeals
+    #   buzzer_emphasis pre-emphasis (high-pass) strength in percent, 0..90
+    #   buzzer_mod      ring-modulation frequency in Hz; 0 = off, moves the
+    #                   baseband into the disc's resonance window
+    BUZZER_TUNING = {
+        "buzzer_gain": (0, 3200),
+        "buzzer_carrier": (0, 8),
+        "buzzer_emphasis": (0, 90),
+        "buzzer_mod": (0, 8000),
+    }
+
+    @classmethod
+    def set_buzzer_tuning(cls, key, value):
+        """Set one tuning knob on every buzzer output and persist it.
+
+        Returns the clamped value, or None when the value is not a number.
+        """
+        limits = cls.BUZZER_TUNING.get(key)
+        if limits is None:
+            raise ValueError("unknown buzzer tuning: %s" % key)
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return None
+        value = max(limits[0], min(limits[1], value))
+        manager = cls.get()
+        for output in manager._outputs:
+            if output.kind == "buzzer":
+                setattr(output, key, value)
+        manager._save_audio_pref(key, str(value))
+        return value
+
+    def _load_buzzer_tuning(self, device):
+        for key, limits in self.BUZZER_TUNING.items():
+            stored = self._audio_prefs.get_string(key, "")
+            if not stored:
+                continue
+            try:
+                value = int(stored)
+            except (TypeError, ValueError):
+                logger.warning("Ignoring invalid %s preference: %s", key, stored)
+                continue
+            setattr(device, key, max(limits[0], min(limits[1], value)))
+
+    @classmethod
+    def get_buzzer_tuning(cls, key):
+        if key not in cls.BUZZER_TUNING:
+            raise ValueError("unknown buzzer tuning: %s" % key)
+        output = cls.find_output_by_kind("buzzer")
+        return getattr(output, key, None) if output else None
+
+    @classmethod
+    def set_buzzer_gain(cls, gain):
+        return cls.set_buzzer_tuning("buzzer_gain", gain)
+
+    @classmethod
+    def get_buzzer_gain(cls):
+        return cls.get_buzzer_tuning("buzzer_gain")
 
     @classmethod
     def find_output_by_name(cls, name):
@@ -556,8 +676,8 @@ class AudioManager:
                 self.STREAM_NOTIFICATION if player.rtttl else self.STREAM_MUSIC
             )
 
-        if player.output.kind == "buzzer" and not player.rtttl:
-            raise ValueError("RTTTL string required for buzzer output")
+        if player.output.kind == "buzzer" and not player.rtttl and not player.file_path:
+            raise ValueError("RTTTL string or file_path required for buzzer output")
         if player.output.kind == "i2s" and not player.file_path:
             raise ValueError("file_path required for i2s output")
 
@@ -693,6 +813,12 @@ class Player:
         if self._stream and hasattr(self._stream, "resume"):
             self._stream.resume()
 
+    def seek(self, position_ms):
+        """Jump to position_ms when the stream supports seeking."""
+        if self._stream and hasattr(self._stream, "seek"):
+            return self._stream.seek(position_ms)
+        return False
+
     def set_repeat(self, count):
         try:
             count = int(count)
@@ -736,7 +862,7 @@ class Player:
 
     def _play_thread(self):
         try:
-            if self.output.kind == "buzzer":
+            if self.output.kind == "buzzer" and self.rtttl:
                 self._play_rtttl()
             else:
                 self._play_wav()
@@ -807,6 +933,10 @@ class Player:
         self._stream.play()
 
     def _play_wav(self):
+        if self.output.kind == "buzzer":
+            self._play_buzzer_pcm()
+            return
+
         if self.file_path.lower().endswith(".mp3"):
             from mpos.audio.stream_mp3 import MP3Stream
 
@@ -839,6 +969,32 @@ class Player:
             on_open=getattr(self.output, "on_open", None),
             on_close=getattr(self.output, "on_close", None),
             warm_ms=getattr(self.output, "warm_ms", 0),
+            repeat_count=self._repeat_count,
+        )
+        self._stream.play()
+
+    def _play_buzzer_pcm(self):
+        """Play a WAV/MP3 file through a piezo buzzer instead of an I2S codec."""
+        if self.file_path.lower().endswith(".mp3"):
+            from mpos.audio.stream_buzzer import BuzzerMP3Stream
+
+            stream_class = BuzzerMP3Stream
+        else:
+            from mpos.audio.stream_buzzer import BuzzerStream
+
+            stream_class = BuzzerStream
+
+        on_complete = self.on_complete
+        self._stream = stream_class(
+            file_path=self.file_path,
+            stream_type=self.stream_type,
+            volume=self.volume if self.volume is not None else self._manager._volume,
+            buzzer_pin=self.output.buzzer_pin,
+            buzzer_gain=getattr(self.output, "buzzer_gain", 800),
+            buzzer_carrier=getattr(self.output, "buzzer_carrier", 0),
+            buzzer_emphasis=getattr(self.output, "buzzer_emphasis", 0),
+            buzzer_mod=getattr(self.output, "buzzer_mod", 0),
+            on_complete=on_complete,
             repeat_count=self._repeat_count,
         )
         self._stream.play()

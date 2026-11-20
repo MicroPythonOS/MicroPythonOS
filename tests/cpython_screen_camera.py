@@ -88,6 +88,25 @@ class TestScreenCamera(unittest.TestCase):
         self.assertEqual(measured["ncc_gradient"], 1.0)
         self.assertEqual(measured["cell_ncc_min"], 1.0)
 
+    def test_flat_cells_are_ignored(self):
+        reference = np.full((240, 320, 3), 200, np.uint8)
+        cv2.rectangle(reference, (8, 8), (150, 230), (30, 60, 200), -1)
+        cv2.putText(reference, "ABC", (20, 130), cv2.FONT_HERSHEY_SIMPLEX, 1.2,
+                    (255, 255, 255), 2)
+        aligned = reference.copy()
+        noise = np.random.default_rng(1).normal(0, 6, (240, 160, 3))
+        aligned[:, 160:] = np.clip(aligned[:, 160:] + noise, 0, 255).astype(np.uint8)
+        measured = cam.metrics(reference, aligned, None)
+        self.assertIn("cell_ncc_min", measured)
+        self.assertGreater(measured["cell_ncc_min"], 0.5)
+
+    def test_metrics_without_structure_skip_cells(self):
+        flat = np.full((240, 320, 3), 128, np.uint8)
+        measured = cam.metrics(flat, flat, None)
+        self.assertNotIn("cell_ncc_min", measured)
+        _, failures = cam.check_thresholds(measured)
+        self.assertNotIn("cell_ncc_min", failures)
+
     def test_sharpness_drops_with_blur(self):
         values = []
         for sigma in (0.0, 1.0, 2.5, 4.0):

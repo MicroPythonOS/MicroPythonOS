@@ -191,6 +191,89 @@ def get_info(file_path):
     return result
 
 
+def frame_offset_for_ms(f, target_ms, info=None):
+    """Find the byte offset (and sample position) of the frame at target_ms.
+
+    Walking the frame headers is the only way to seek a VBR file without an
+    index: every Layer III frame carries the same number of samples for a given
+    MPEG version, so counting headers gives the time even though their byte
+    sizes differ. ``f`` is a seekable binary file; it is left positioned at the
+    returned offset. ``info`` is a get_info() result (read from the file when
+    omitted).
+    """
+    if info is None:
+        name = getattr(f, "name", None)
+        if not name:
+            raise ValueError("MP3 seek needs a named file or its get_info()")
+        info = get_info(name)
+    try:
+        target_ms = int(target_ms)
+    except (TypeError, ValueError):
+        target_ms = 0
+    if target_ms < 0:
+        target_ms = 0
+    sample_rate = info["sample_rate"]
+    samples_per_frame = info["samples_per_frame"]
+    target_samples = target_ms * sample_rate // 1000
+
+    base = info["audio_offset"]
+    f.seek(base)
+    buf = b""
+    buf_pos = 0
+    elapsed = 0
+
+    while True:
+        if buf_pos + 4 > len(buf):
+            buf = buf[buf_pos:]
+            base += buf_pos
+            buf_pos = 0
+            more = f.read(_HEAD_READ)
+            if not more:
+                f.seek(base)
+                return base, elapsed
+            buf += more
+
+        header = _parse_header(buf, buf_pos)
+        if header is None:
+            found, header = _find_frame(buf, buf_pos)
+            if header is None:
+                # No frame starts here: keep the last three bytes (a sync may
+                # straddle the chunk boundary) and read on.
+                keep = 3 if len(buf) - buf_pos > 3 else len(buf) - buf_pos
+                base += len(buf) - keep
+                buf = buf[len(buf) - keep:]
+                buf_pos = 0
+                more = f.read(_HEAD_READ)
+                if not more:
+                    f.seek(base)
+                    return base, elapsed
+                buf += more
+                continue
+            buf_pos = found
+
+        if elapsed >= target_samples:
+            f.seek(base + buf_pos)
+            return base + buf_pos, elapsed
+        step = header["frame_bytes"]
+        if step <= 0:
+            f.seek(base + buf_pos)
+            return base + buf_pos, elapsed
+        if buf_pos + step > len(buf):
+            # The frame crosses the read chunk: shift it to the front and
+            # read more before counting it.
+            base += buf_pos
+            buf = buf[buf_pos:]
+            buf_pos = 0
+            more = f.read(_HEAD_READ)
+            if not more:
+                f.seek(base)
+                return base, elapsed
+            buf += more
+            continue
+        buf_pos += step
+        elapsed += header["samples_per_frame"]
+
+
 # ── Decoding helpers (native module) ─────────────────────────────────
 
 

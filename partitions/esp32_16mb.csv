@@ -1,0 +1,19 @@
+# 16 MB ESP32 (non-S3) layout.
+#
+# Same compact 64 KiB preamble as the badge table so ota_0 starts at 0x10000,
+# but the app slots are 0x390000 instead of 0x380000: the esp32 build is about
+# 65 KiB larger than the esp32s3 build and does not leave usable headroom in a
+# 3.5 MiB slot.
+#
+# 0x390000 is deliberate: it is the smallest slot that fits the esp32 image and
+# keeps ota_1 at a 64 KiB-aligned offset (0x10000 + 0x390000 = 0x3a0000). App
+# partition offsets must be 64 KiB aligned, so a slot size that is not a
+# multiple of 0x10000 pushes ota_1 up to 0x3b0000 and wastes 0xf000 of flash.
+# The filesystem takes everything else.
+#
+# Name,     Type, SubType, Offset,   Size,     Flags
+otadata,    data, ota,     0x9000,   0x2000,
+nvs,        data, nvs,     0xb000,   0x5000,
+ota_0,      app,  ota_0,   0x10000,  0x390000,
+ota_1,      app,  ota_1,   0x3a0000, 0x390000,
+vfs,        data, fat,     0x730000, 0x8d0000,

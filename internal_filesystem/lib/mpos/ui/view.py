@@ -28,6 +28,13 @@ def close_top_layer_msgboxes():
             msgbox.close()
         i += 1
 
+def _apply_system_gestures():
+    from . import gesture_navigation
+    activity = screen_stack[-1][0] if screen_stack else None
+    gesture_navigation.set_system_gestures_enabled(
+        True if activity is None
+        else getattr(activity, "system_gestures_enabled", True))
+
 def setContentView(new_activity, new_screen):
     global screen_stack, _orphan_screen
     if screen_stack:
@@ -72,6 +79,7 @@ def setContentView(new_activity, new_screen):
             show_app_error_dialog(
                 new_activity.appFullName, e, is_lifecycle=True
             )
+    _apply_system_gestures()
 
 def remove_and_stop_all_activities():
     global screen_stack
@@ -131,6 +139,8 @@ def remove_and_stop_current_activity():
             _orphan_screen = current_screen
         else:
             current_screen.delete()
+
+    _apply_system_gestures()
 
 def finish_current_activity():
     """Remove the current activity and resume the one below it.

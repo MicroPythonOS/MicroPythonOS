@@ -20,11 +20,10 @@ class TestADCRecording(unittest.TestCase):
         """Set up test fixtures."""
         self.test_file = "test_recording.wav"
         
-        # Ensure AudioManager is initialized (mocking pins if needed)
-        # On desktop, it will use simulation mode
-        if not AudioManager._instance:
-            # Initialize with dummy values if needed, but adc_mic_pin is supported
-            AudioManager(adc_mic_pin=1)
+        # Ensure AudioManager is initialized. The manager takes no constructor
+        # arguments; get() creates the singleton (or rebuilds one whose
+        # initialisation never finished).
+        AudioManager.get()
 
     def tearDown(self):
         """Clean up test files."""

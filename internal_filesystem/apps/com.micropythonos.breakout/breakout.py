@@ -1,12 +1,18 @@
-# Breakout app UI/driver glue. This app renders into a framebuffer that may be
-# smaller than the full display (partial framebuffer). The draw loop is more
-# complex because it slices the screen into chunks, renders each slice in C,
-# and flushes them sequentially using a flush-ready IRQ callback. A scheduled
-# (non-IRQ) handler advances chunks so it can work on larger-than-320x230
-# displays without requiring a full-size framebuffer.
+# Breakout: a native (C) game on a MicroPythonOS activity.
+#
+# The C module in c_mpos/breakout/ owns the game state and draws the bands of
+# rows that changed into an RGB565 surface. This file is the glue: input, save
+# state, sound, and the frame loop.
+#
+# The frame loop is the interesting part. mpos.ui.native_display.NativeDisplay
+# hands the renderer a full-screen buffer and shows it with one lv_image widget,
+# so LVGL stays the only writer of the panel (no flicker) and only the bands
+# that changed are blitted and flushed (a frame that moves the ball and the
+# paddle costs two bands, not a whole screen).
 import lvgl as lv
-import mpos.ui
-from mpos import Activity, InputManager, SharedPreferences
+import time
+from mpos import SharedPreferences, AudioManager
+from mpos.ui.native_activity import NativeActivity
 
 import sys
 if sys.platform == "esp32":
@@ -14,116 +20,248 @@ if sys.platform == "esp32":
 else:
     import breakout_x64 as breakout
 
+# Frames per second the pump aims for. Measured on the badge: a frame that
+# touches two bands costs about 10ms end to end, so 50fps leaves half the budget
+# free; a full screen redraw (level change) costs about 30ms.
+TARGET_FPS = 50
 
-class Breakout(Activity):
+# The frame loop runs on the task handler's passes, which are a few
+# milliseconds apart. Presenting a frame that is up to this many milliseconds
+# early keeps the pacing on its grid instead of slipping a whole pass each time.
+FRAME_SLACK_MS = 5
 
+
+class Beep:
+    """Square-wave tones on the badge's piezo buzzer, without blocking.
+
+    A game cannot afford AudioManager here: it decodes and streams on its own
+    clock, which costs milliseconds per frame and allocates. Driving the piezo
+    with a PWM channel costs a few microseconds and a deadline check.
+    """
+
+    def __init__(self, enabled=True):
+        self._pwm = None
+        self._off_at = None
+        self._enabled = enabled
+        self.tones = 0
+
+    def _ensure_pwm(self):
+        if self._pwm is not None or not self._enabled:
+            return self._pwm
+        try:
+            from machine import Pin, PWM
+            output = AudioManager.find_output_by_kind("buzzer")
+            if output is None or output.buzzer_pin is None:
+                # Boards without a piezo (this one has no audio at all) simply
+                # play nothing; the game must not depend on sound.
+                self._enabled = False
+                return None
+            self._pwm = PWM(Pin(output.buzzer_pin), freq=4000, duty_u16=0)
+        except Exception:
+            self._enabled = False
+            self._pwm = None
+        return self._pwm
+
+    def tone(self, freq, ms):
+        pwm = self._ensure_pwm()
+        if pwm is None:
+            return
+        try:
+            pwm.freq(freq)
+            pwm.duty_u16(32768)
+        except Exception:
+            self._enabled = False
+            return
+        self.tones += 1
+        self._off_at = time.ticks_add(time.ticks_ms(), ms)
+
+    def poll(self, now_ms):
+        if self._off_at is None or self._pwm is None:
+            return
+        if time.ticks_diff(now_ms, self._off_at) >= 0:
+            self._off_at = None
+            try:
+                self._pwm.duty_u16(0)
+            except Exception:
+                pass
+
+    def stop(self):
+        self._off_at = None
+        if self._pwm is not None:
+            try:
+                self._pwm.duty_u16(0)
+                self._pwm.deinit()
+            except Exception:
+                pass
+            self._pwm = None
+
+
+class Breakout(NativeActivity):
+
+    target_fps = TARGET_FPS
+
+    # Play area and pacing.
     hor_res = 0
     ver_res = 0
-    paddle_move_step = None
-    layer = None
-    buffer = None
-    touch_active = False
-    touch_last_x = None
-    last_fps = 0
-    average_fps = 0
+    paddle_move_step = 0
 
-    old_callback = None
-
-    render_next = True
-    flush_ready = False
-    chunk_in_progress = False
-    chunk_waiting = False
-    chunk_rows_per = 0
-    chunk_total = 0
-    chunk_index = 0
-
-    # Widgets:
-    screen = None
     leftbutton = None
     rightbutton = None
 
-    # State mirrors of native state (not displayed without fonts).
+    # Touch tracking.
+    touch_active = False
+    touch_last_x = None
+
+    # State mirrors of the native module (used for saving, not for display).
     score = 0
     level = 1
     lives = 5
     highscore = 0
-    _initialized = False
-    _paused = False
+    _autosaved_level = 0
+    _autosaved_lives = 5
     _game_over_handled = False
     _state_timer = None
-    _autosaved_level = 0
-    _autosaved_score = 0
-    _autosaved_lives = 5
 
-    def onCreate(self):
-        self.screen = lv.obj()
-        self.screen.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.screen.add_event_cb(self.touch_cb, lv.EVENT.ALL, None)
+    _beep = None
 
+    def on_screen(self, screen):
         d = lv.display_get_default()
         self.hor_res = d.get_horizontal_resolution()
         self.paddle_move_step = round(self.hor_res / 10)
         self.ver_res = d.get_vertical_resolution()
 
-        self.leftbutton = lv.button(self.screen)
+        # Invisible buttons: they exist so the keypad indev has something to
+        # focus, which is how the B/Y buttons reach move_left()/move_right().
+        self.leftbutton = lv.button(screen)
         self.leftbutton.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
-        self.leftbutton.set_size(1,1)
+        self.leftbutton.set_size(1, 1)
         self.leftbutton.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         self.leftbutton.add_event_cb(lambda e: self.move_left(), lv.EVENT.FOCUSED, None)
 
         # Invisible button, just for defocusing the left and right buttons:
-        self.defocus_button = lv.button(self.screen)
-        self.defocus_button.align(lv.ALIGN.BOTTOM_MID,0,0)
-        self.defocus_button.set_size(1,1)
+        self.defocus_button = lv.button(screen)
+        self.defocus_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.defocus_button.set_size(1, 1)
         self.defocus_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
 
-        self.rightbutton = lv.button(self.screen)
+        self.rightbutton = lv.button(screen)
         self.rightbutton.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
-        self.rightbutton.set_size(1,1)
+        self.rightbutton.set_size(1, 1)
         self.rightbutton.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         self.rightbutton.add_event_cb(lambda e: self.move_right(), lv.EVENT.FOCUSED, None)
 
-        self.setContentView(self.screen)
-
-    def onResume(self, screen):
-        self._paused = False
-        if not self._initialized:
-            self._initialized = True
-            breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
-            mpos.ui.task_handler.add_event_cb(self.drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
-
-        mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
-
-        prefs = SharedPreferences(self.appFullName)
-        self.highscore = prefs.get_int("highscore", 0)
+    def start_engine(self, surface):
+        self.highscore = SharedPreferences(self.appFullName).get_int("highscore", 0)
+        breakout.init(surface.buffer, surface.width, surface.height)
+        bands = breakout.set_band_rows(surface.rows_per_band)
+        if __debug__:
+            print("breakout: %dx%d, %d bands of %d rows" % (
+                surface.width, surface.height, bands, surface.rows_per_band))
         breakout.set_highscore(self.highscore)
-
         self._check_autoload()
+        self._beep = Beep()
+        return True
 
+    def on_resumed(self):
+        # The surface may hold anything after another activity used the panel.
+        breakout.mark_all_dirty()
         if self._state_timer is None:
             self._state_timer = lv.timer_create(self._update_state, 2000, None)
 
-    def onPause(self, screen):
-        self._paused = True
+    def on_paused(self):
+        if self._beep is not None:
+            self._beep.stop()
         self._save_state()
         self._stop_state_timer()
-        # If a chunk is mid-flight, release the display driver so the next
-        # activity can flush normally.
-        if self.chunk_waiting:
-            self.chunk_waiting = False
-            self.chunk_in_progress = False
-            self.render_next = True
-            self.flush_ready = False
-            try:
-                mpos.ui.main_display._disp_drv.flush_ready()
-            except Exception:
-                pass
-        mpos.ui.main_display._data_bus.register_callback(mpos.ui.main_display._flush_ready_cb)
 
-    def onDestroy(self, screen):
-        self._paused = True
-        self._save_state()
-        self._stop_state_timer()
+    # -- frame loop -------------------------------------------------------
+
+    def on_frame(self, now):
+        breakout.tick(now)
+        events = breakout.poll_events()
+        beep = self._beep
+        if beep is not None:
+            if events:
+                self._play_events(events)
+            # Polled every frame, not just after an event: a tone has to be
+            # turned off on time even when the next frame has nothing to say.
+            beep.poll(now)
+
+        self._surface.present(self._dirty_bands(), breakout.render_band)
+
+    def _dirty_bands(self):
+        # next_dirty() keeps reporting a band until render_band() has drawn it,
+        # so a renderer that forgets to clear a flag would spin here forever.
+        # Seen bands are skipped for that reason.
+        seen = 0
+        band = breakout.next_dirty()
+        while band >= 0 and not (seen >> band) & 1:
+            seen |= 1 << band
+            yield band
+            band = breakout.next_dirty()
+
+    # -- sound ------------------------------------------------------------
+
+    def _play_events(self, events):
+        beep = self._beep
+        if beep is None:
+            return
+        if events & breakout.EVENT_LOST_LIFE:
+            beep.tone(300, 350)
+        elif events & breakout.EVENT_LEVEL_UP:
+            beep.tone(2400, 120)
+        elif events & breakout.EVENT_GAME_OVER:
+            beep.tone(200, 600)
+        elif events & breakout.EVENT_BRICK:
+            beep.tone(3200, 25)
+        elif events & breakout.EVENT_PADDLE:
+            beep.tone(4400, 20)
+        elif events & breakout.EVENT_WALL:
+            beep.tone(2400, 15)
+
+    # -- input ------------------------------------------------------------
+
+    def move_left(self):
+        # A queued FOCUSED event can arrive after the activity paused and its
+        # widgets were deleted; focusing then raises LvReferenceError.
+        if self._paused or breakout.is_game_over():
+            return
+        lv.group_focus_obj(self.defocus_button)
+        breakout.move_paddle(-self.paddle_move_step)
+
+    def move_right(self):
+        if self._paused or breakout.is_game_over():
+            return
+        lv.group_focus_obj(self.defocus_button)
+        breakout.move_paddle(self.paddle_move_step)
+
+    def on_pointer(self, event_code, x, y):
+        if breakout.is_game_over():
+            return
+
+        if event_code == lv.EVENT.PRESSED:
+            self.touch_active = True
+            self.touch_last_x = x
+            return
+
+        if event_code == lv.EVENT.PRESSING:
+            if not self.touch_active:
+                self.touch_active = True
+                self.touch_last_x = x
+                return
+            if self.touch_last_x is not None:
+                delta = x - self.touch_last_x
+                if delta:
+                    breakout.move_paddle(round(delta * 1.3))
+            self.touch_last_x = x
+            return
+
+        if event_code == lv.EVENT.RELEASED:
+            self.touch_active = False
+            self.touch_last_x = None
+            return
+
+    # -- persistence ------------------------------------------------------
 
     def _stop_state_timer(self):
         if self._state_timer is not None:
@@ -132,10 +270,6 @@ class Breakout(Activity):
             except Exception:
                 pass
             self._state_timer = None
-
-    def _save_state(self):
-        self._save_highscore()
-        self._autosave()
 
     def _update_state(self, _=None):
         try:
@@ -149,11 +283,10 @@ class Breakout(Activity):
         if self.score > self.highscore:
             self.highscore = self.score
 
-        # Save progress when the level changes; skip when dead to avoid
-        # reloading a game that is already over.
+        # Only write to flash when the game moved on, not on every point: a
+        # prefs commit takes milliseconds and stalls the frame after it.
         if self.lives > 0 and (
             self.level != self._autosaved_level or
-            self.score != self._autosaved_score or
             self.lives != self._autosaved_lives
         ):
             self._autosave()
@@ -167,146 +300,20 @@ class Breakout(Activity):
         if self._game_over_handled and self.lives == 5 and self.score == 0:
             self._game_over_handled = False
 
-    def move_left(self):
-        if not breakout.is_game_over():
-            lv.group_focus_obj(self.defocus_button)
-            breakout.move_paddle(-self.paddle_move_step)
-
-    def move_right(self):
-        if not breakout.is_game_over():
-            lv.group_focus_obj(self.defocus_button)
-            breakout.move_paddle(self.paddle_move_step)
-
-    def flush_ready_cb(self, arg1=None, arg2=None):
-        # This is called in IRQ (interrupt) context so it can't allocate memory
-        # So no printf, no calling drawframe() directly, just setting variables or scheduling a function.
-        mpos.ui.main_display._disp_drv.flush_ready()
-        self.flush_ready = True
-
-    def drawframe(self, arg1=None, arg2=None):
-        if self._paused:
-            return
-
-        if self.chunk_waiting:
-            if self.flush_ready:
-                self.flush_ready = False
-                self.chunk_waiting = False
-                self.chunk_index += 1
-                if self.chunk_index >= self.chunk_total:
-                    self.chunk_in_progress = False
-                    self.render_next = True
-                else:
-                    self._render_and_send_chunk()
-            return
-
-        if self.chunk_in_progress or not self.render_next:
-            return
-
-        self.render_next = False
-
-        buffer_len = len(mpos.ui.main_display._frame_buffer1)
-        bytes_per_row = self.hor_res * 2
-        if bytes_per_row <= 0:
-            self.render_next = True
-            return
-
-        rows_per_chunk = buffer_len // bytes_per_row
-        if rows_per_chunk <= 0:
-            self.render_next = True
-            return
-
-        if rows_per_chunk >= self.ver_res:
-            self.chunk_rows_per = self.ver_res
-            self.chunk_index = 0
-            self.chunk_total = 1
-        else:
-            self.chunk_rows_per = rows_per_chunk
-            self.chunk_index = 0
-            self.chunk_total = (self.ver_res + rows_per_chunk - 1) // rows_per_chunk
-
-        self.chunk_in_progress = True
-        self.chunk_waiting = False
-        self.flush_ready = False
-        self._render_and_send_chunk()
-
-    def _render_and_send_chunk(self):
-        if not self.chunk_in_progress:
-            return
-        if self.chunk_waiting:
-            return
-        if self.chunk_index >= self.chunk_total:
-            self.chunk_in_progress = False
-            self.render_next = True
-            return
-
-        y_offset = self.chunk_index * self.chunk_rows_per
-        rows = min(self.chunk_rows_per, self.ver_res - y_offset)
-
-        self.chunk_waiting = True
-        breakout.render(y_offset, rows)
-        self.send_to_display(y_offset, rows)
-
-    def send_to_display(self, y_offset=0, rows=None):
-        x1 = 0
-        x2 = mpos.ui.main_display.get_horizontal_resolution() - 1
-        x2 = x2 + mpos.ui.main_display._offset_x
-        x1 = x1 + mpos.ui.main_display._offset_x
-
-        if rows is None:
-            rows = mpos.ui.main_display.get_vertical_resolution()
-        y1 = y_offset
-        y2 = y_offset + rows - 1
-        y1 = y1 + mpos.ui.main_display._offset_y
-        y2 = y2 + mpos.ui.main_display._offset_y
-
-        cmd = mpos.ui.main_display._set_memory_location(x1, y1, x2, y2)
-        bytes_needed = rows * mpos.ui.main_display.get_horizontal_resolution() * 2
-        data_view = memoryview(mpos.ui.main_display._frame_buffer1)[:bytes_needed]
-
-        tx_last = True
-        mpos.ui.main_display._data_bus.tx_color(
-            cmd,
-            data_view,
-            x1, y1, x2, y2,
-            mpos.ui.main_display._rotation,
-            tx_last,
-        )
-
-    def touch_cb(self, event):
-        if breakout.is_game_over():
-            return
-
-        event_code = event.get_code()
-        if event_code == lv.EVENT.PRESSED:
-            x, y = InputManager.pointer_xy()
-            self.touch_active = True
-            self.touch_last_x = x
-            return
-
-        if event_code == lv.EVENT.PRESSING:
-            if not self.touch_active:
-                x, y = InputManager.pointer_xy()
-                self.touch_active = True
-                self.touch_last_x = x
-                return
-            x, y = InputManager.pointer_xy()
-            if self.touch_last_x is not None:
-                delta = x - self.touch_last_x
-                if delta:
-                    breakout.move_paddle(round(delta * 1.3))
-            self.touch_last_x = x
-            return
-
-        if event_code == lv.EVENT.RELEASED:
-            self.touch_active = False
-            self.touch_last_x = None
-            return
+    def _save_state(self):
+        try:
+            self.score = breakout.get_score()
+            self.level = breakout.get_level()
+            self.lives = breakout.get_lives()
+        except Exception:
+            pass
+        self._save_highscore()
+        self._autosave()
 
     def _autosave(self):
         if self.lives <= 0:
             return
         self._autosaved_level = self.level
-        self._autosaved_score = self.score
         self._autosaved_lives = self.lives
         editor = SharedPreferences(self.appFullName).edit()
         editor.put_int("autosave_level", self.level)
@@ -325,7 +332,6 @@ class Breakout(Activity):
 
     def _delete_autosave(self):
         self._autosaved_level = 0
-        self._autosaved_score = 0
         self._autosaved_lives = 5
         editor = SharedPreferences(self.appFullName).edit()
         editor.put_int("autosave_level", 0)
@@ -340,11 +346,9 @@ class Breakout(Activity):
         saved_lives = prefs.get_int("autosave_lives", 0)
 
         if saved_level <= 0 or saved_lives <= 0:
-            # Start a fresh game and clear any stale dead save.
             self._delete_autosave()
-            breakout.new_game()
+            breakout.new_game(time.ticks_ms())
             self._autosaved_level = 1
-            self._autosaved_score = 0
             self._autosaved_lives = 5
             return
 
@@ -352,12 +356,8 @@ class Breakout(Activity):
         self.score = saved_score
         self.lives = saved_lives
         self._autosaved_level = self.level
-        self._autosaved_score = self.score
         self._autosaved_lives = self.lives
         breakout.set_highscore(self.highscore)
         breakout.set_level(self.level)
         breakout.set_score(self.score)
         breakout.set_lives(self.lives)
-
-    def log_callback(self, level, log_str):
-        pass

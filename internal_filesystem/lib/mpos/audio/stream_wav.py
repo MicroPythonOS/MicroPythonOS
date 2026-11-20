@@ -75,6 +75,11 @@ class WAVStream:
     WAVE_FORMAT_ADPCM = 0x0011
     WAVE_FORMAT_EXTENSIBLE = 0xFFFE # often used for 24 and 32 bits per sample
 
+    # Subclasses that feed their own PCM sink (the piezo buzzer driver) set
+    # this so the normal playback loop also runs on desktop, where the default
+    # behaviour is to hand the file to an external player instead.
+    force_pcm = False
+
     # Warm output (opt-in per board via AudioManager.Output(warm_ms=N)): after a
     # clip ends, the MCLK PWM and I2S peripheral keep running and the codec stays
     # unmuted for N ms, so the next clip starts without the click that restarting
@@ -205,6 +210,8 @@ class WAVStream:
         self._repeat_played = 0
         self._keep_running = True
         self._is_playing = False
+        self._paused = False
+        self._seek_ms = None
         self._i2s = None
         self._mck_pwm = None
         self._web_audio = False
@@ -239,18 +246,56 @@ class WAVStream:
             except ImportError:
                 pass
 
+    def pause(self):
+        """Pause playback without releasing the output."""
+        self._paused = True
+
+    def resume(self):
+        """Continue a paused stream."""
+        self._paused = False
+
+    def is_paused(self):
+        return self._paused
+
+    def seek(self, position_ms):
+        """Ask the playback loop to jump to a position (milliseconds).
+
+        The jump happens on the audio thread at the next chunk boundary, so a
+        caller can seek while the stream is paused and the new position shows
+        up before playback resumes.
+        """
+        try:
+            position_ms = int(position_ms)
+        except (TypeError, ValueError):
+            return False
+        if position_ms < 0:
+            position_ms = 0
+        self._seek_ms = position_ms
+        return True
+
     def get_progress_percent(self):
         if self._total_samples <= 0:
             return None
         return int((self._progress_samples / self._total_samples) * 100)
 
     def get_progress_ms(self):
-        if self._playback_rate:
-            return int((self._progress_samples / self._playback_rate) * 1000)
+        # _progress_samples always counts source frames, so report it against
+        # the source rate even when the sink runs upsampled.
+        if self._original_rate:
+            return int((self._progress_samples / self._original_rate) * 1000)
         return None
 
     def get_duration_ms(self):
         return self._duration_ms
+
+    def _set_progress_ms(self, position_ms):
+        """Record a position while the desktop player is in charge."""
+        rate = self._original_rate or self._playback_rate
+        if rate:
+            samples = int(position_ms * rate / 1000)
+            if self._total_samples and samples > self._total_samples:
+                samples = self._total_samples
+            self._progress_samples = samples
 
 
     # ----------------------------------------------------------------------
@@ -594,11 +639,21 @@ class WAVStream:
                     break
                 elapsed_ms = 0
                 while self._keep_running:
+                    if self._seek_ms is not None:
+                        elapsed_ms = self._seek_ms
+                        if elapsed_ms > self._duration_ms:
+                            elapsed_ms = self._duration_ms
+                        self._seek_ms = None
+                        self._set_progress_ms(elapsed_ms)
+                    if self._paused:
+                        time.sleep_ms(20)
+                        continue
                     time.sleep_ms(100)
                     elapsed_ms += 100
-                    if self._playback_rate:
+                    rate = self._original_rate or self._playback_rate
+                    if rate:
                         self._progress_samples = min(
-                            int(elapsed_ms / 1000.0 * self._playback_rate),
+                            int(elapsed_ms / 1000.0 * rate),
                             self._total_samples
                         )
                     if elapsed_ms >= self._duration_ms:
@@ -630,12 +685,29 @@ class WAVStream:
                 os.system(cmd)
 
                 start_ticks = time.ticks_ms()
+                paused_ms = 0
+                paused_at = None
                 while self._keep_running:
+                    if self._seek_ms is not None:
+                        # The external players used here cannot be seeked in
+                        # place; drop the request rather than lie about it.
+                        self._seek_ms = None
+                    if self._paused:
+                        if paused_at is None:
+                            paused_at = time.ticks_ms()
+                            os.system("kill -STOP $(cat %s)" % qpid)
+                        time.sleep_ms(50)
+                        continue
+                    if paused_at is not None:
+                        paused_ms += time.ticks_diff(time.ticks_ms(), paused_at)
+                        paused_at = None
+                        os.system("kill -CONT $(cat %s)" % qpid)
                     time.sleep_ms(100)
-                    elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
-                    if self._playback_rate:
+                    elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks) - paused_ms
+                    rate = self._original_rate or self._playback_rate
+                    if rate:
                         self._progress_samples = min(
-                            int(elapsed_ms / 1000.0 * self._playback_rate),
+                            int(elapsed_ms / 1000.0 * rate),
                             self._total_samples
                         )
                     if elapsed_ms >= (self._duration_ms or 0):
@@ -658,9 +730,10 @@ class WAVStream:
                 while self._keep_running:
                     await asyncio.sleep_ms(100)
                     elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
-                    if self._playback_rate:
+                    rate = self._original_rate or self._playback_rate
+                    if rate:
                         self._progress_samples = min(
-                            int(elapsed_ms / 1000.0 * self._playback_rate),
+                            int(elapsed_ms / 1000.0 * rate),
                             self._total_samples
                         )
                     if elapsed_ms >= (self._duration_ms or 0):
@@ -688,6 +761,39 @@ class WAVStream:
     # ----------------------------------------------------------------------
     #  Main playback routine
     # ----------------------------------------------------------------------
+    def _apply_seek(self, f, data_start, data_size, bytes_per_sample,
+                    format_tag, block_align):
+        """Jump the file to the pending seek position; returns the new offset.
+
+        Returns None when there was nothing to do or the position cannot be
+        represented for this format (the request is then dropped).
+        """
+        ms = self._seek_ms
+        self._seek_ms = None
+        if ms is None or not self._original_rate:
+            return None
+        target_sample = ms * self._original_rate // 1000
+        if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
+            if block_align <= 0 or self._spb <= 0:
+                return None
+            offset = (target_sample // self._spb) * block_align
+            if offset > data_size:
+                offset = (data_size // block_align) * block_align
+            self._progress_samples = (offset // block_align) * self._spb
+        else:
+            if bytes_per_sample <= 0:
+                return None
+            offset = target_sample * bytes_per_sample
+            offset -= offset % bytes_per_sample
+            if offset > data_size:
+                offset = (data_size // bytes_per_sample) * bytes_per_sample
+            self._progress_samples = offset // bytes_per_sample
+        try:
+            f.seek(data_start + offset)
+        except OSError:
+            return None
+        return offset
+
     def play(self):
         """Main synchronous playback routine (runs in separate thread)."""
         self._is_playing = True
@@ -738,7 +844,7 @@ class WAVStream:
 
                 if __debug__: logger.debug("I2S init params: requested_rate=%s, playback_rate=%s, original_rate=%s, channels=%s, bits=16, i2s_pins=%s", self.requested_sample_rate, playback_rate, original_rate, channels, self.i2s_pins)
 
-                if sys.platform != "esp32":
+                if sys.platform != "esp32" and not self.force_pcm:
                     self._play_desktop()
                     return
 
@@ -774,6 +880,16 @@ class WAVStream:
                     f.seek(data_start)
 
                     while total_original < data_size and self._keep_running:
+                        if self._seek_ms is not None:
+                            seeked = self._apply_seek(
+                                f, data_start, data_size, bytes_per_sample,
+                                format_tag, block_align)
+                            if seeked is not None:
+                                total_original = seeked
+                                continue
+                        if self._paused:
+                            time.sleep_ms(10)
+                            continue
                         chunk, to_read = self._read_decode_chunk(f, total_original)
                         if chunk is None:
                             break
@@ -816,6 +932,12 @@ class WAVStream:
                     # at low byte rates (2 extra seconds at 8 kHz mono).
                     elapsed_ms = time.ticks_diff(time.ticks_ms(), play_start_ms)
                     drain_ms = WAVStream.compute_drain_ms(played_ms, elapsed_ms)
+                    # A seek skips over source time, so the samples-written
+                    # estimate can exceed what the ring actually holds. The
+                    # ring is the real upper bound.
+                    max_drain_ms = ibuf * 1000 // (playback_rate * channels * 2)
+                    if drain_ms > max_drain_ms:
+                        drain_ms = max_drain_ms
                     if drain_ms > 0:
                         time.sleep_ms(drain_ms)
 

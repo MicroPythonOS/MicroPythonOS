@@ -1,0 +1,4 @@
+build_*/
+gen/
+*.mpy
+.mpy_ld_cache/

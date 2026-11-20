@@ -42,6 +42,8 @@ class TestPingHandling(unittest.TestCase):
         self.assertEqual(app.pings, [b"relay-ping"])
 
     def test_no_pong_attribute_needed_anywhere(self):
+        if sys.platform == "esp32":
+            self.skipTest("source tree is not on the device")
         src = open("lib/uaiowebsocket.py").read()
         self.assertFalse(".pong(" in src)
 

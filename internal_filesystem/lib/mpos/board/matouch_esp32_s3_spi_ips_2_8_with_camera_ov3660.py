@@ -26,7 +26,7 @@ import mpos.ui
 # Pin configuration for Display (SPI)
 # Correct pins from hardware schematic
 SPI_BUS = 1
-SPI_FREQ = 40000000
+SPI_FREQ = 80000000
 LCD_SCLK = 14
 LCD_MOSI = 13
 LCD_MISO = 12

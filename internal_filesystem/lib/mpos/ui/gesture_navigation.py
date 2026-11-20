@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 downbutton = None
 backbutton = None
+back_rect = None
+top_rect = None
 down_start_x = 0
 down_start_y = 0
 back_start_y = 0
@@ -18,9 +20,49 @@ back_start_x = 0
 short_movement_threshold = 10
 backbutton_visible = False
 downbutton_visible = False
+system_gestures_enabled = True
 
 def is_short_movement(dx, dy):
     return dx < short_movement_threshold and dy < short_movement_threshold
+
+def _delete_gesture_objects(rect, button):
+    for obj in (rect, button):
+        if obj is not None:
+            try:
+                obj.delete()
+            except Exception:
+                pass
+
+def _apply_gesture_state(rect):
+    if rect is None:
+        return
+    if system_gestures_enabled:
+        rect.remove_flag(lv.obj.FLAG.HIDDEN)
+        rect.add_flag(lv.obj.FLAG.CLICKABLE)
+    else:
+        rect.add_flag(lv.obj.FLAG.HIDDEN)
+        # A hidden but clickable zone still wins the hit test, which is exactly
+        # what takes the touch away from the foreground activity.
+        rect.remove_flag(lv.obj.FLAG.CLICKABLE)
+
+def set_system_gestures_enabled(enabled):
+    """Turn the top/left edge swipes off for immersive input, or back on.
+
+    The foreground activity declares this through
+    ``Activity.system_gestures_enabled``; the view applies it whenever the
+    foreground changes.
+    """
+    global system_gestures_enabled, backbutton_visible, downbutton_visible
+    system_gestures_enabled = bool(enabled)
+    _apply_gesture_state(back_rect)
+    _apply_gesture_state(top_rect)
+    if not system_gestures_enabled:
+        backbutton_visible = False
+        downbutton_visible = False
+        for button in (backbutton, downbutton):
+            if button is not None:
+                button.add_flag(lv.obj.FLAG.HIDDEN)
+
 
 def _passthrough_click(x, y, indev):
     obj = lv.indev_search_obj(lv.screen_active(), lv.point_t({'x': x, 'y': y}))
@@ -53,6 +95,10 @@ def _back_swipe_cb(event):
             backbutton_visible = should_show
             WidgetAnimator.smooth_show(backbutton) if should_show else WidgetAnimator.smooth_hide(backbutton)
         backbutton.set_pos(round(x / 10), back_start_y)
+    elif event_code == lv.EVENT.PRESS_LOST:
+        if backbutton_visible:
+            backbutton_visible = False
+            WidgetAnimator.smooth_hide(backbutton)
     elif event_code == lv.EVENT.RELEASED:
         if backbutton_visible:
             backbutton_visible = False
@@ -88,6 +134,10 @@ def _top_swipe_cb(event):
             downbutton_visible = should_show
             WidgetAnimator.smooth_show(downbutton) if should_show else WidgetAnimator.smooth_hide(downbutton)
         downbutton.set_pos(down_start_x, round(y / 10))
+    elif event_code == lv.EVENT.PRESS_LOST:
+        if downbutton_visible:
+            downbutton_visible = False
+            WidgetAnimator.smooth_hide(downbutton)
     elif event_code == lv.EVENT.RELEASED:
         if downbutton_visible:
             downbutton_visible = False
@@ -103,8 +153,10 @@ def _top_swipe_cb(event):
             _passthrough_click(x, y, indev)
 
 def handle_back_swipe():
-    global backbutton
+    global backbutton, back_rect
+    _delete_gesture_objects(back_rect, backbutton)
     rect = lv.obj(lv.layer_top())
+    back_rect = rect
     rect.set_size(AppearanceManager.NOTIFICATION_BAR_HEIGHT, lv.layer_top().get_height()-AppearanceManager.NOTIFICATION_BAR_HEIGHT) # narrow because it overlaps buttons
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     rect.set_scroll_dir(lv.DIR.NONE)
@@ -119,6 +171,7 @@ def handle_back_swipe():
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESSED, None)
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESSING, None)
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.RELEASED, None)
+    rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESS_LOST, None)
     # button with label that shows up during the dragging:
     backbutton = lv.button(lv.layer_top())
     backbutton.set_pos(0, round(lv.layer_top().get_height() / 2))
@@ -136,10 +189,13 @@ def handle_back_swipe():
     backlabel.set_text(lv.SYMBOL.NEW_LINE)
     backlabel.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
     backlabel.center()
+    _apply_gesture_state(rect)
 
 def handle_top_swipe():
-    global downbutton
+    global downbutton, top_rect
+    _delete_gesture_objects(top_rect, downbutton)
     rect = lv.obj(lv.layer_top())
+    top_rect = rect
     rect.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     rect.set_pos(0, 0)
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -153,6 +209,7 @@ def handle_top_swipe():
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESSED, None)
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESSING, None)
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.RELEASED, None)
+    rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESS_LOST, None)
     # button with label that shows up during the dragging:
     downbutton = lv.button(lv.layer_top())
     downbutton.set_pos(0, round(lv.layer_top().get_height() / 2))
@@ -162,3 +219,4 @@ def handle_top_swipe():
     downlabel.set_text(lv.SYMBOL.DOWN)
     downlabel.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
     downlabel.center()
+    _apply_gesture_state(rect)

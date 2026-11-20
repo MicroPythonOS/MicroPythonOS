@@ -51,8 +51,11 @@ class ChooserActivity(Activity):
     def _select_handler(self, handler_info, original_intent):
         from ...activity_navigator import ActivityNavigator
 
-        ActivityNavigator._dispatch(original_intent, handler_info, self._result_callback)
+        result_callback = self._result_callback
+        # Leave the chooser first: dispatching pushes the target activity, so
+        # finishing afterwards would pop the target instead of the chooser.
         self.finish()
+        ActivityNavigator._dispatch(original_intent, handler_info, result_callback)
 
     def onStop(self, screen):
         if __debug__: logger.debug("ChooserActivity stopped")

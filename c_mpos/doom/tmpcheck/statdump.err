@@ -1,0 +1,6 @@
+gen/statdump.c:38:18: warning: ‘doom2_par_times__statdump’ defined but not used [-Wunused-const-variable=]
+   38 | static const int doom2_par_times__statdump[] = {
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~
+gen/statdump.c:33:18: warning: ‘doom1_par_times__statdump’ defined but not used [-Wunused-const-variable=]
+   33 | static const int doom1_par_times__statdump[] = {
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~

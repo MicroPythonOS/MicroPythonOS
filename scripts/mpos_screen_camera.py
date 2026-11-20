@@ -381,6 +381,9 @@ def _norm(array):
     return (array - mean) / (std if std > 1e-6 else 1.0)
 
 
+FLAT_CELL_STD = 3.0
+
+
 def _ncc(first, second):
     return float((_norm(first) * _norm(second)).mean())
 
@@ -407,7 +410,13 @@ def metrics(reference_bgr, aligned_bgr, quad=None, rows=None, cols=None):
         for col in range(cols):
             y0, y1 = int(row * height / rows), int((row + 1) * height / rows)
             x0, x1 = int(col * width / cols), int((col + 1) * width / cols)
-            cell_values.append(float((_norm(ref_gray[y0:y1, x0:x1]) * _norm(aligned_gray[y0:y1, x0:x1])).mean()))
+            ref_cell = ref_gray[y0:y1, x0:x1]
+            if float(ref_cell.std()) < FLAT_CELL_STD:
+                # A cell that is one flat colour has nothing to compare; its
+                # normalized correlation is ~0 for any camera noise, so counting
+                # it would fail every mostly-blank screen (e.g. the About app).
+                continue
+            cell_values.append(float((_norm(ref_cell) * _norm(aligned_gray[y0:y1, x0:x1])).mean()))
 
     result = {
         "ncc_gray": round(_ncc(ref_gray, aligned_gray), 3),
@@ -415,10 +424,11 @@ def metrics(reference_bgr, aligned_bgr, quad=None, rows=None, cols=None):
         "ncc_bgr": [round(_ncc(reference_bgr[:, :, i], aligned_bgr[:, :, i]), 3) for i in range(3)],
         "laplacian_var": round(float(cv2.Laplacian(aligned_gray, cv2.CV_64F).var()), 1),
         "tenengrad": round(float(np.mean(sobel_x * sobel_x + sobel_y * sobel_y)), 1),
-        "cell_ncc_mean": round(float(np.mean(cell_values)), 3),
-        "cell_ncc_min": round(float(np.min(cell_values)), 3),
         "cells": [rows, cols],
     }
+    if cell_values:
+        result["cell_ncc_mean"] = round(float(np.mean(cell_values)), 3)
+        result["cell_ncc_min"] = round(float(np.min(cell_values)), 3)
     if quad is not None:
         screen_w = float(np.linalg.norm(quad[1] - quad[0]))
         screen_h = float(np.linalg.norm(quad[3] - quad[0]))

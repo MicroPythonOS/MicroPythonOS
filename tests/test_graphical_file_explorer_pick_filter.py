@@ -93,6 +93,43 @@ class TestGraphicalFileExplorerPickFilter(unittest.TestCase):
         for expected in ("song.wav", "notes.md", "video.rgb565", "sub"):
             self.assertIn(expected, names)
 
+    @staticmethod
+    def _event_for(explorer, path):
+        class _Event:
+            def __init__(self, btn):
+                self._btn = btn
+
+            def get_target_obj(self):
+                return self._btn
+
+        return _Event(explorer._path_to_btn[path])
+
+    def test_pick_mode_tap_enters_a_folder(self):
+        explorer = self._open_explorer(
+            action="pick_file",
+            extras={"start_dir": FIXTURE_DIR + "/", "path_pattern": [".wav"]},
+        )
+        path = FIXTURE_DIR + "/sub/"
+        explorer._on_item_clicked(self._event_for(explorer, path), path, True)
+        self.assertEqual(explorer._current_path, FIXTURE_DIR + "/sub/",
+                         "tapping a folder must enter it, not select it")
+        self.assertEqual(explorer._selected_paths, [])
+
+    def test_pick_mode_long_press_selects_a_folder(self):
+        explorer = self._open_explorer(
+            action="pick_file",
+            extras={"start_dir": FIXTURE_DIR + "/", "path_pattern": [".wav"]},
+        )
+        path = FIXTURE_DIR + "/sub/"
+        event = self._event_for(explorer, path)
+        explorer._on_any_long_press(event, path)
+        self.assertIn(path, explorer._selected_paths)
+        # The CLICKED that LVGL sends on release must not enter the folder.
+        explorer._on_item_clicked(event, path, True)
+        self.assertEqual(explorer._current_path, FIXTURE_DIR + "/")
+        self.assertIn(path, explorer._selected_paths,
+                      "the release that follows a long press deselected the folder")
+
     def test_browse_mode_lists_everything(self):
         explorer = self._open_explorer(
             extras={

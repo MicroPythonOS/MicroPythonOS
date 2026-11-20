@@ -18,7 +18,7 @@ ifeq ($(ARCH),)
 all: $(ARCHES)
 
 $(ARCHES):
-	$(MAKE) -f $(lastword $(MAKEFILE_LIST)) ARCH=$@ MOD=$(MOD)_$@
+	$(MAKE) -f $(lastword $(MAKEFILE_LIST)) ARCH=$@ MOD=$(MOD)_$@ BUILD=build_$@
 else
 # Include to get the rules for compiling and linking the module
 include $(MPY_DIR)/py/dynruntime.mk

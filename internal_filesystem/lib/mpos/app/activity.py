@@ -5,6 +5,11 @@ logger = logging.getLogger(__name__)
 
 class Activity:
 
+    # An activity that owns the whole screen (a game with its own touch
+    # controls) can set this to False: the OS then takes the top and left edge
+    # swipes out of the hit test instead of opening the drawer or going back.
+    system_gestures_enabled = True
+
     def __init__(self):
         self.intent = None  # Store the intent that launched this activity
         self.result = None

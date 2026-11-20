@@ -12,8 +12,10 @@ mydir=$(dirname "$mydir")
 
 cd "$mydir"
 
-rm -rf build
-rm *.mpy
+# Each architecture gets its own object dir (see the Makefile): sharing one
+# left the second architecture linking the first one's objects.
+rm -rf build build_x64 build_xtensawin
+rm -f *.mpy
 
 make </dev/null
 

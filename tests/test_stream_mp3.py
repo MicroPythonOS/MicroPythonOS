@@ -1,5 +1,6 @@
 # Unit tests for MP3 routing in AudioManager and MP3Stream's desktop fallback.
 import os
+import sys
 import unittest
 
 from mpos.testing import (
@@ -158,6 +159,8 @@ class _FakeSys:
 class TestMP3StreamDesktop(unittest.TestCase):
 
     def setUp(self):
+        if sys.platform == "esp32":
+            self.skipTest("desktop player selection (ffplay/mpg123/aplay)")
         self.stream = stream_mp3.MP3Stream("/music/song.mp3", 0, 70, I2S_PINS, None)
         self.real_system = os.system
         # The player selection is host specific: pin a Linux platform so the

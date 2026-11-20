@@ -85,12 +85,26 @@ class Fri3dCommunicatorKeyboard(keypad_framework.KeypadDriver):
         self._repeat_lv_key = None
         self._repeat_press_start_ms = 0
         self._repeat_last_emit_ms = 0
+        self._repeat_enabled = True
 
     def _reset_repeat(self):
         self._repeat_hid = None
         self._repeat_lv_key = None
         self._repeat_press_start_ms = 0
         self._repeat_last_emit_ms = 0
+
+    def held_keys(self):
+        """The keys in the last HID report that are still down."""
+        return tuple(
+            self._active_lv_by_hid[hid]
+            for hid in self._prev_keys
+            if hid in self._active_lv_by_hid)
+
+    def set_repeat_enabled(self, enabled):
+        """Repeats are for typing; a game wants one press and one release."""
+        self._repeat_enabled = bool(enabled)
+        if not self._repeat_enabled:
+            self._reset_repeat()
 
     def _fire_mpos_nav_hook(self, state, key):
         if state != self.PRESSED:
@@ -169,6 +183,8 @@ class Fri3dCommunicatorKeyboard(keypad_framework.KeypadDriver):
             self._reset_repeat()
 
     def _maybe_enqueue_repeat(self):
+        if not self._repeat_enabled:
+            return
         if self._repeat_lv_key is None:
             return
         if self._repeat_hid not in self._prev_keys:

@@ -1,0 +1,7 @@
+gen/i_sound.c: In function ‘I_BindSoundVariables’:
+gen/i_sound.c:404:18: warning: unused variable ‘libsamplerate_scale’ [-Wunused-variable]
+  404 |     extern float libsamplerate_scale;
+      |                  ^~~~~~~~~~~~~~~~~~~
+gen/i_sound.c:403:16: warning: unused variable ‘use_libsamplerate’ [-Wunused-variable]
+  403 |     extern int use_libsamplerate;
+      |                ^~~~~~~~~~~~~~~~~

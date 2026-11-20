@@ -234,26 +234,34 @@ def _build_import_runner_code(tests_dir=None, coverage=False, coverage_paths=Non
         "    _mpos_a.core._io_queue = _mpos_saved_io_queue\n"
         "    _mpos_a.core.cur_task = _mpos_saved_cur_task\n"
         "\n"
-        "_mpos_orig_run = _mpos_a.run\n"
-        "def _mpos_safe_run(coro):\n"
-        "    try:\n"
-        "        return _mpos_orig_run(coro)\n"
-        "    finally:\n"
-        "        _mpos_a.core.cur_task = _mpos_saved_cur_task\n"
-        "_mpos_a.run = _mpos_safe_run\n"
+        # A device runs the whole suite in one interpreter, so install these\n"
+        "# wrappers once: wrapping the previous wrapper adds a frame per test\n"
+        "# and asyncio.run() ends at the recursion limit.\n"
+        "if not getattr(_mpos_a, '_mpos_wrapped', False):\n"
+        "    _mpos_a._mpos_wrapped = True\n"
+        "    _mpos_a._mpos_orig_run = _mpos_a.run\n"
+        "    _mpos_a._mpos_orig_new_loop = _mpos_a.new_event_loop\n"
+        "    _mpos_a._mpos_orig_loop_rtc = _mpos_a.Loop.run_until_complete\n"
+        "    _mpos_a._mpos_saved = {'cur_task': _mpos_saved_cur_task}\n"
         "\n"
-        "_mpos_orig_new_loop = _mpos_a.new_event_loop\n"
-        "def _mpos_safe_new_loop():\n"
-        "    return _mpos_orig_new_loop()\n"
-        "_mpos_a.new_event_loop = _mpos_safe_new_loop\n"
+        "    def _mpos_safe_run(coro):\n"
+        "        try:\n"
+        "            return _mpos_a._mpos_orig_run(coro)\n"
+        "        finally:\n"
+        "            _mpos_a.core.cur_task = _mpos_a._mpos_saved['cur_task']\n"
+        "    _mpos_a.run = _mpos_safe_run\n"
         "\n"
-        "_mpos_orig_loop_rtc = _mpos_a.Loop.run_until_complete\n"
-        "def _mpos_safe_loop_rtc(aw):\n"
-        "    try:\n"
-        "        return _mpos_orig_loop_rtc(aw)\n"
-        "    finally:\n"
-        "        _mpos_a.core.cur_task = _mpos_saved_cur_task\n"
-        "_mpos_a.Loop.run_until_complete = staticmethod(_mpos_safe_loop_rtc)\n"
+        "    def _mpos_safe_new_loop():\n"
+        "        return _mpos_a._mpos_orig_new_loop()\n"
+        "    _mpos_a.new_event_loop = _mpos_safe_new_loop\n"
+        "\n"
+        "    def _mpos_safe_loop_rtc(aw):\n"
+        "        try:\n"
+        "            return _mpos_a._mpos_orig_loop_rtc(aw)\n"
+        "        finally:\n"
+        "            _mpos_a.core.cur_task = _mpos_a._mpos_saved['cur_task']\n"
+        "    _mpos_a.Loop.run_until_complete = staticmethod(_mpos_safe_loop_rtc)\n"
+        "_mpos_a._mpos_saved['cur_task'] = _mpos_saved_cur_task\n"
     )
 
     code += "import mpos; mpos.TaskManager.disable()\n"
@@ -1297,67 +1305,50 @@ class SerialBackend:
             except Exception:
                 pass
 
-        print("waiting 1 minute for device...")
-        time.sleep(60)
-        return True
-
-        '''
-        # 2. machine.reset() detaches USB from the bus entirely.
-        # On USB/IP passthrough (KVM) we must re-attach after reset.
-        # On direct USB this script doesn't exist — no-op.
-        attach_script = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..", "..", "..", "kvm_usb", "vm", "esp32-usbip-attach.sh",
-        )
-        if os.path.exists(attach_script):
-            subprocess.run(["bash", attach_script], capture_output=True, timeout=10)
-            time.sleep(1)
-
-        # 3. Wait for the serial port to reappear after USB re-enumeration
+        # machine.reset() detaches and re-enumerates the USB device. Keep
+        # reading as soon as the port appears: the boot log is only ~0.5 KB,
+        # but the CDC TX FIFO is small, so a host that sleeps without reading
+        # leaves the device blocked in print(). A blocked main task also stops
+        # draining RX, so the next write times out (the "USB CDC wedge" that
+        # the relay path avoids by polling the port as it boots).
+        print("waiting for device to boot...")
         deadline = time.monotonic() + timeout
-        while not os.path.exists(self.port):
-            if time.monotonic() > deadline:
-                raise TimeoutError(
-                    "Device at {} did not reappear after reset".format(self.port)
-                )
-            time.sleep(0.1)
-
-        # 4. Reconnect and wait for main.py to finish booting.
-        # USB/IP ports can flap — retry up to 20 times (3s apart = ~60s window).
-        # ESP32 boot takes 2-40s depending on apps and BLE init.
-        # Don't use wait_for_boot() here — it sends Ctrl-C after 2s which
-        # interrupts main.py mid-boot. Instead, read serial output directly
-        # until the "Starting asyncio REPL..." sentinel confirms full boot.
         last_err = None
-        for _ in range(20):
+        while time.monotonic() < deadline:
             if not os.path.exists(self.port):
-                time.sleep(3)
+                time.sleep(0.2)
                 continue
             try:
                 ser = _serial.Serial(
                     self.port, self.baudrate, timeout=0.5, write_timeout=2,
                 )
-                try:
-                    t0 = time.monotonic()
-                    data = b""
-                    while time.monotonic() - t0 < min(timeout, 60):
-                        chunk = ser.read(4096)
-                        if chunk:
-                            data += chunk
-                            if b"Starting asyncio REPL..." in data:
-                                return True
-                        time.sleep(0.1)
-                    time.sleep(10) # seems needed to make tests/test_adc_recording.py work?
-                    return True
-                finally:
-                    ser.close()
             except (OSError, _serial.SerialException) as e:
                 last_err = e
-                time.sleep(3)
-        raise RuntimeError(
-            "Device at {} not reachable after reset: {}".format(self.port, last_err)
+                time.sleep(0.5)
+                continue
+            try:
+                data = b""
+                while time.monotonic() < deadline:
+                    chunk = ser.read(4096)
+                    if not chunk:
+                        continue
+                    data += chunk
+                    if b"Starting asyncio REPL..." in data or b">>> " in data:
+                        return True
+            except (OSError, _serial.SerialException) as e:
+                last_err = e
+            finally:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+            time.sleep(0.5)
+
+        raise TimeoutError(
+            "Device at {} did not finish booting after reset (last error: {})".format(
+                self.port, last_err
+            )
         )
-        '''
 
     def soft_reset(self):
         """Ctrl-D soft reset via existing serial connection, wait for REPL."""
@@ -1458,7 +1449,7 @@ class SerialBackend:
             f.write(data)
         subprocess.run(
             _mpremote_cmd(self.port, "cp", tmppath, ":{}".format(path)),
-            capture_output=True, timeout=60
+            capture_output=True, timeout=120 + len(data) // 1024
         )
         _os.unlink(tmppath)
 
@@ -1768,7 +1759,7 @@ class MPOSController:
         return mpos_buzzer_acoustic
 
     def buzzer_acoustic_measure(self, notes=None, volume=100, device=None, out_dir=None,
-                                label="buzzer", thresholds=None):
+                                channels=None, label="buzzer", thresholds=None):
         """Play notes on the badge buzzer and score a host microphone recording.
 
         Host-only: needs a USB microphone on the host, ``arecord`` and numpy
@@ -1779,15 +1770,16 @@ class MPOSController:
         return buzzer.verify(
             controller=self, notes=notes or buzzer.DEFAULT_NOTES, volume=volume,
             device=device, out_dir=out_dir or buzzer.DEFAULT_OUT_DIR, label=label,
+            channels=channels,
             thresholds=thresholds,
         )
 
     def buzzer_acoustic_verify(self, notes=None, volume=100, device=None, out_dir=None,
-                               label="buzzer", thresholds=None):
+                               channels=None, label="buzzer", thresholds=None):
         """Like buzzer_acoustic_measure but returns ``(ok, metrics)``."""
         measured = self.buzzer_acoustic_measure(
             notes=notes, volume=volume, device=device, out_dir=out_dir, label=label,
-            thresholds=thresholds,
+            channels=channels, thresholds=thresholds,
         )
         return bool(measured.get("ok")), measured
 
@@ -1800,6 +1792,7 @@ class MPOSController:
         return mpos_dac_acoustic
 
     def dac_acoustic_measure(self, notes=None, file=None, volume=100, device=None,
+                             channels=None,
                              out_dir=None, label="dac", output=None, thresholds=None,
                              capture_gain=None):
         """Play tones (or *file*) on the badge DAC and score a host recording.
@@ -1814,6 +1807,7 @@ class MPOSController:
             notes = dac.DEFAULT_NOTES
         return dac.verify(
             controller=self, notes=notes, file=file, volume=volume, device=device,
+            channels=channels,
             out_dir=out_dir or dac.DEFAULT_OUT_DIR, label=label,
             output=output or dac.DEFAULT_OUTPUT, thresholds=thresholds,
             capture_gain=capture_gain,
@@ -1821,11 +1815,12 @@ class MPOSController:
 
     def dac_acoustic_verify(self, notes=None, file=None, volume=100, device=None,
                             out_dir=None, label="dac", output=None, thresholds=None,
-                            capture_gain=None):
+                            capture_gain=None, channels=None):
         """Like dac_acoustic_measure but returns ``(ok, metrics)``."""
         measured = self.dac_acoustic_measure(
             notes=notes, file=file, volume=volume, device=device, out_dir=out_dir,
             label=label, output=output, thresholds=thresholds, capture_gain=capture_gain,
+            channels=channels,
         )
         return bool(measured.get("ok")), measured
 

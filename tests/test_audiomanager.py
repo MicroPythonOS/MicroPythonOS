@@ -19,6 +19,11 @@ inject_mocks({
 
 # Now import the module to test
 from mpos.audio.audiomanager import AudioManager
+from mpos.audio import audiomanager as _audiomanager
+
+# mpos/__init__.py imports AudioManager before the mocks above are installed,
+# so audiomanager already holds a reference to the real _thread module.
+_audiomanager._thread = MockThread
 
 
 class TestAudioManager(unittest.TestCase):
@@ -109,15 +114,23 @@ class TestAudioManager(unittest.TestCase):
         with self.assertRaises(ValueError):
             AudioManager.player(rtttl="Test:d=4,o=5,b=120:c").start()
 
-    def test_buzzer_only_rejects_wav(self):
-        """Test that buzzer-only config rejects I2S playback."""
-        # Re-initialize with buzzer only
+    def test_buzzer_accepts_wav_via_pcm_driver(self):
+        """A buzzer output now plays WAV/MP3 through the PCM driver."""
+        AudioManager._instance = None
+        AudioManager()
+        AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=self.buzzer_pin))
+
+        player = AudioManager.player(file_path="test.wav")
+        player.start()
+        self.assertEqual(len(MockThread._started_threads), 1)
+
+    def test_buzzer_rejects_playback_without_a_source(self):
         AudioManager._instance = None
         AudioManager()
         AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=self.buzzer_pin))
 
         with self.assertRaises(ValueError):
-            AudioManager.player(file_path="test.wav").start()
+            AudioManager.player().start()
 
     def test_is_playing_initially_false(self):
         """Test that is_playing() returns False initially."""
@@ -257,6 +270,89 @@ class TestAudioManagerPreferences(unittest.TestCase):
         default_input = AudioManager.get_default_input()
         self.assertIsNotNone(default_input)
         self.assertEqual(default_input.name, "mic")
+
+
+class TestBuzzerTuning(unittest.TestCase):
+    """The piezo-as-speaker tuning knobs exposed by the audio settings app."""
+
+    def setUp(self):
+        AudioManager._instance = None
+        MockSharedPreferences.reset_all()
+        AudioManager()
+        self._prefs = MockSharedPreferences("com.micropythonos.settings.audio")
+        AudioManager.get()._audio_prefs = self._prefs
+        self.buzzer = AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=46))
+
+    def tearDown(self):
+        AudioManager.stop()
+
+    def test_default_gain_is_audible(self):
+        self.assertEqual(self.buzzer.buzzer_gain, 800)
+
+    def test_set_gain_applies_to_buzzer_outputs_and_persists(self):
+        self.assertEqual(AudioManager.set_buzzer_gain(1600), 1600)
+        self.assertEqual(self.buzzer.buzzer_gain, 1600)
+        self.assertEqual(self._prefs.get_string("buzzer_gain"), "1600")
+        self.assertEqual(AudioManager.get_buzzer_gain(), 1600)
+
+    def test_gain_is_clamped(self):
+        self.assertEqual(AudioManager.set_buzzer_gain(99999), 3200)
+        self.assertEqual(self.buzzer.buzzer_gain, 3200)
+        self.assertEqual(AudioManager.set_buzzer_gain(-5), 0)
+        self.assertEqual(self.buzzer.buzzer_gain, 0)
+
+    def test_invalid_gain_is_ignored(self):
+        self.assertIsNone(AudioManager.set_buzzer_gain("loud"))
+        self.assertEqual(self.buzzer.buzzer_gain, 800)
+
+    def test_carrier_emphasis_and_mod_are_applied_and_persisted(self):
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_carrier", 2), 2)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_emphasis", 55), 55)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_mod", 3000), 3000)
+        self.assertEqual(self.buzzer.buzzer_carrier, 2)
+        self.assertEqual(self.buzzer.buzzer_emphasis, 55)
+        self.assertEqual(self.buzzer.buzzer_mod, 3000)
+        self.assertEqual(self._prefs.get_string("buzzer_carrier"), "2")
+        self.assertEqual(self._prefs.get_string("buzzer_emphasis"), "55")
+        self.assertEqual(self._prefs.get_string("buzzer_mod"), "3000")
+        self.assertEqual(AudioManager.get_buzzer_tuning("buzzer_mod"), 3000)
+
+    def test_tuning_is_clamped_to_its_range(self):
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_emphasis", 1000), 90)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_mod", -10), 0)
+        self.assertEqual(AudioManager.set_buzzer_tuning("buzzer_carrier", 99999999), 8)
+
+    def test_unknown_tuning_key_is_rejected(self):
+        with self.assertRaises(ValueError):
+            AudioManager.set_buzzer_tuning("buzzer_something", 1)
+        with self.assertRaises(ValueError):
+            AudioManager.get_buzzer_tuning("buzzer_something")
+
+    def test_output_accepts_the_tuning_parameters(self):
+        output = AudioManager.Output(
+            "buzzer2", "buzzer", buzzer_pin=46,
+            buzzer_gain=1600, buzzer_carrier=3, buzzer_emphasis=30, buzzer_mod=2500)
+        self.assertEqual(output.buzzer_gain, 1600)
+        self.assertEqual(output.buzzer_carrier, 3)
+        self.assertEqual(output.buzzer_emphasis, 30)
+        self.assertEqual(output.buzzer_mod, 2500)
+
+    def test_stored_gain_is_applied_when_the_output_is_registered(self):
+        AudioManager._instance = None
+        AudioManager()
+        prefs = MockSharedPreferences("com.micropythonos.settings.audio")
+        AudioManager.get()._audio_prefs = prefs
+        editor = prefs.edit()
+        editor.put_string("buzzer_gain", "3200")
+        editor.put_string("buzzer_emphasis", "75")
+        editor.put_string("buzzer_mod", "2500")
+        editor.put_string("buzzer_carrier", "4")
+        editor.commit()
+        output = AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=46))
+        self.assertEqual(output.buzzer_gain, 3200)
+        self.assertEqual(output.buzzer_emphasis, 75)
+        self.assertEqual(output.buzzer_mod, 2500)
+        self.assertEqual(output.buzzer_carrier, 4)
 
 
 class TestAudioManagerFindMethods(unittest.TestCase):

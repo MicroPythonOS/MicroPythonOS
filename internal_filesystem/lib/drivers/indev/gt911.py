@@ -26,6 +26,8 @@ _CMD_INT_HIGH_LEVEL = const(0x03)
 
 _STATUS_REG = const(0x814E)
 _POINT_1_REG = const(0x8150)
+_MAX_TOUCH_POINTS = const(5)
+_TOUCH_POINT_SIZE = const(8)
 
 _PRODUCT_ID_REG = const(0x8140)
 _FIRMWARE_VERSION_REG = const(0x8144)
@@ -41,6 +43,20 @@ BITS = 16
 _ADDR2 = const(0x14)
 
 _USE_INTERRUPTS = False # Interrupt handler based? Or just polling?
+
+
+def parse_touch_points(buf, count):
+    points = []
+    for index in range(count):
+        offset = index * _TOUCH_POINT_SIZE
+        x = buf[offset] | (buf[offset + 1] << 8)
+        y = buf[offset + 2] | (buf[offset + 3] << 8)
+        size = buf[offset + 4] | (buf[offset + 5] << 8)
+        if not (x or y or size):
+            continue
+        points.append((index, x, y))
+    return points
+
 
 class GT911(pointer_framework.PointerDriver):
 
@@ -76,7 +92,7 @@ class GT911(pointer_framework.PointerDriver):
     ):
         self._tx_buf = bytearray(3)
         self._tx_mv = memoryview(self._tx_buf)
-        self._rx_buf = bytearray(6)
+        self._rx_buf = bytearray(1 + _MAX_TOUCH_POINTS * _TOUCH_POINT_SIZE)
         self._rx_mv = memoryview(self._rx_buf)
 
         self._device = device
@@ -85,6 +101,8 @@ class GT911(pointer_framework.PointerDriver):
         self.__y = 0
         self.__last_state = self.RELEASED
         self._interrupt_flag = False
+        self._touch_points = []
+        self._multi_touch_active = False
 
         if isinstance(reset_pin, int):
             reset_pin = machine.Pin(reset_pin, machine.Pin.OUT)
@@ -108,6 +126,8 @@ class GT911(pointer_framework.PointerDriver):
         self._interrupt_flag = True
 
     def hw_reset(self):
+        self._touch_points = []
+        self._multi_touch_active = False
         if self._reset_pin:
             if self._interrupt_pin:
                 self._interrupt_pin.init(self._interrupt_pin.OUT)
@@ -199,21 +219,42 @@ class GT911(pointer_framework.PointerDriver):
         status = self._rx_buf[0] & 0x80
 
         if status:
-            if touch_cnt == 1:
-                self._read_reg(_POINT_1_REG, 6)
-
-                x = self._rx_buf[0] + (self._rx_buf[1] << 8)
-                y = self._rx_buf[2] + (self._rx_buf[3] << 8)
-
-                self._write_reg(_STATUS_REG, 0x00)
-
-                self.__x = x
-                self.__y = y
-                self.__last_state = self.PRESSED
-
-            elif touch_cnt == 0:
-                self.__last_state = self.RELEASED
+            if touch_cnt:
+                if touch_cnt > _MAX_TOUCH_POINTS:
+                    touch_cnt = _MAX_TOUCH_POINTS
+                self._read_reg(_POINT_1_REG, touch_cnt * _TOUCH_POINT_SIZE)
+                self._touch_points = parse_touch_points(self._rx_buf, touch_cnt)
+            else:
+                self._touch_points = []
 
             self._write_reg(_STATUS_REG, 0x00)
 
+        if len(self._touch_points) >= 2:
+            if not self._multi_touch_active:
+                self._multi_touch_active = True
+                self._indev_drv.wait_release()
+            return None
+
+        if self._multi_touch_active:
+            if not self._touch_points:
+                self._multi_touch_active = False
+            return None
+
+        if self._touch_points:
+            self.__x = self._touch_points[0][1]
+            self.__y = self._touch_points[0][2]
+            self.__last_state = self.PRESSED
+        else:
+            self.__last_state = self.RELEASED
+
         return self.__last_state, self.__x, self.__y
+
+    def get_touches(self):
+        touches = []
+        for point_id, x, y in self._touch_points:
+            logical_x, logical_y = self._calc_coords(x, y)
+            touches.append((point_id, logical_x, logical_y))
+        return touches
+
+    def get_touch_count(self):
+        return len(self._touch_points)

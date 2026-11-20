@@ -103,6 +103,15 @@ if [[ " $* " == *" --usb "* ]]; then
 	fi
 fi
 
+# Full flash images get a preloaded filesystem (sample media plus a handful of
+# apps that are normally installed from the AppStore). It is on by default for
+# the ESP32-family targets that have room for it; --no-preload-fs (or
+# MPOS_PRELOAD_FS=0) produces the old firmware-only image.
+preload_fs=1
+if [ "${MPOS_PRELOAD_FS:-1}" = "0" ] || [[ " $* " == *" --no-preload-fs "* ]]; then
+	preload_fs=0
+fi
+
 if [ -z "$target" ]; then
     echo "Usage: $0 target"
     echo "Usage: $0 <esp32 or esp32-small or unix or macOS or web>"
@@ -113,6 +122,7 @@ if [ -z "$target" ]; then
     echo "Example: $0 esp32-small"
     echo "Example: $0 esp32s3"
     echo "Example: $0 esp32s3 --usb (USB host support: display adapters + HID, ESP32-S3 USB host)"
+    echo "Example: $0 esp32s3 --no-preload-fs (firmware-only image, no preloaded apps/sample media)"
     echo "Example: $0 esp32p4 (ESP32-P4 + ESP32-C6 Wi-Fi co-processor, e.g. Waveshare ESP32-P4-WIFI6-Touch-LCD boards)"
     echo "Example: $0 unphone"
     echo "Example: $0 lilygo_t4"
@@ -194,16 +204,22 @@ cat "$idfile"
 
 echo "Check need to add lvgl_micropython manifest to micropython-camera-API's manifest..."
 camani="$codebasedir"/micropython-camera-API/src/manifest.py
-rellvglmani=lvgl_micropython/build/manifest.py
-abslvglmani="$codebasedir"/"$rellvglmani"
+rellvglmani=../../lvgl_micropython/build/manifest.py
+if grep -q '^include("/' "$camani"; then
+	# Earlier builds appended an absolute include, which baked this checkout's
+	# path into a tracked file. Drop it; manifest includes resolve relative to
+	# the manifest doing the including.
+	echo "Removing absolute manifest include from $camani"
+	sed -i.bak '/^include("\//d' "$camani" && rm -f "$camani".bak
+fi
 if ! grep "$rellvglmani" "$camani"; then
-	echo "Adding include(\"$abslvglmani\") to $camani"
+	echo "Adding include(\"$rellvglmani\") to $camani"
 	echo >> "$camani" # needs newline because file doesn't have newline at the end
-	echo "include(\"$abslvglmani\") # workaround to prevent micropython-camera-API from overriding the lvgl_micropython manifest..." >> "$camani"
+	echo "include(\"$rellvglmani\") # workaround to prevent micropython-camera-API from overriding the lvgl_micropython manifest..." >> "$camani"
 	echo "Resulting file:"
 	cat "$camani"
 else
-	echo "No need to add include(\"$abslvglmani\") to $camani"
+	echo "No need to add include(\"$rellvglmani\") to $camani"
 fi
 
 echo "Check need to add asyncio..."
@@ -232,6 +248,10 @@ echo "Symlinking secp256k1-embedded-ecdh for unix and macOS builds..."
 ln -sf ../../secp256k1-embedded-ecdh "$codebasedir"/lvgl_micropython/ext_mod/secp256k1-embedded-ecdh
 echo "Symlinking c_mpos for unix and macOS builds..."
 ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
+# The PCM sink for hosts without machine.I2S lives beside it; its .mk picks the
+# backend (WebAudio through Emscripten's SDL2 on the web build, ALSA on Linux
+# when a static libasound is available).
+ln -sf ../../c_mpos/hosted_audio "$codebasedir"/lvgl_micropython/ext_mod/hosted_audio
 
 echo "Applying lvgl_micropython esp32 uart repl enable/disable at runtime patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_uart_repl_runtime.patch
@@ -400,7 +420,10 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	if [ "$target" == "esp32" ]; then
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=SPIRAM
-		partition_size=3737600 # esp32 builds are ~65 KiB bigger than esp32s3 builds
+		# Match partitions/esp32_16mb.csv: esp32 builds are ~65 KiB bigger
+		# than esp32s3 builds, so the app slots are 0x390000 instead of the
+		# badge's 3.5 MiB.
+		partition_size=3735552
 	elif [ "$target" == "esp32-small" ]; then
 		# No PSRAM, so do not set SPIRAM-specific options
 		BOARD=ESP32_GENERIC
@@ -474,6 +497,24 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	if [ "$BOARD_VARIANT" == "SPIRAM" -o "$BOARD_VARIANT" == "SPIRAM_OCT" ]; then
 		# Camera only works on boards configured with spiram, otherwise the build breaks
 		extra_configs="$extra_configs USER_C_MODULE=$codebasedir/micropython-camera-API/src/micropython.cmake"
+	fi
+
+	# Partition table used for the final flash image (the builder's generated
+	# table pads the preamble and puts ota_0 at 0x20000; partitions/ keeps the
+	# badge's compact layout and the 7 MB filesystem). The app and OTA images
+	# are partition-offset independent, so building with the generated table
+	# and merging with ours is safe.
+	partition_csv=""
+	if [ "$preload_fs" = "1" ]; then
+		case "$target" in
+			esp32s3) partition_csv="$codebasedir/partitions/esp32s3_16mb_badge.csv" ;;
+			esp32) partition_csv="$codebasedir/partitions/esp32_16mb.csv" ;;
+			unphone) partition_csv="$codebasedir/partitions/esp32s3_8mb_unphone.csv" ;;
+			esp32p4) partition_csv="$codebasedir/partitions/esp32p4_32mb.csv" ;;
+			*)
+				echo "NOTE: $target has no preloaded filesystem layout (flash is needed for the OS itself)."
+				;;
+		esac
 	fi
 
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
@@ -589,6 +630,30 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		fi
 		echo "====================================="
 	fi
+
+	if [ -n "$partition_csv" ]; then
+		preload_python="${MPOS_PRELOAD_PYTHON:-python3}"
+		if ! "$preload_python" -c "import littlefs" >/dev/null 2>&1; then
+			echo "ERROR: littlefs-python is required to build the preloaded filesystem." >&2
+			echo "       Install it (python3 -m pip install littlefs-python==0.19.0)," >&2
+			echo "       point MPOS_PRELOAD_PYTHON at a venv that has it, or use --no-preload-fs." >&2
+			exit 1
+		fi
+		echo ""
+		echo "=== Preloaded filesystem ($target) ==="
+		"$preload_python" "$mydir"/preload_fs.py all \
+			--build-dir "$codebasedir/lvgl_micropython/lib/micropython/ports/esp32/$builddir" \
+			--partitions "$partition_csv" \
+			--march "$builtin_march" \
+			--work-dir "$codebasedir/tmp/preload/$target" \
+			--cache-dir "$codebasedir/tmp/preload_cache"
+		preload_status=$?
+		if [ $preload_status -ne 0 ]; then
+			echo "ERROR: preloaded filesystem failed; build with --no-preload-fs to skip it." >&2
+			exit $preload_status
+		fi
+		echo "======================================"
+	fi
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	# Full cleanup: old .o from upstream MicroPython builds would cause link errors
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
@@ -691,6 +756,12 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 		sed -i.backup 's/^CWARN = -Wall -Werror$/CWARN = -Wall -Werror -Wno-unknown-warning-option -Wno-error=gnu-folding-constant -Wno-error=missing-field-initializers -Wno-error=unterminated-string-initialization/' "$unix_makefile"
 	fi
 
+	# The desktop build is linked dynamically so the bundled SDL can carry its
+	# ALSA backend (a static binary cannot link libasound, and a static alsa-lib
+	# was measured unusable: config-parser spin, exclusive card access).
+	echo "Applying lvgl_micropython unix dynamic-link patch..."
+	apply_patch "$codebasedir"/lvgl_micropython "$codebasedir"/patches/unix_desktop_dynamic.patch
+
 	# If it's still running, kill it, otherwise "text file busy"
 	pkill -9 -f /lvgl_micropy_unix
 	# LV_CFLAGS are passed to USER_C_MODULES (compiler flags only, no linker flags)
@@ -718,7 +789,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 		STRIP= \
 		DISPLAY=sdl_display \
 		INDEV=sdl_pointer \
-		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_SNDIO=OFF -DSDL_LIBSAMPLERATE=OFF" \
+		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_ALSA=ON -DSDL_PULSEAUDIO=OFF -DSDL_SNDIO=OFF -DSDL_LIBSAMPLERATE=OFF" \
 		MPY_CROSS_FLAGS="\"$mpy_cross_flags\"" \
 		"$frozenmanifest"
 	build_status=$?
@@ -832,6 +903,8 @@ elif [ "$target" == "web" ]; then
 	else
 		cp -a "$codebasedir"/internal_filesystem/. "$staged_fs"/
 	fi
+	# /apps and /data are packaged separately below (see the persistence split).
+	rm -rf "$staged_fs"/apps "$staged_fs"/data
 	rm -rf "$staged_fs"/prefs "$staged_fs"/sdcard "$staged_fs"/cache_audio "$staged_fs"/tests \
 		"$staged_fs"/SDLPointer_2 "$staged_fs"/SDLPointer_3 "$staged_fs"/screenshot-*.bmp
 
@@ -850,20 +923,15 @@ elif [ "$target" == "web" ]; then
 	#   - The bundled demo apps still need to ship with the image, so they are
 	#     packaged separately at /.bundled_apps and copied into the persistent
 	#     /apps store once, on first boot (seedBundledApps() in shell.html).
-	staged_bundled_apps="$codebasedir"/web/.preload_bundled_apps
-	rm -rf "$staged_bundled_apps"
-	if [ -d "$staged_fs"/apps ]; then
-		mv "$staged_fs"/apps "$staged_bundled_apps"
-	else
-		mkdir -p "$staged_bundled_apps"
-	fi
-	# /data is recreated empty by IDBFS at boot; drop the preloaded copy so it
-	# does not collide with the persistent mount.
-	rm -rf "$staged_fs"/data
-	staged_bundled_data="$codebasedir"/web/.preload_bundled_data
-	rm -rf "$staged_bundled_data"
-	mkdir -p "$staged_bundled_data"
-	cp -a "$codebasedir"/internal_filesystem_data/. "$staged_bundled_data"/
+	#
+	# scripts/preload_fs.py is the single source of truth for what ships: the
+	# same app list and sample data feed the device littlefs image.
+	staged_bundled="$codebasedir"/web/.preload_stage
+	rm -rf "$staged_bundled"
+	python3 "$mydir"/preload_fs.py stage --out "$staged_bundled" \
+		--cache-dir "$codebasedir/tmp/preload_cache"
+	staged_bundled_apps="$staged_bundled"/apps
+	staged_bundled_data="$staged_bundled"/data
 
 	# The browser build disables native threading (MICROPY_PY_THREAD=0), so the
 	# C builtin `_thread` module is absent. MicroPythonOS imports `_thread`

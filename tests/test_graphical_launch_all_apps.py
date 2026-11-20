@@ -71,6 +71,7 @@ class TestLaunchAllApps(unittest.TestCase):
         skipped_packages = {
             'com.micropythonos.breakout',
             'com.micropythonos.doom',
+            'com.micropythonos.framecoreprobe',
             'cz.ucw.pavel.cellular',
             'cz.ucw.pavel.compass',
             'cz.ucw.pavel.navstar',

@@ -1,24 +1,25 @@
 import unittest
 import sys
 
-# Add tests directory to path for network_test_helper
-sys.path.insert(0, "../tests")
+if sys.platform != "esp32":
+    # Add tests directory to path for network_test_helper
+    sys.path.insert(0, "../tests")
 
-# Import network test helpers
-from network_test_helper import MockNetwork, MockTime
+    # Import network test helpers
+    from network_test_helper import MockNetwork, MockTime
 
-from mpos.testing.mocks import HotspotMockNetwork, MockMpos, MockSharedPreferences
+    from mpos.testing.mocks import HotspotMockNetwork, MockMpos, MockSharedPreferences
 
-# Inject mocks before importing WifiService
-sys.modules["mpos"] = MockMpos
-sys.modules["mpos.shared_preferences"] = MockMpos.shared_preferences
-sys.modules["mpos.time"] = MockMpos.time
+    # Inject mocks before importing WifiService
+    sys.modules["mpos"] = MockMpos
+    sys.modules["mpos.shared_preferences"] = MockMpos.shared_preferences
+    sys.modules["mpos.time"] = MockMpos.time
 
-# Add path to wifi_service.py
-sys.path.append("lib/mpos/net")
+    # Add path to wifi_service.py
+    sys.path.append("lib/mpos/net")
 
-# Import WifiService
-from wifi_service import WifiService
+    # Import WifiService
+    from wifi_service import WifiService
 
 
 class TestWifiServiceConnect(unittest.TestCase):
@@ -26,6 +27,8 @@ class TestWifiServiceConnect(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         MockSharedPreferences.reset_all()
         WifiService.access_points = {}
         WifiService.wifi_busy = False
@@ -87,6 +90,8 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
     """Test WifiService.attempt_connecting() method."""
 
     def setUp(self):
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         # A hotspot restore left pending by another test would disconnect the
         # station on the failure paths and skew the disconnect() counts here.
         WifiService._needs_hotspot_restore = False
@@ -462,6 +467,8 @@ class TestWifiServiceEmptyScanRescan(unittest.TestCase):
     NET = (b"Home", b"", 1, -50, 3, False)
 
     def setUp(self):
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         MockSharedPreferences.reset_all()
         WifiService.access_points = {}
         WifiService.wifi_busy = False
@@ -611,6 +618,8 @@ class TestWifiServiceAutoConnect(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         MockSharedPreferences.reset_all()
         WifiService.access_points = {}
         WifiService.wifi_busy = False
@@ -667,6 +676,8 @@ class TestWifiServiceIsConnected(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         WifiService.wifi_busy = False
 
     def tearDown(self):
@@ -725,6 +736,8 @@ class TestWifiServiceNetworkManagement(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         MockSharedPreferences.reset_all()
         WifiService.access_points = {}
 
@@ -794,6 +807,8 @@ class TestWifiServiceHotspot(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         MockSharedPreferences.reset_all()
         WifiService.hotspot_enabled = False
         WifiService.wifi_busy = False
@@ -974,6 +989,8 @@ class TestWifiServiceTemporaryDisable(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         WifiService.wifi_busy = False
         WifiService._temp_disable_state = None
         WifiService.hotspot_enabled = False
@@ -1057,6 +1074,8 @@ class TestWifiServiceIPv4Info(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         WifiService.wifi_busy = False
         WifiService.hotspot_enabled = False
 
@@ -1138,6 +1157,10 @@ class TestWifiServiceIPv4Info(unittest.TestCase):
 class TestWifiServiceDisconnect(unittest.TestCase):
     """Test WifiService.disconnect() method."""
 
+    def setUp(self):
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
+
     def test_disconnect(self):
         """Test disconnecting from WiFi."""
         mock_network = MockNetwork(connected=True)
@@ -1190,6 +1213,8 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         MockSharedPreferences.reset_all()
         WifiService.access_points = {}
         WifiService.wifi_busy = False
@@ -1440,6 +1465,8 @@ class TestWifiServiceBusyFlag(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        if sys.platform == "esp32":
+            self.skipTest("host unit test: needs the tests directory")
         MockSharedPreferences.reset_all()
         WifiService.access_points = {}
         WifiService.wifi_busy = False

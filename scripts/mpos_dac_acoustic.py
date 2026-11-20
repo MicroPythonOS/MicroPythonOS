@@ -5,7 +5,7 @@ Plays a known tone sequence through an i2s output ("Headset Output", the
 on-board DAC jack) and records it with a microphone input on the host. This is
 the analogue counterpart of ``mpos_buzzer_acoustic.py``: the buzzer is a PWM
 pin checked from the air, while this checks the whole digital-to-analogue path
-(decoder -> i2s -> DAC -> jack -> cable -> capture device).
+(decoder -> i2s -> DAC -> jack -> speaker or cable -> capture device).
 
 Commands:
     list     enumerate capture devices
@@ -17,9 +17,12 @@ Examples:
     python3 scripts/mpos_dac_acoustic.py verify --notes a4,a5,a6 --relayport /dev/ttyUSB0
     python3 scripts/mpos_dac_acoustic.py verify --file /music/test.mp3 --notes a4,a5,a6
 
-The manual entry point is ``tests/manual_test_dac.py``. The rig needs the badge
-headphone jack wired into a capture input; on zbox1 that is the on-board ALC892
-microphone jack (``plughw:0,0``), with ``Capture`` around +4 dB (value 20/46).
+The manual entry point is ``tests/manual_test_dac.py``. Any capture device
+works: by default the tools pick a USB microphone, which hears the badge's
+speaker from the desk and needs no cable (on zbox1 the webcam's C925e, which is
+stereo only and is selected automatically). Wiring the headphone jack into the
+on-board line input is quieter and more precise: ``--device plughw:0,0
+--capture-gain 20``.
 """
 
 import argparse
@@ -200,21 +203,29 @@ def prepare_tones(controller, notes, path=DEFAULT_TONES_PATH, rate=DEFAULT_TONE_
 # ── Capture devices and mixer ───────────────────────────────────────
 
 
-def find_onboard_capture_device(spec=None):
-    """Pick the on-board (non-USB) capture device, or honour *spec*."""
+def find_default_capture_device(spec=None):
+    """Pick a capture device, or honour *spec*.
+
+    A USB microphone (the webcam on the desk) hears both the buzzer and the
+    speaker next to it, so one microphone covers every acoustic check; the
+    on-board line input, when the badge's jack is wired to it, is the fallback
+    and stays available with --device.
+    """
     if spec:
         return base.find_capture_device(spec)
     devices = base.list_capture_devices()
     if not devices:
-        raise AcousticError("no ALSA capture devices found; connect the cable or pass --device")
-    onboard = [device for device in devices
-               if "usb" not in (device.card_name + " " + device.device_name).lower()
-               and "hdmi" not in (device.card_name + " " + device.device_name).lower()]
-    if not onboard:
-        return base.find_capture_device()
+        raise AcousticError("no ALSA capture devices found; connect a microphone or pass --device")
+    usable = [device for device in devices
+              if "hdmi" not in (device.card_name + " " + device.device_name).lower()]
+    microphone = base.prefer_microphone(usable)
+    if microphone is not None:
+        return microphone
+    onboard = [device for device in usable
+               if "usb" not in (device.card_name + " " + device.device_name).lower()]
     preferred = [device for device in onboard
                  if "analog" in (device.card_name + " " + device.device_name).lower()]
-    return (preferred or onboard)[0]
+    return (preferred or onboard or devices)[0]
 
 
 def _amixer_capture_value(card):
@@ -317,12 +328,15 @@ def verify(port=DEFAULT_PORT, device=None, notes=DEFAULT_NOTES, file=None,
            label="dac", thresholds=None, relayport=None, controller=None,
            sample_rate=DEFAULT_RATE, capture_gain=None, tone_rate=DEFAULT_TONE_RATE,
            amplitude=DEFAULT_AMPLITUDE, note_seconds=DEFAULT_NOTE_SECONDS,
-           pre_roll=0.5, tail=1.5, settle=1.5, play_timeout=None):
+           pre_roll=0.5, tail=1.5, settle=1.5, play_timeout=None,
+           channels=None):
     """Play tones (or *file*) on the badge DAC, record and gate pass/fail."""
     note_list = base.parse_notes(notes) if notes else []
     if not 0 <= int(volume) <= 100:
         raise AcousticError("volume must be 0-100, got %s" % volume)
-    capture = find_onboard_capture_device(device)
+    capture = find_default_capture_device(device)
+    if channels is None:
+        channels = base.default_channels_for(capture)
     if relayport:
         base.relay_cycle(relayport, device_port=port)
     owns_controller = controller is None
@@ -341,7 +355,7 @@ def verify(port=DEFAULT_PORT, device=None, notes=DEFAULT_NOTES, file=None,
         restore_gain = set_capture_gain(capture, capture_gain)
         os.makedirs(out_dir, exist_ok=True)
         wav_path = os.path.join(out_dir, "%s-%s.wav" % (label, time.strftime("%Y%m%d-%H%M%S")))
-        process = base.start_recording(capture, wav_path, sample_rate)
+        process = base.start_recording(capture, wav_path, sample_rate, channels)
         try:
             base.wait_for_recording(process, wav_path)
             time.sleep(max(0.0, float(pre_roll)))
@@ -389,6 +403,8 @@ def build_parser():
     verify_parser.add_argument("--port", default=DEFAULT_PORT)
     verify_parser.add_argument("--relayport", default=DEFAULT_RELAY,
                                help="USB relay port used to power-cycle the badge first")
+    verify_parser.add_argument("--channels", type=int, default=None,
+                               help="capture channels (default: mono, or stereo for a USB microphone)")
     verify_parser.add_argument("--device", default=DEFAULT_DEVICE,
                                help="capture device: plughw:CARD,DEV, a card number or an alsa_input.* source")
     verify_parser.add_argument("--notes", default=None,
@@ -430,7 +446,7 @@ def main(argv=None):
         port=args.port, device=args.device, notes=notes, file=args.file,
         output=args.output, volume=args.volume, out_dir=args.out_dir,
         label=args.label, thresholds=thresholds, relayport=args.relayport,
-        capture_gain=args.capture_gain,
+        capture_gain=args.capture_gain, channels=args.channels,
     )
     print(json.dumps(measured, indent=1))
     return 0 if measured.get("ok") else 1

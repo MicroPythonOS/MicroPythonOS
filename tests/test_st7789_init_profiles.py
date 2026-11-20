@@ -1,5 +1,4 @@
 import os
-import sys
 import unittest
 
 import lvgl as lv
@@ -47,13 +46,14 @@ class ST7789InitProfileTests(unittest.TestCase):
     def commands_without_inversion(self, commands):
         return [(sent, data) for sent, data in commands if sent not in (_INVON, _INVCTR)]
 
-    def test_package_registers_every_init_module(self):
-        self.assertIn("_st7789_init", sys.modules)
-        self.assertIn("_st7789_init_type1", sys.modules)
-        self.assertIn("_st7789_init_type2", sys.modules)
-        self.assertIs(__import__("_st7789_init"), _st7789_init)
-        self.assertIs(__import__("_st7789_init_type1"), _st7789_init_type1)
-        self.assertIs(__import__("_st7789_init_type2"), _st7789_init_type2)
+    def test_package_exports_every_init_module(self):
+        # The package keeps a reference even after display_driver_framework
+        # deletes the init module it used from sys.modules (it does that to
+        # reclaim RAM), so check the package attributes, not sys.modules.
+        import drivers.display.st7789 as driver
+        self.assertIs(driver._st7789_init, _st7789_init)
+        self.assertIs(driver._st7789_init_type1, _st7789_init_type1)
+        self.assertIs(driver._st7789_init_type2, _st7789_init_type2)
 
     def test_profile_names_match_the_init_module_numbers(self):
         self.assertIsNone(PROFILE_GENERIC)

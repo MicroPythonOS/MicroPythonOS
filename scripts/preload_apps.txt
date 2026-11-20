@@ -1,0 +1,35 @@
+# Apps preinstalled into the device filesystem image and the web bundle.
+#
+# One app per line:
+#   repo     <fullname>
+#   badgehub <fullname> [version=<v>] [sha256=<hex>]
+#
+# "repo" apps come from internal_filesystem/apps/<fullname> in this checkout.
+# "badgehub" apps are downloaded from badgehub.eu (the same channel the
+# AppStore uses). Without version=/sha256= the latest published version is
+# used, so a release image always ships the newest BadgeHub build.
+#
+# Keep this list small: every entry costs flash space in the 7 MB badge
+# filesystem. Precompiled to .mpy these are roughly 500 KiB together.
+
+# Utilities and demos
+repo com.micropythonos.imageview
+repo com.micropythonos.media_player
+repo com.micropythonos.texteditor
+repo com.micropythonos.sorter
+repo com.micropythonos.confetti
+repo com.micropythonos.soundrecorder
+repo com.micropythonos.showbattery
+
+# Games
+repo com.micropythonos.connect4
+repo com.micropythonos.memory
+repo com.micropythonos.lights_out
+repo com.micropythonos.breakout
+
+# Communication
+repo com_micropythonos_nostr
+
+# Apps published on BadgeHub (not in this repository)
+badgehub com.lightningpiggy.displaywallet
+badgehub com.quasikili.quasibird

@@ -1,0 +1,11 @@
+gen/i_video.c: In function ‘I_InitGraphics’:
+gen/i_video.c:211:11: warning: unused variable ‘mode’ [-Wunused-variable]
+  211 |     char *mode;
+      |           ^~~~
+gen/i_video.c:210:12: warning: unused variable ‘gfxmodeparm’ [-Wunused-variable]
+  210 |     int i, gfxmodeparm;
+      |            ^~~~~~~~~~~
+gen/i_video.c: At top level:
+gen/i_video.c:25:19: warning: ‘rcsid__i_video’ defined but not used [-Wunused-const-variable=]
+   25 | static const char rcsid__i_video[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
+      |                   ^~~~~~~~~~~~~~

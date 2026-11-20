@@ -1,0 +1,10 @@
+# 32 MB ESP32-P4 layout (OTA slots stay 4 MiB: build_mpos.sh sizes the app for
+# the P4 at 4 MiB, and boards ship 32 MB of flash). The filesystem takes the
+# rest of the flash.
+#
+# Name,     Type, SubType, Offset,   Size,      Flags
+otadata,    data, ota,     0x9000,   0x2000,
+nvs,        data, nvs,     0xb000,   0x5000,
+ota_0,      app,  ota_0,   0x10000,  0x400000,
+ota_1,      app,  ota_1,   0x410000, 0x400000,
+vfs,        data, fat,     0x810000, 0x17f0000,

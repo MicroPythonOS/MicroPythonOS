@@ -10,6 +10,8 @@
 # local scratch: logs, screenshots and camera-validation artifacts
 tmp/
 web/.preload_bundled_apps/
+web/.preload_stage/
+.venv-preload/
 
 trash/
 
@@ -65,3 +67,4 @@ c_mpos/breakout/build
 
 # local API key
 ppq_api.txt
+internal_filesystem/doom1.wad

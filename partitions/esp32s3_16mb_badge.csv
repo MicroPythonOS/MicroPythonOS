@@ -1,0 +1,17 @@
+# 16 MB ESP32-S3 layout for the Fri3d Camp badge family.
+#
+# Byte-identical to badge_firmware_MicroPythonOS/boards/shared/partitions.16mb.csv:
+# the 64 KiB preamble (bootloader, partition table, otadata, nvs) is compact,
+# so ota_0 starts at 0x10000 instead of the 0x20000 that the generic builder
+# produces, retro-go/Duke Nukem slots are reserved, and the filesystem is the
+# same 7 MB at 0x900000 as the badge images. A full MicroPythonOS .bin built
+# with this table can be flashed over a badge image and vice versa.
+#
+# Name,        Type, SubType, Offset,   Size,     Flags
+otadata,       data, ota,     0x9000,   0x2000,
+nvs,           data, nvs,     0xb000,   0x5000,
+ota_0,         app,  ota_0,   0x10000,  0x380000,
+ota_1,         app,  ota_1,   0x390000, 0x380000,
+retro-core,    app,  ota_2,   0x710000, 0xf0000,
+duke3d-go,     app,  ota_3,   0x800000, 0x100000,
+vfs,           data, fat,     0x900000, 0x700000,
