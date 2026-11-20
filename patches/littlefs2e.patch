@@ -44,7 +44,7 @@ index 1fdf792f..a477ae8c 100644
  extern const mp_obj_type_t mp_type_vfs_lfs1_fileio;
  extern const mp_obj_type_t mp_type_vfs_lfs1_textio;
 diff --git a/lib/littlefs/lfs2.c b/lib/littlefs/lfs2.c
-index 6c3c3ece..9cee5db8 100644
+index 6c3c3ece..63ac398b 100644
 --- a/lib/littlefs/lfs2.c
 +++ b/lib/littlefs/lfs2.c
 @@ -258,7 +258,7 @@ static int lfs2_bd_prog(lfs2_t *lfs2,
@@ -101,6 +101,15 @@ index 6c3c3ece..9cee5db8 100644
  static inline void lfs2_superblock_fromle32(lfs2_superblock_t *superblock) {
      superblock->version     = lfs2_fromle32(superblock->version);
      superblock->block_size  = lfs2_fromle32(superblock->block_size);
+@@ -532,7 +561,7 @@ static void lfs2_mlist_append(lfs2_t *lfs2, struct lfs2_mlist *mlist) {
+ }
+ 
+ // some other filesystem operations
+-static uint32_t lfs2_fs_disk_version(lfs2_t *lfs2) {
++uint32_t lfs2_fs_disk_version(lfs2_t *lfs2) {
+     (void)lfs2;
+ #ifdef LFS2_MULTIVERSION
+     if (lfs2->cfg->disk_version) {
 @@ -658,6 +687,22 @@ static int lfs2_alloc_scan(lfs2_t *lfs2) {
          return err;
      }
@@ -877,7 +886,7 @@ index 6c3c3ece..9cee5db8 100644
      int err = LFS2_LOCK(cfg);
      if (err) {
 diff --git a/lib/littlefs/lfs2.h b/lib/littlefs/lfs2.h
-index 77477aaf..87e1f264 100644
+index 77477aaf..3f5f725c 100644
 --- a/lib/littlefs/lfs2.h
 +++ b/lib/littlefs/lfs2.h
 @@ -21,14 +21,27 @@ extern "C"
@@ -991,7 +1000,7 @@ index 77477aaf..87e1f264 100644
  
  #ifdef LFS2_MIGRATE
      struct lfs21 *lfs21;
-@@ -794,6 +834,63 @@ int lfs2_migrate(lfs2_t *lfs2, const struct lfs2_config *cfg);
+@@ -794,6 +834,67 @@ int lfs2_migrate(lfs2_t *lfs2, const struct lfs2_config *cfg);
  #endif
  
  
@@ -1050,6 +1059,10 @@ index 77477aaf..87e1f264 100644
 +
 +// Number of blocks, useful for sizing the maps above.
 +lfs2_size_t lfs2_fs_block_count(lfs2_t *lfs2);
++
++// On-disk version this mount reports. A current image is 2.1; an image
++// mounted at an older minor reports that until its superblock is rewritten.
++uint32_t lfs2_fs_disk_version(lfs2_t *lfs2);
 +
 +
  #ifdef __cplusplus

@@ -34,7 +34,7 @@ static mp_obj_t lfs2e_geometry(void) {
     mp_obj_t tuple[3] = {
         mp_obj_new_int_from_uint(lfs->cfg->block_size),
         mp_obj_new_int_from_uint(lfs->block_count),
-        mp_obj_new_int_from_uint(lfs->disk_version),
+        mp_obj_new_int_from_uint(lfs2_fs_disk_version(lfs)),
     };
     return mp_obj_new_tuple(3, tuple);
 }
