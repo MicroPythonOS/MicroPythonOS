@@ -196,6 +196,21 @@ class TestNativeInstall(unittest.TestCase):
             ]))
         self.assertTrue("before" in str(ctx.exception))
 
+    def test_a_truncated_xip_fails_the_install(self):
+        extent_files.available = lambda: True
+        extent_files.Writer = FakeWriter
+        app_dir = APP + "/"
+        archive = _zip([
+            (app_dir, b""),
+            (app_dir + "MANIFEST.JSON", _manifest({"esp32s3": ["esp32s3.xip"]})),
+            (app_dir + "esp32s3.xip", b"X" * 400),
+        ])
+        extractor = StreamingUnzip(DEST, expected_app_name=APP, native_keys=["esp32s3"])
+        with self.assertRaises(RuntimeError):
+            _feed(extractor, archive[:-100])
+        self.assertEqual(len(FakeWriter.instances), 1)
+        self.assertTrue(FakeWriter.instances[0].aborted)
+
     def test_crc_mismatch_aborts_the_extent(self):
         extent_files.available = lambda: True
         extent_files.Writer = FakeWriter

@@ -233,11 +233,13 @@ class StreamingUnzip:
                 pass
             self._file_fd = None
         if self._extent is not None:
+            name = self._extent_target
             logger.warning(
                 "finish() called with an extent still open: %s (truncated download?)",
-                self._extent_target,
+                name,
             )
             self._abort_extent()
+            raise RuntimeError("truncated package: %s is incomplete" % (name,))
         self._state = "idle"
 
     def _abort_extent(self):
