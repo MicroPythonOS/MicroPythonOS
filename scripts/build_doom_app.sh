@@ -21,6 +21,13 @@ doom=$root/c_mpos/doom
 app=$root/internal_filesystem/apps/com.micropythonos.doom
 wad=$root/internal_filesystem/doom1.wad
 
+# mpy_ld needs the `ar` package and pyelftools for the system toolchain here;
+# a local venv is where this workspace keeps them (system pip is blocked).
+if [ -d "$root/tmp/venv/bin" ]; then
+    PATH="$root/tmp/venv/bin:$PATH"
+    export PATH
+fi
+
 desktop_only=0
 if [ "${1:-}" = "--desktop" ]; then
     desktop_only=1
