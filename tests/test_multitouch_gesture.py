@@ -80,6 +80,17 @@ class TestMultiTouchGesture(unittest.TestCase):
         self.gesture.poll()
         self.assert_close(self.gesture.scale, 1.0)
 
+    def test_a_record_swap_is_not_a_half_turn(self):
+        # The FT6x36 numbers its records by touch order, so the same two
+        # fingers can come back with the records exchanged. Follow the points,
+        # not the numbers, or the pair looks like it turned 180 degrees.
+        self.indev.touches = [(0, 100, 100), (1, 140, 100)]
+        self.gesture.poll()
+        self.indev.touches = [(0, 140, 100), (1, 100, 100)]
+        self.gesture.poll()
+        self.assert_close(self.gesture.scale, 1.0)
+        self.assert_close(self.gesture.rotation, 0.0)
+
     def test_finger_order_without_ids(self):
         self.indev.touches = [(None, 100, 100), (None, 140, 100)]
         self.gesture.poll()

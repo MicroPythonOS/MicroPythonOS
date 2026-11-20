@@ -144,6 +144,18 @@ class MultiTouchGesture:
         return self
 
     def _select_pair(self, points, previous_points):
+        # With exactly two points there is one finger per point, so keep each
+        # one with where it was last poll. The record numbers cannot do that on
+        # a panel that shuffles them (the FT6x36 returns its records in touch
+        # order), and following them turns a record swap into a half turn.
+        if len(points) == 2 and len(previous_points) == 2:
+            direct = self._point_distance(points[0], previous_points[0])
+            direct += self._point_distance(points[1], previous_points[1])
+            swapped = self._point_distance(points[0], previous_points[1])
+            swapped += self._point_distance(points[1], previous_points[0])
+            if swapped < direct:
+                return [points[1], points[0]]
+            return points[:2]
         if self._pair_ids is not None:
             first = None
             second = None
