@@ -89,6 +89,12 @@ def _create(path, align):
         raise
 
 
+# Defrag only relocates files on the root littlefs. Other mounts (the frozen
+# /builtin VFS, an SD card) are read-only or a different filesystem; walking
+# them would fail in every lfs2e call and can be very large.
+_OTHER_MOUNTS = ("/builtin", "/sdcard", "/roms")
+
+
 def _walk(root="/"):
     """Yield (path, size) for regular files on the root littlefs."""
     stack = [root]
@@ -100,6 +106,8 @@ def _walk(root="/"):
             continue
         for name in names:
             path = directory.rstrip("/") + "/" + name
+            if path in _OTHER_MOUNTS:
+                continue
             try:
                 st = os.stat(path)
             except OSError:
