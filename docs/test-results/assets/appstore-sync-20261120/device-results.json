@@ -1,0 +1,308 @@
+[
+  {
+    "case": "builtin_appstore_identity_and_no_independent_entry",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "source": "upystore",
+      "fullname": "com.micropythonos.appstore",
+      "firmware": "0.21.2",
+      "online": true,
+      "independent_installed": false,
+      "files": {
+        "blurhash.py": "dc1300111a05d3b1aca2b7d712747512f6510f317243eafc078c6e0b9ccb3d32",
+        "appstore_core.py": "850e3585f47a8b38b9299ce0de53495e16e907d873b75f0ddf4cbc5a5fe34618",
+        "app_detail.py": "722306a8db564dbebfa556f0d0294608c0903f2291e62ee527e48a73167f053b",
+        "icon_64x64.png": "71127b64d2b1443382a6cb29bc476aa8d440e5fa9d2888ff8e293a6b547baf06",
+        "MANIFEST.JSON": "e2024f3bf6d34fd51631abf226fc3d40693e358fd406109983f718bb42296772",
+        "appstore_boot_service.py": "bf231bf4fe02b9d4470c8c84e4bd4d360666aa4af70755a1ee26a1a5db2489ff",
+        "store_source.py": "9c9cb73da33df230a40dec6cbfe0dacdd25fe256bdcc1cfa2b787bb81da8d364",
+        "appstore.py": "71aad36204c5447352160051386d0e89c84a3c5aa2de468ec89eae6304f0530c",
+        "store_install.py": "fe507c1596c3104b0c39dfc41d2ba221a5843deeb9d98ff1d451758560653337"
+      },
+      "version": "1.5.3"
+    }
+  },
+  {
+    "case": "real_search_and_official_list",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "loaded": true,
+      "apps": 5,
+      "refreshing": false,
+      "categories": [
+        "Installed",
+        "Updates",
+        "All",
+        "Appstore",
+        "Development",
+        "Hardware",
+        "Utilities"
+      ],
+      "foreground": "AppStore",
+      "catalog_error": false
+    }
+  },
+  {
+    "case": "real_detail_versions_and_actions",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "details_error": false,
+      "message": "A minimal four-function calculator app built with LVGL. Supports addition, subtraction, multiplication, and division.",
+      "label": "Uninstall"
+    }
+  },
+  {
+    "case": "real_uninstall_and_receipt_removal",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "details_error": false,
+      "message": "A minimal four-function calculator app built with LVGL. Supports addition, subtraction, multiplication, and division.\n\nuPyStore: rating submission is not available.",
+      "label": "Install"
+    }
+  },
+  {
+    "case": "real_https_mpk_integrity_and_install_success",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "source": "upystore",
+      "fullname": "com.example.cc_skill_smoke",
+      "sha256": "44b63bb4af00613edea5ce01069aa58e3032a7dad81a7e350b263c35a75418b6",
+      "version": "1.0.0",
+      "slug": "com-example-cc-skill-smoke",
+      "revision": 1
+    }
+  },
+  {
+    "case": "real_launch_arithmetic_and_return",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "activity": "CalculatorActivity",
+      "result": "5"
+    }
+  },
+  {
+    "case": "lifecycle_and_launcher_return",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": true
+  },
+  {
+    "case": "helper_upgrade_install_and_start_v1",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "version": "1.0.0",
+      "revision": 1,
+      "result": 5
+    },
+    "scope": "controlled local packages, no reset during upgrade; not published store revisions"
+  },
+  {
+    "case": "helper_peer_install_and_start_v1",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "version": "1.0.0",
+      "revision": 1,
+      "result": 5
+    },
+    "scope": "controlled local packages, no reset during upgrade; not published store revisions"
+  },
+  {
+    "case": "invalid_launcher_rejected_and_v1_preserved",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "details_error": false,
+      "message": "Install failed: Missing main/launcher Activity. Retry the action or return to the list.",
+      "label": "Uninstall"
+    },
+    "scope": "controlled local packages, no reset during upgrade; not published store revisions"
+  },
+  {
+    "case": "background_notification_opens_builtin_updates",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "present": true,
+      "updates": 2
+    },
+    "scope": "controlled local packages, no reset during upgrade; not published store revisions"
+  },
+  {
+    "case": "batch_upgrade_removes_obsolete_files_and_cached_modules",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "versions": [
+        "1.1.0",
+        "1.1.0"
+      ]
+    },
+    "scope": "controlled local packages, no reset during upgrade; not published store revisions"
+  },
+  {
+    "case": "helper_upgrade_starts_new_code_without_reset",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "version": "1.1.0",
+      "result": 105,
+      "helper_renamed": true
+    },
+    "scope": "controlled local packages, no reset during upgrade; not published store revisions"
+  },
+  {
+    "case": "helper_peer_starts_new_code_without_reset",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "version": "1.1.0",
+      "result": 105,
+      "helper_renamed": false
+    },
+    "scope": "controlled local packages, no reset during upgrade; not published store revisions"
+  },
+  {
+    "case": "helper_upgrade_uninstall",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": true,
+    "scope": "controlled local packages, no reset during upgrade; not published store revisions"
+  },
+  {
+    "case": "helper_peer_uninstall",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": true,
+    "scope": "controlled local packages, no reset during upgrade; not published store revisions"
+  },
+  {
+    "case": "real_download_wrong_expected_sha_preserves_installed_app",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "details_error": false,
+      "message": "Install failed: Package SHA256 hash missing or mismatched. Retry the action or return to the list.",
+      "label": "Uninstall"
+    }
+  },
+  {
+    "case": "controlled_timeout_prompt_releases_action",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "details_error": false,
+      "message": "Install failed: TimeoutError. Retry the action or return to the list.",
+      "label": "Uninstall"
+    }
+  },
+  {
+    "case": "actual_wifi_disconnect_install_prompt",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "details_error": false,
+      "message": "Install failed: Offline: connect WiFi and retry. Retry the action or return to the list.",
+      "label": "Uninstall"
+    }
+  },
+  {
+    "case": "actual_wifi_reconnect_retry_and_success_message_reset",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "details_error": false,
+      "message": "A minimal four-function calculator app built with LVGL. Supports addition, subtraction, multiplication, and division.\n\nuPyStore: rating submission is not available.\nPublished: 1.0.0 (r1)",
+      "label": "Uninstall"
+    }
+  },
+  {
+    "case": "real_old_sample_http404_prompt",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "busy": false,
+      "details_error": true,
+      "message": "Store details unavailable: HTTP 404. Tap Install to retry or return to the list.",
+      "label": "Install"
+    }
+  },
+  {
+    "case": "real_complete_catalog_all_rows_and_isolated_objects",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "categories": [
+        "Installed",
+        "Updates",
+        "All",
+        "Ai",
+        "Appstore",
+        "Development",
+        "Education",
+        "Games",
+        "Hardware",
+        "Iot",
+        "Media",
+        "Tools",
+        "Utilities"
+      ],
+      "shared_system_app": false,
+      "merged_apps": 529,
+      "visible_rows": 529,
+      "source": "upystore"
+    }
+  },
+  {
+    "case": "real_category_filter",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "rows": 384,
+      "category": "Utilities"
+    }
+  },
+  {
+    "case": "search_does_not_clear_updates_or_start_background_check",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": {
+      "loaded": true,
+      "apps": 5,
+      "refreshing": false,
+      "categories": [
+        "Installed",
+        "Updates",
+        "All",
+        "Appstore",
+        "Development",
+        "Hardware",
+        "Utilities"
+      ],
+      "foreground": "AppStore",
+      "catalog_error": false
+    }
+  },
+  {
+    "case": "final_cleanup_real_network_and_original_launcher_entry",
+    "result": "passed",
+    "mpk_sha256": "b436ce8aecb9502cdadfca08f07cb158e238aec64cc0f08bedcca0365f193e59",
+    "actual": true
+  }
+]

@@ -1,5 +1,9 @@
 # Built-in AppStore and D-Shell verification, 2026-11-20
 
+Checkpoint before upstream synchronization. The subsequent merge, new device
+regression and contribution status are in `appstore-upstream-sync-2026-11-20.md`.
+PR hold statements below describe this earlier checkpoint only.
+
 This delivery directly modifies the existing builtin
 `com.micropythonos.appstore` to connect its official UI and update management to
 uPyStore. The independent 1.1.0 application is preserved as history and is not

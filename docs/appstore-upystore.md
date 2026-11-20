@@ -1,10 +1,14 @@
 # Official AppStore integration with uPyStore
 
+For the organization/upstream synchronization, current test scope and evidence,
+see [the synchronization regression record](test-results/appstore-upstream-sync-2026-11-20.md).
+
 This branch adapts `com.micropythonos.appstore`, retaining its Activity, boot
 Service and UI. It does not ship the earlier standalone uPyStore prototype.
-The development AppStore version is **1.5.3**, based on organization main
-`8484908a5ceade80a7a5854925b85d662a3b480b`. This is a fork build, not an
-upstream-published AppStore release.
+The development AppStore version is **1.5.3**. The original organization base
+was `8484908a5ceade80a7a5854925b85d662a3b480b`; it is now synchronized with
+official main `2a6cd97a` without changing the AppStore payload. This is a fork
+build, not an upstream-published AppStore release.
 
 ## Preserved behavior
 
