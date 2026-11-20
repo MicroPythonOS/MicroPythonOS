@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Boards:
+- Add LilyGO T-Deck support (ESP32-S3, 16 MB flash, 8 MB PSRAM): ST7789 320x240 landscape display, GT911 touch, trackball keypad, battery on ADC1 GPIO4, SX1262 LoRa, with automatic board detection through the I2C keyboard controller.
+
 Frameworks:
 - littlefs2e: contiguous "extent" files on the internal filesystem. An extent is
   an immutable, aligned run of blocks whose bytes are stored verbatim, so it can

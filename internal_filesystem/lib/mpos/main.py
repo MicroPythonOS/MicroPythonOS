@@ -185,6 +185,29 @@ def detect_lilygo_t_hmi():
 
     return False
 
+def detect_lilygo_t_deck():
+    """T-Deck: the I2C keyboard controller answers at 0x55 once GPIO10 powers it.
+
+    The board has no ID chip, so the keyboard is the signature: KB_POWERON (GPIO10)
+    must be high for the controller to boot, then it answers on SDA 18 / SCL 8.
+    """
+    from machine import Pin
+    import time
+
+    try:
+        Pin(10, Pin.OUT, value=1)  # KB_POWERON, also needed later by the board module
+        time.sleep_ms(200)  # the keyboard controller needs a moment after power-on
+        i2c0 = fail_save_i2c(sda=18, scl=8)
+        if not i2c0:
+            return False
+        try:
+            return single_address_i2c_scan(i2c0, 0x55)
+        finally:
+            restore_i2c(18, 8)
+    except Exception as e:
+        if __debug__: logger.debug("lilygo_t_deck detection failed: %s", e)
+        return False
+
 def fail_save_i2c(sda, scl):
     from machine import I2C, Pin
 
@@ -309,6 +332,10 @@ def detect_board():
                 if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
                     return "fri3d_2024"
                 restore_i2c(sda=9, scl=18)
+
+            if __debug__: logger.debug("lilygo_t_deck ?")
+            if detect_lilygo_t_deck():
+                return "lilygo_t_deck"
 
             if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_3_5 ?")
             if i2c0 := fail_save_i2c(sda=8, scl=7):
