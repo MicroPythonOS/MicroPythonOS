@@ -167,13 +167,18 @@ class TouchFingers:
             return []
         if points is None:
             points = read_touches(self.indev)
+        points = list(points)
+        # A panel may hand the records back in touch order, with the newest
+        # finger first; follow the thumb positions instead of the numbers when
+        # that happened.
+        swapped = self._swapped_slots(points)
 
         events = []
         free = dict(self._down)
         down = {}
         for point_id, x, y in points:
             if point_id is not None:
-                finger = point_id
+                finger = swapped.get(point_id, point_id)
                 previous = self._down.get(finger)
                 free.pop(finger, None)
             else:
@@ -208,6 +213,40 @@ class TouchFingers:
                 best = finger
                 best_distance = distance
         return best
+
+    def _swapped_slots(self, points):
+        """Which reported slot numbers belong to the other finger.
+
+        The FT6x36 numbers its records by touch order: the newest finger is
+        record 0, so when a second thumb lands the finger that was already
+        down is pushed to record 1. Read literally, that says the held finger
+        jumped across the screen and a new one appeared where it was, which
+        moves the joystick onto the new finger and presses the old one in the
+        stick's place. A point sitting where a slot used to be is the same
+        finger: swap the two slots back.
+        """
+        limit = self.match_distance * self.match_distance
+        swapped = {}
+        for index, (point_id, x, y) in enumerate(points):
+            if point_id is None or point_id in swapped:
+                continue
+            previous = self._down.get(point_id)
+            if previous is None:
+                continue
+            if ((x - previous[0]) ** 2
+                    + (y - previous[1]) ** 2) <= limit:
+                continue
+            for other, (other_id, other_x, other_y) in enumerate(points):
+                if other == index or other_id is None:
+                    continue
+                if other_id == point_id or other_id in swapped:
+                    continue
+                if ((other_x - previous[0]) ** 2
+                        + (other_y - previous[1]) ** 2) <= limit:
+                    swapped[point_id] = other_id
+                    swapped[other_id] = point_id
+                    break
+        return swapped
 
     def _allocate(self, down, free):
         finger = self._next_finger

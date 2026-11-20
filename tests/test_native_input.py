@@ -105,6 +105,30 @@ class TestTouchFingers(unittest.TestCase):
         events = self.touches.poll()
         self.assertEqual(events, [(4, TouchFingers.RELEASED, 30, 100)])
 
+    def test_a_held_finger_keeps_its_thumb_when_the_records_are_reordered(self):
+        # The FT6x36 numbers its records by touch order, so the thumb that is
+        # already down moves to slot 1 when the other one lands. The finger
+        # that walks must stay the walking finger: only the new one presses.
+        self.panel.touches = [(0, 30, 120)]
+        self.assertEqual(
+            self.touches.poll(), [(0, TouchFingers.PRESSED, 30, 120)])
+
+        self.panel.touches = [(0, 220, 175), (1, 30, 120)]
+        self.assertEqual(
+            self.touches.poll(), [(1, TouchFingers.PRESSED, 220, 175)])
+
+        # Lifting the new finger releases slot 1, not the walking thumb.
+        self.panel.touches = [(0, 30, 120)]
+        self.assertEqual(
+            self.touches.poll(), [(1, TouchFingers.RELEASED, 220, 175)])
+
+    def test_one_fast_finger_is_not_mistaken_for_a_reordered_panel(self):
+        self.panel.touches = [(0, 30, 120)]
+        self.touches.poll()
+        self.panel.touches = [(0, 200, 120)]
+        self.assertEqual(
+            self.touches.poll(), [(0, TouchFingers.MOVING, 200, 120)])
+
     def test_the_display_rotation_is_applied(self):
         # A 90 degree display turns the panel's (x, y) into (299 - y, x).
         self.panel.rotation = 1
