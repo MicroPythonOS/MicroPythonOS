@@ -1,9 +1,12 @@
-"""Manual two-finger check for the touch panel.
+"""Manual two-finger check for an FT6x36 touch panel.
 
 Run this on the device, put two fingers on the screen (one on the left half,
 one on the right), and read the lines it prints. It reads the controller's raw
 registers, not the driver's parsed output, so a panel that only reports one
-point can be told apart from a driver bug:
+point can be told apart from a driver bug. The register map is the FT6x36's
+(0x02 status, 0x03 point 1, 6 bytes per point); on another controller the raw
+part is meaningless, though the ``driver`` lines still show what
+``get_touches()`` returns.
 
     >>> exec(open('tests/manual_test_multitouch.py').read())
 
