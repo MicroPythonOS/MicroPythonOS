@@ -28,6 +28,7 @@ from .lights import LightsManager
 
 # Battery manager (imported early for UI dependencies)
 from .battery_manager import BatteryManager
+from .ble_manager import BLEManager
 from .webserver.webserver import WebServer
 from .notification_manager import NotificationManager, Notification
 
@@ -95,6 +96,7 @@ __all__ = (
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager", "WebServer",
     "NotificationManager", "Notification",
     "LoRaManager", "IRManager", "GPSManager", "DeviceManager", "LightsManager",
+    "BLEManager",
     # Device and build info
     "DeviceInfo", "BuildInfo",
     # Common activities
