@@ -24,7 +24,9 @@ cp "$src/lfs2_util.h" "$work/build-src/lfs2_util.h"
     lfs2.c lfs2.h lfs2_util.c lfs2_util.h)
 cp "$work/build-src"/lfs.c "$work/build-src"/lfs.h \
    "$work/build-src"/lfs_util.c "$work/build-src"/lfs_util.h "$work/"
-cp "$root/tests/littlefs_test_extent.toml" "$work/tests/"
+# An older copy may have been left under the flattened file name.
+rm -f "$work"/tests/littlefs_test_extent.*
+cp "$root/tests/littlefs_test_extent.toml" "$work/tests/test_extent.toml"
 
 cd "$work"
 make test NO_COV=1 -j4 TESTFLAGS="tests/test_extent.toml"
