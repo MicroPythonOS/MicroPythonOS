@@ -204,6 +204,13 @@ class _FakeCore:
         return self.quit
 
 
+class _FakeExtent:
+    """The one call the core engine makes on the way to a mapped core."""
+
+    def ensure(self, path, align=1, defrag_first=True):
+        return (0x1000, 0x2000, 0xDEADBEEF)
+
+
 class TestTheEngineSpeaksDoomsProtocol(unittest.TestCase):
 
     def test_the_native_module_exposes_the_engine_api(self):
@@ -240,11 +247,14 @@ class TestCoreEngine(unittest.TestCase):
         self.core = _FakeCore()
         self._real_core = sys.modules.get("mpos_core")
         sys.modules["mpos_core"] = self.core
+        self._real_extent = doom.extent
+        doom.extent = _FakeExtent()
         self.engine = doom._CoreEngine()
         self.surface = _FakeSurface()
         self._real_pointer_xy = InputManager.pointer_xy
 
     def tearDown(self):
+        doom.extent = self._real_extent
         if self._real_core is not None:
             sys.modules["mpos_core"] = self._real_core
         else:
@@ -255,7 +265,7 @@ class TestCoreEngine(unittest.TestCase):
 
         self.assertIsNotNone(self.core.started, "the core was not started")
         args = self.core.started
-        self.assertEqual(args[0], doom.CORE_PARTITION)
+        self.assertEqual(args[0], "vfs")
         self.assertEqual(args[9], "doom1.wad")
         self.assertEqual(args[10], SURFACE_WIDTH)
         self.assertEqual(args[11], SURFACE_HEIGHT)
