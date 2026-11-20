@@ -336,10 +336,18 @@ class _CoreEngine:
     def surface_size(self, display):
         # A portrait panel cannot show Doom's landscape frame, so the core
         # rotates it into a 200x320 surface; a landscape panel takes the frame
-        # straight, which also keeps the touches unrotated.
-        if display.get_vertical_resolution() > display.get_horizontal_resolution():
-            return GAME_HEIGHT, GAME_WIDTH
-        return GAME_WIDTH, GAME_HEIGHT
+        # straight, which also keeps the touches unrotated. The engine does not
+        # scale, so a panel smaller than the frame cannot show it at all.
+        width = display.get_horizontal_resolution()
+        height = display.get_vertical_resolution()
+        if height > width:
+            if GAME_HEIGHT <= width and GAME_WIDTH <= height:
+                return GAME_HEIGHT, GAME_WIDTH
+        elif GAME_WIDTH <= width and GAME_HEIGHT <= height:
+            return GAME_WIDTH, GAME_HEIGHT
+        raise RuntimeError(
+            "Doom needs a screen of at least 320x200; this panel is %dx%d"
+            % (width, height))
 
     def start(self, wad, surface):
         self._surface = surface
