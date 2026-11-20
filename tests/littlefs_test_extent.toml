@@ -90,7 +90,7 @@ code = '''
     lfs_unmount(&lfs) => 0;
 '''
 
-[cases.test_extent_version_gate]
+[cases.test_extent_keeps_disk_version_2_1]
 code = '''
     lfs_t lfs;
     lfs_format(&lfs, cfg) => 0;
@@ -107,11 +107,11 @@ code = '''
     lfs_ext_commit(&lfs, "blob", 0) => 0;
 
     lfs_fs_stat(&lfs, &fsinfo) => 0;
-    assert((fsinfo.disk_version & 0xffff) == 0xE000);
+    assert((fsinfo.disk_version & 0xffff) == 1);
     lfs_unmount(&lfs) => 0;
     lfs_mount(&lfs, cfg) => 0;
     lfs_fs_stat(&lfs, &fsinfo) => 0;
-    assert((fsinfo.disk_version & 0xffff) == 0xE000);
+    assert((fsinfo.disk_version & 0xffff) == 1);
     lfs_unmount(&lfs) => 0;
 '''
 

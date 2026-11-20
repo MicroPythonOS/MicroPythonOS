@@ -2,7 +2,7 @@
 # Run the littlefs2e extent cases against the patched littlefs source.
 set -eu
 
-root=$(cd "$(dirname "$0")/../.." && pwd)
+root=$(cd "$(dirname "$0")/.." && pwd)
 work="$root/tmp/littlefs-tests"
 src="$root/lvgl_micropython/lib/micropython/lib/littlefs"
 
@@ -24,7 +24,7 @@ cp "$src/lfs2_util.h" "$work/build-src/lfs2_util.h"
     lfs2.c lfs2.h lfs2_util.c lfs2_util.h)
 cp "$work/build-src"/lfs.c "$work/build-src"/lfs.h \
    "$work/build-src"/lfs_util.c "$work/build-src"/lfs_util.h "$work/"
-cp "$root/tests/littlefs/test_extent.toml" "$work/tests/"
+cp "$root/tests/littlefs_test_extent.toml" "$work/tests/"
 
 cd "$work"
 make test NO_COV=1 -j4 TESTFLAGS="tests/test_extent.toml"

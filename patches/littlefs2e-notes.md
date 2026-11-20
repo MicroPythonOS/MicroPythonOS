@@ -21,13 +21,12 @@ immutable runs ("extents").
   allocator, `fs_size()` and `statvfs()`. Deleting or truncating the file
   frees the run (littlefs's drop-on-the-floor deallocation).
 
-- Format stays at disk **2.1** (`LFS2_DISK_VERSION_LITTLEFS2`).
-  `lfs2_ext_commit()` first commits the superblock at disk **2.0xE000**
-  (`LFS2_DISK_VERSION_EXTENTS`, constant in `lfs2.h`) and only then writes
-  the extent tag. Stock littlefs 2.11 checks the minor version and refuses
-  the image with `LFS_ERR_INVAL`; this is deliberate: it cannot read the tag
-  and would hand the run out as free space. A filesystem that never holds an
-  extent stays 2.1 and remains stock-mountable.
+- Format and new extents use the standard disk **2.1** (`LFS2_DISK_VERSION`).
+  The extent tag is unknown to stock littlefs: stock can mount the image, but
+  its allocator treats the extent's blocks as free, so stock tools must be
+  read-only. The stored CRC lets a consumer detect a stock write or flash
+  corruption before using the extent. There is no separate extent disk
+  version and no legacy one to mount.
 
 ## Invariants
 
@@ -45,9 +44,9 @@ immutable runs ("extents").
 - The extent bookkeeping uses `LFS2_EXT_MAP_MAX` (1024 bytes) in `lfs2_t`,
   not the heap: the firmware builds littlefs with `LFS2_NO_MALLOC`. This
   covers filesystems up to 8192 blocks (32 MiB at 4 KiB).
-- Power loss: payload first, then the version, then the tag. A crash leaves
-  either the old file, or no tag and an unreferenced run; never a tag that
-  points at a partially written run.
+- Power loss: payload first, then the tag. A crash leaves either the old
+  file, or no tag and an unreferenced run; never a tag that points at a
+  partially written run.
 
 ## Defrag
 
@@ -72,7 +71,7 @@ caller gets `LFS_ERR_NOCONTIG`.
 
 ## Tests
 
-`tests/littlefs/run.sh` downloads the v2.11.3 test runner, reverse-prefixes
-the patched `lfs2_*` sources and runs `test_extent.toml`. The rest of the
-upstream suite passes; `test_compat`'s minor-incompatibility cases assume the
-stock 2.1 maximum and are not applicable to a fork that supports 2.0xE000.
+`tests/littlefs_run.sh` downloads the v2.11.3 test runner, reverse-prefixes
+the patched `lfs2_*` sources and runs `tests/littlefs_test_extent.toml`. The
+rest of the upstream suite (including `test_compat`, now that the format is
+2.1) passes as well.
