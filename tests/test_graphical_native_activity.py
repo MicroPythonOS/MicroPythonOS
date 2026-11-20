@@ -455,6 +455,57 @@ class TestNativeActivity(unittest.TestCase):
             self.game.game_rect_to_panel(10, 20, 30, 40),
             (x, y, 30, 40))
 
+    def test_a_scaled_surface_maps_a_touch_into_the_engine_frame(self):
+        # 240x150 shows the engine's 320x200 at three quarters, so a finger is
+        # scaled up by 4/3 and the frame's edges land on the surface's edges.
+        self.game._surface = _FakeSurface(width=240, height=150)
+        self.game._rotated = False
+        self.game._game_width, self.game._game_height = 320, 200
+        surface = self.game._surface
+        self.assertEqual(
+            self.game.to_game(surface._image_x + 120, surface._image_y + 75),
+            (160, 100))
+        self.assertEqual(
+            self.game.to_game(surface._image_x, surface._image_y), (0, 0))
+        self.assertEqual(
+            self.game.to_game(surface._image_x + 239, surface._image_y + 149),
+            (319, 199))
+
+    def test_a_scaled_surface_round_trips_panel_points(self):
+        self.game._surface = _FakeSurface(width=240, height=150)
+        self.game._rotated = False
+        self.game._game_width, self.game._game_height = 320, 200
+        surface = self.game._surface
+        for x in (0, 1, 2, 3, 119, 120, 238, 239):
+            for y in (0, 1, 74, 75, 148, 149):
+                point = (surface._image_x + x, surface._image_y + y)
+                self.assertEqual(
+                    self.game.game_to_panel(*self.game.to_game(*point)), point)
+
+    def test_a_scaled_surface_shrinks_a_game_rect(self):
+        self.game._surface = _FakeSurface(width=240, height=150)
+        self.game._rotated = False
+        self.game._game_width, self.game._game_height = 320, 200
+        surface = self.game._surface
+        x, y, width, height = self.game.game_rect_to_panel(0, 0, 160, 200)
+        self.assertEqual((x, y), (surface._image_x, surface._image_y))
+        self.assertEqual((width, height), (120, 150))
+
+    def test_an_engine_that_scales_reports_the_frame_it_draws(self):
+        engine = _FakeEngine(size=(240, 150))
+        engine.frame_size = (WIDTH, HEIGHT)
+        self.game.engine = engine
+        self.game._surface = None
+        self.game._game_width = None
+        self.game._game_height = None
+        self.game._begin_session()
+        self.assertIsNone(self.game.error)
+        self.assertEqual(
+            (self.game._game_width, self.game._game_height), (WIDTH, HEIGHT))
+        self.assertFalse(self.game._rotated)
+        self.assertEqual((self.game._surface.width, self.game._surface.height),
+                         (240, 150))
+
     # -- audio ------------------------------------------------------------
 
     def _patch_pcm(self, chosen=None, outputs=()):

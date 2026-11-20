@@ -108,6 +108,10 @@ class NativeActivity(Activity):
     _fps_frames = 0
     _hint_until = 0
     _rotated = False
+    # The engine's own frame, when the surface is a scaled copy of it. None
+    # means the surface size is the frame size.
+    _game_width = None
+    _game_height = None
     _keys_sent = 0
     _sink = None
     _audio_buffer = None
@@ -233,6 +237,13 @@ class NativeActivity(Activity):
             # A surface taller than it is wide means the engine transposed the
             # picture, so overlays and touch coordinates have to follow.
             self._rotated = height > width
+            # An engine that presents its frame scaled says what its own frame
+            # is; a 240x240 panel gets Doom's 320x200 at three quarters.
+            self._game_width = None
+            self._game_height = None
+            frame = getattr(engine, "frame_size", None) if engine else None
+            if frame is not None:
+                self._game_width, self._game_height = frame
             started = self.start_engine(self._surface)
         except Exception as error:
             # The engine is the one part of such an app that can be missing: a
@@ -448,45 +459,94 @@ class NativeActivity(Activity):
         for finger, phase, x, y in touches.poll():
             self.on_touch_finger(finger, TOUCH_EVENTS[phase], x, y)
 
+    def _game_frame(self):
+        """The engine's own frame: the surface, unless the picture is scaled."""
+        if self._game_width and self._game_height:
+            return self._game_width, self._game_height
+        surface = self._surface
+        if self._rotated:
+            # A transposed surface has the frame's sides swapped.
+            return surface.height, surface.width
+        return surface.width, surface.height
+
+    @staticmethod
+    def _into_frame(panel_value, panel_length, frame_length):
+        """A panel coordinate in the engine's frame, rounded to the nearest.
+
+        The core samples a scaled surface with the same rounding, so a touch
+        lands on the source pixel the panel is showing.
+        """
+        return (panel_value * frame_length + panel_length // 2) // panel_length
+
+    @staticmethod
+    def _onto_panel(frame_value, panel_length, frame_length):
+        """The inverse of :meth:`_into_frame`."""
+        return (frame_value * panel_length + frame_length // 2) // frame_length
+
     def to_game(self, x, y):
         """Panel point -> the engine's own frame.
 
         An engine that presents in a portrait surface has transposed its frame
         (a source pixel (sx, sy) lands at surface (199 - sy, sx)), so touch
         coordinates have to be turned back before they mean anything: without
-        it, a thumb at the panel's left edge means the game's *top*.
+        it, a thumb at the panel's left edge means the game's *top*. A surface
+        smaller than the frame is scaled, and the point is scaled up by the
+        same factor.
         """
         surface = self._surface
         dx = x - surface._image_x
         dy = y - surface._image_y
+        game_width, game_height = self._game_frame()
         if not self._rotated:
-            return dx, dy
-        return dy, (surface.width - 1) - dx
+            return (self._into_frame(dx, surface.width, game_width),
+                    self._into_frame(dy, surface.height, game_height))
+        return (self._into_frame(dy, surface.height, game_width),
+                self._into_frame((surface.width - 1) - dx,
+                                 surface.width, game_height))
 
     def game_to_panel(self, x, y):
         """A point in the engine's frame -> a panel point.
 
         The inverse of :meth:`to_game`: an app that draws over the picture
         (touch hints, a HUD) can place its widgets in the game's own
-        coordinates and let this apply the letterbox and the rotation.
+        coordinates and let this apply the scale, the letterbox and the
+        rotation.
         """
         surface = self._surface
+        game_width, game_height = self._game_frame()
         if not self._rotated:
-            return surface._image_x + x, surface._image_y + y
-        return (surface._image_x + surface.width - 1 - y,
-                surface._image_y + x)
+            return (surface._image_x
+                    + self._onto_panel(x, surface.width, game_width),
+                    surface._image_y
+                    + self._onto_panel(y, surface.height, game_height))
+        return (surface._image_x + surface.width - 1
+                - self._onto_panel(y, surface.width, game_height),
+                surface._image_y
+                + self._onto_panel(x, surface.height, game_width))
 
     def game_rect_to_panel(self, x, y, width, height):
         """A rect in the engine's frame -> ``(x, y, width, height)`` on the panel.
 
-        A 90 degree rotation swaps the rect's width and height, so overlays do
-        not have to special-case the portrait surfaces.
+        A 90 degree rotation swaps the rect's width and height, and a scaled
+        surface shrinks both, so overlays do not have to special-case either.
         """
         surface = self._surface
+        game_width, game_height = self._game_frame()
         if not self._rotated:
-            return surface._image_x + x, surface._image_y + y, width, height
-        return (surface._image_x + surface.width - 1 - (y + height - 1),
-                surface._image_y + x, height, width)
+            x0 = self._onto_panel(x, surface.width, game_width)
+            y0 = self._onto_panel(y, surface.height, game_height)
+            x1 = self._onto_panel(x + width - 1, surface.width, game_width)
+            y1 = self._onto_panel(y + height - 1, surface.height, game_height)
+            return (surface._image_x + x0, surface._image_y + y0,
+                    x1 - x0 + 1, y1 - y0 + 1)
+        top = self._onto_panel(x, surface.height, game_width)
+        bottom = self._onto_panel(x + width - 1, surface.height, game_width)
+        left = surface.width - 1 - self._onto_panel(
+            y + height - 1, surface.width, game_height)
+        right = surface.width - 1 - self._onto_panel(
+            y, surface.width, game_height)
+        return (surface._image_x + left, surface._image_y + top,
+                right - left + 1, bottom - top + 1)
 
     # -- labels -----------------------------------------------------------
 

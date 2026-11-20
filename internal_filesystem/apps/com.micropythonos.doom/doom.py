@@ -322,6 +322,7 @@ class _CoreEngine:
 
     name = "core"
     quit = False
+    frame_size = (GAME_WIDTH, GAME_HEIGHT)
 
     def __init__(self):
         import mpos_core
@@ -336,8 +337,10 @@ class _CoreEngine:
     def surface_size(self, display):
         # A portrait panel cannot show Doom's landscape frame, so the core
         # rotates it into a 200x320 surface; a landscape panel takes the frame
-        # straight, which also keeps the touches unrotated. The engine does not
-        # scale, so a panel smaller than the frame cannot show it at all.
+        # straight, which also keeps the touches unrotated. A panel too small
+        # for either gets the same landscape picture at the largest quarter
+        # scale that still fits (a 240x240 panel becomes 240x150): the core
+        # samples the frame instead of letterboxing it.
         width = display.get_horizontal_resolution()
         height = display.get_vertical_resolution()
         if height > width:
@@ -345,9 +348,12 @@ class _CoreEngine:
                 return GAME_HEIGHT, GAME_WIDTH
         elif GAME_WIDTH <= width and GAME_HEIGHT <= height:
             return GAME_WIDTH, GAME_HEIGHT
+        quarter = min(width * 4 // GAME_WIDTH, height * 4 // GAME_HEIGHT)
+        if quarter >= 2:
+            return GAME_WIDTH * quarter // 4, GAME_HEIGHT * quarter // 4
         raise RuntimeError(
-            "Doom needs a screen of at least 320x200; this panel is %dx%d"
-            % (width, height))
+            "Doom needs a screen of at least 160x100 (or 320x200 unscaled); "
+            "this panel is %dx%d" % (width, height))
 
     def start(self, wad, surface):
         self._surface = surface
@@ -488,6 +494,7 @@ class _NatmodEngine:
     """
 
     name = "natmod"
+    frame_size = (GAME_WIDTH, GAME_HEIGHT)
 
     def __init__(self):
         _path, name = find_engine()

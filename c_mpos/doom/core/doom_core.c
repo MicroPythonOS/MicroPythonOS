@@ -69,6 +69,9 @@ static uint16_t s_surface[DOOMGENERIC_RESY * DOOMGENERIC_RESX];  // rotated, RGB
 // One 32x32 tile of the transpose. Static, not on the stack: the task stack is
 // a few KB and the engine is already deep inside it when a frame is presented.
 static uint16_t s_tile[32][32];
+// Source column for each column of a scaled surface. A downscale only ever
+// samples fewer columns, so one entry per source column is enough.
+static uint16_t s_xmap[DOOMGENERIC_RESX];
 
 static char s_wad_path[128];
 static char s_config_dir[128];
@@ -204,6 +207,26 @@ static void convert_band_direct(const mpos_core_abi_t *abi, uint16_t *dst,
     }
 }
 
+// A surface smaller than the frame is the same landscape picture at a scale
+// that keeps its 4:3 shape (240x150 for a 240x240 panel). Nearest neighbour:
+// panel pixel (x, y) shows source pixel (round(x * 320 / out_w), round(y * 200
+// / out_h)). The rounding matches NativeActivity's touch mapping, so a finger
+// lands on the pixel it is over.
+static void convert_band_scaled(const mpos_core_abi_t *abi, uint16_t *dst,
+                                int dst_y0, int rows) {
+    const uint8_t *src = (const uint8_t *)DG_ScreenBuffer;
+    const int out_w = abi->frame_width;
+    const int out_h = abi->frame_height;
+    for (int y = dst_y0; y < dst_y0 + rows; y++) {
+        const int sy = (2 * y * DOOMGENERIC_RESY + out_h) / (2 * out_h);
+        const uint8_t *src_row = src + sy * DOOMGENERIC_RESX;
+        uint16_t *dst_row = dst + y * out_w;
+        for (int x = 0; x < out_w; x++) {
+            dst_row[x] = s_palette[src_row[s_xmap[x]]];
+        }
+    }
+}
+
 static uint32_t s_engine_ms;
 static uint32_t s_convert_ms;
 static uint32_t s_present_ms;
@@ -221,9 +244,22 @@ static void present_frame(const mpos_core_abi_t *abi) {
 
     const int height = abi->frame_height;
     // The host's surface shape says how to present it: a 200x320 surface is
-    // the rotated portrait layout, a 320x200 one is Doom's own landscape frame.
+    // the rotated portrait layout, a 320x200 one is Doom's own landscape frame,
+    // and anything smaller is that frame scaled down.
     const int rotate = (abi->frame_width == DOOMGENERIC_RESY
                          && abi->frame_height == DOOMGENERIC_RESX);
+    const int scaled = !rotate
+        && abi->frame_width <= DOOMGENERIC_RESX
+        && abi->frame_height <= DOOMGENERIC_RESY
+        && (abi->frame_width != DOOMGENERIC_RESX
+            || abi->frame_height != DOOMGENERIC_RESY);
+    if (scaled) {
+        for (int x = 0; x < abi->frame_width; x++) {
+            s_xmap[x] = (uint16_t)((2 * x * DOOMGENERIC_RESX
+                                    + abi->frame_width)
+                                   / (2 * abi->frame_width));
+        }
+    }
     uint16_t *target = abi->frame;
     if (target != NULL) {
         int band = abi->band_rows > 0 ? abi->band_rows : height;
@@ -238,6 +274,8 @@ static void present_frame(const mpos_core_abi_t *abi) {
             uint32_t started = abi->now_ms(abi->host);
             if (rotate) {
                 convert_band(abi, target, y, rows);
+            } else if (scaled) {
+                convert_band_scaled(abi, target, y, rows);
             } else {
                 convert_band_direct(abi, target, y, rows);
             }
@@ -254,6 +292,8 @@ static void present_frame(const mpos_core_abi_t *abi) {
     // No surface from the host: keep our own copy and hand bands over.
     if (rotate) {
         convert_band(abi, s_surface, 0, height);
+    } else if (scaled) {
+        convert_band_scaled(abi, s_surface, 0, height);
     } else {
         convert_band_direct(abi, s_surface, 0, height);
     }

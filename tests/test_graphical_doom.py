@@ -307,14 +307,19 @@ class TestCoreEngine(unittest.TestCase):
         width, height = self.engine.surface_size(_FakeDisplay(320, 240))
         self.assertEqual((width, height), (doom.GAME_WIDTH, doom.GAME_HEIGHT))
 
-    def test_a_panel_too_small_for_the_frame_says_so(self):
-        # The engine does not scale, and neither orientation of 320x200 fits a
-        # square 240x240 panel: say which panel it is instead of letting the
-        # surface constructor fail with "larger than the display".
+    def test_a_square_panel_gets_the_frame_scaled_to_three_quarters(self):
+        # Neither orientation fits 240x240, so the core samples Doom's own
+        # 320x200 into 240x150: same 4:3 picture, 45 px of panel left over.
+        width, height = self.engine.surface_size(_FakeDisplay(240, 240))
+        self.assertEqual((width, height), (240, 150))
+
+    def test_a_panel_too_small_to_scale_says_so(self):
+        # Below half scale the text is unreadable, so refuse instead of drawing
+        # something nobody can use.
         with self.assertRaises(RuntimeError) as ctx:
-            self.engine.surface_size(_FakeDisplay(240, 240))
+            self.engine.surface_size(_FakeDisplay(120, 120))
         self.assertIn("320x200", str(ctx.exception))
-        self.assertIn("240x240", str(ctx.exception))
+        self.assertIn("120x120", str(ctx.exception))
 
     def test_a_band_with_pixels_is_copied_and_flushed(self):
         self.engine.start(_fake_wad(), self.surface)
