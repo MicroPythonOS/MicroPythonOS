@@ -3,9 +3,10 @@
 An extent file is an immutable run of raw blocks. The bytes live verbatim in
 that run, so a caller can map them (XIP, memory-mapped assets) or read them
 without the CTZ skip-list. The inode is an ordinary littlefs file with an
-extent tag; creating the first extent upgrades the filesystem to the
-littlefs2e disk version (stock littlefs refuses it from then on, because it
-would otherwise hand the run out as free space).
+extent tag. Extents use the standard littlefs 2.1 disk version: stock
+littlefs can mount the image, but it treats the extent's blocks as free
+space, so stock tools must be treated as read-only. The stored CRC lets a
+consumer detect a stock write (or flash corruption) before using the data.
 
 The low-level work is in the `lfs2e` C module; this file is policy:
 chunked streaming, CRC, and a targeted defragmenter for when the free space
@@ -130,6 +131,11 @@ def defrag(need, align=1, budget=None):
     from the allocator while doing so. Only normal files are moved: extents
     are immutable and metadata pairs are left alone.
     """
+    # TODO(later): the window scan below is O(block_count²) in Python.
+    # Precompute free-run intervals (or a run list) so a candidate window's
+    # outside max hole is O(runs) instead of a full map scan per candidate.
+    # 77 s worst case on a full 7 MiB badge is acceptable for a one-time
+    # install; do not add a progress callback until this is faster.
     if lfs2e is None:
         return False
     block_size, block_count, _ = lfs2e.geometry()

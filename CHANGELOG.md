@@ -5,9 +5,9 @@ Frameworks:
 - littlefs2e: contiguous "extent" files on the internal filesystem. An extent is
   an immutable, aligned run of blocks whose bytes are stored verbatim, so it can
   be mapped from flash (XIP) instead of being read through the CTZ skip-list.
-  `mpos.extent` creates/reads/verifies them; the first extent upgrades the
-  superblock from disk 2.1 to 2.0xE000, which stock littlefs refuses rather than
-  handing the run out as free space. Images without extents stay 2.1. A normal
+  `mpos.extent` creates/reads/verifies them. Extents use the standard disk 2.1,
+  so stock littlefs can mount the image; it treats extent blocks as free space,
+  so stock tools must be read-only. A normal
   `open(path, "wb")` converts an extent back to an ordinary file, and extent
   creation defragments a fragmented filesystem by relocating the files in the
   target window. Native cores can be stored and executed this way.

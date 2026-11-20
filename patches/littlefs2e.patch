@@ -44,7 +44,7 @@ index 1fdf792f..a477ae8c 100644
  extern const mp_obj_type_t mp_type_vfs_lfs1_fileio;
  extern const mp_obj_type_t mp_type_vfs_lfs1_textio;
 diff --git a/lib/littlefs/lfs2.c b/lib/littlefs/lfs2.c
-index 6c3c3ece..a51453dc 100644
+index 6c3c3ece..9cee5db8 100644
 --- a/lib/littlefs/lfs2.c
 +++ b/lib/littlefs/lfs2.c
 @@ -258,7 +258,7 @@ static int lfs2_bd_prog(lfs2_t *lfs2,
@@ -101,25 +101,7 @@ index 6c3c3ece..a51453dc 100644
  static inline void lfs2_superblock_fromle32(lfs2_superblock_t *superblock) {
      superblock->version     = lfs2_fromle32(superblock->version);
      superblock->block_size  = lfs2_fromle32(superblock->block_size);
-@@ -533,15 +562,12 @@ static void lfs2_mlist_append(lfs2_t *lfs2, struct lfs2_mlist *mlist) {
- 
- // some other filesystem operations
- static uint32_t lfs2_fs_disk_version(lfs2_t *lfs2) {
--    (void)lfs2;
- #ifdef LFS2_MULTIVERSION
-     if (lfs2->cfg->disk_version) {
-         return lfs2->cfg->disk_version;
--    } else
--#endif
--    {
--        return LFS2_DISK_VERSION;
-     }
-+#endif
-+    return lfs2->disk_version;
- }
- 
- static uint16_t lfs2_fs_disk_version_major(lfs2_t *lfs2) {
-@@ -658,6 +684,22 @@ static int lfs2_alloc_scan(lfs2_t *lfs2) {
+@@ -658,6 +687,22 @@ static int lfs2_alloc_scan(lfs2_t *lfs2) {
          return err;
      }
  
@@ -142,7 +124,7 @@ index 6c3c3ece..a51453dc 100644
      return 0;
  }
  #endif
-@@ -673,6 +715,15 @@ static int lfs2_alloc(lfs2_t *lfs2, lfs2_block_t *block) {
+@@ -673,6 +718,15 @@ static int lfs2_alloc(lfs2_t *lfs2, lfs2_block_t *block) {
                  *block = (lfs2->lookahead.start + lfs2->lookahead.next)
                          % lfs2->block_count;
  
@@ -158,7 +140,7 @@ index 6c3c3ece..a51453dc 100644
                  // eagerly find next free block to maximize how many blocks
                  // lfs2_alloc_ckpoint makes available for scanning
                  while (true) {
-@@ -1291,6 +1342,7 @@ static lfs2_stag_t lfs2_dir_fetchmatch(lfs2_t *lfs2,
+@@ -1291,6 +1345,7 @@ static lfs2_stag_t lfs2_dir_fetchmatch(lfs2_t *lfs2,
  
              // found a match for our fetcher?
              if ((fmask & tag) == (fmask & ftag)) {
@@ -166,7 +148,7 @@ index 6c3c3ece..a51453dc 100644
                  int res = cb(data, tag, &(struct lfs2_diskoff){
                          dir->pair[0], off+sizeof(tag)});
                  if (res < 0) {
-@@ -1427,6 +1479,21 @@ static int lfs2_dir_getinfo(lfs2_t *lfs2, lfs2_mdir_t *dir,
+@@ -1427,6 +1482,21 @@ static int lfs2_dir_getinfo(lfs2_t *lfs2, lfs2_mdir_t *dir,
  
      info->type = lfs2_tag_type3(tag);
  
@@ -188,7 +170,7 @@ index 6c3c3ece..a51453dc 100644
      struct lfs2_ctz ctz;
      tag = lfs2_dir_get(lfs2, dir, LFS2_MKTAG(0x700, 0x3ff, 0),
              LFS2_MKTAG(LFS2_TYPE_STRUCT, id, sizeof(ctz)), &ctz);
-@@ -1501,7 +1568,7 @@ nextname:
+@@ -1501,7 +1571,7 @@ nextname:
          if (lfs2_tag_type3(tag) == LFS2_TYPE_DIR) {
              name += strspn(name, "/");
          }
@@ -197,7 +179,7 @@ index 6c3c3ece..a51453dc 100644
  
          // skip '.'
          if (namelen == 1 && memcmp(name, ".", 1) == 0) {
-@@ -1520,7 +1587,7 @@ nextname:
+@@ -1520,7 +1590,7 @@ nextname:
          int depth = 1;
          while (true) {
              suffix += strspn(suffix, "/");
@@ -206,7 +188,7 @@ index 6c3c3ece..a51453dc 100644
              if (sufflen == 0) {
                  break;
              }
-@@ -1761,7 +1828,7 @@ static int lfs2_dir_commitcrc(lfs2_t *lfs2, struct lfs2_commit *commit) {
+@@ -1761,7 +1831,7 @@ static int lfs2_dir_commitcrc(lfs2_t *lfs2, struct lfs2_commit *commit) {
  
          commit->off = noff;
          // perturb valid bit?
@@ -215,7 +197,7 @@ index 6c3c3ece..a51453dc 100644
          // reset crc for next commit
          commit->crc = 0xffffffff;
  
-@@ -3142,20 +3209,67 @@ static int lfs2_file_opencfg_(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -3142,20 +3212,67 @@ static int lfs2_file_opencfg_(lfs2_t *lfs2, lfs2_file_t *file,
          err = LFS2_ERR_ISDIR;
          goto cleanup;
  #ifndef LFS2_READONLY
@@ -291,7 +273,7 @@ index 6c3c3ece..a51453dc 100644
      }
  
      // fetch attrs
-@@ -3244,10 +3358,12 @@ static int lfs2_file_open_(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -3244,10 +3361,12 @@ static int lfs2_file_open_(lfs2_t *lfs2, lfs2_file_t *file,
  #endif
  
  static int lfs2_file_close_(lfs2_t *lfs2, lfs2_file_t *file) {
@@ -307,7 +289,7 @@ index 6c3c3ece..a51453dc 100644
  #endif
  
      // remove from list of mdirs
-@@ -3429,18 +3545,12 @@ relocate:
+@@ -3429,18 +3548,12 @@ relocate:
  
  #ifndef LFS2_READONLY
  static int lfs2_file_sync_(lfs2_t *lfs2, lfs2_file_t *file) {
@@ -326,7 +308,7 @@ index 6c3c3ece..a51453dc 100644
      if ((file->flags & LFS2_F_DIRTY) &&
              !lfs2_pair_isnull(file->m.pair)) {
          // before we commit metadata, we need sync the disk to make sure
-@@ -3485,6 +3595,17 @@ static int lfs2_file_sync_(lfs2_t *lfs2, lfs2_file_t *file) {
+@@ -3485,6 +3598,17 @@ static int lfs2_file_sync_(lfs2_t *lfs2, lfs2_file_t *file) {
          file->flags &= ~LFS2_F_DIRTY;
      }
  
@@ -344,7 +326,7 @@ index 6c3c3ece..a51453dc 100644
      return 0;
  }
  #endif
-@@ -3506,7 +3627,12 @@ static lfs2_ssize_t lfs2_file_flushedread(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -3506,7 +3630,12 @@ static lfs2_ssize_t lfs2_file_flushedread(lfs2_t *lfs2, lfs2_file_t *file,
          // check if we need a new block
          if (!(file->flags & LFS2_F_READING) ||
                  file->off == lfs2->cfg->block_size) {
@@ -358,7 +340,7 @@ index 6c3c3ece..a51453dc 100644
                  int err = lfs2_ctz_find(lfs2, NULL, &file->cache,
                          file->ctz.head, file->ctz.size,
                          file->pos, &file->block, &file->off);
-@@ -3692,7 +3818,7 @@ static lfs2_ssize_t lfs2_file_write_(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -3692,7 +3821,7 @@ static lfs2_ssize_t lfs2_file_write_(lfs2_t *lfs2, lfs2_file_t *file,
          return nsize;
      }
  
@@ -367,7 +349,7 @@ index 6c3c3ece..a51453dc 100644
      return nsize;
  }
  #endif
-@@ -3725,6 +3851,7 @@ static lfs2_soff_t lfs2_file_seek_(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -3725,6 +3854,7 @@ static lfs2_soff_t lfs2_file_seek_(lfs2_t *lfs2, lfs2_file_t *file,
      // if we're only reading and our new offset is still in the file's cache
      // we can avoid flushing and needing to reread the data
      if ((file->flags & LFS2_F_READING)
@@ -375,13 +357,10 @@ index 6c3c3ece..a51453dc 100644
              && file->off != lfs2->cfg->block_size) {
          int oindex = lfs2_ctz_index(lfs2, &(lfs2_off_t){file->pos});
          lfs2_off_t noff = npos;
-@@ -4198,6 +4325,13 @@ static int lfs2_removeattr_(lfs2_t *lfs2, const char *path, uint8_t type) {
+@@ -4198,6 +4328,10 @@ static int lfs2_removeattr_(lfs2_t *lfs2, const char *path, uint8_t type) {
  static int lfs2_init(lfs2_t *lfs2, const struct lfs2_config *cfg) {
      lfs2->cfg = cfg;
      lfs2->block_count = cfg->block_count;  // May be 0
-+    // Images are written at the safe 2.1 baseline until an extent is
-+    // committed; the mount raises this to the on-disk version.
-+    lfs2->disk_version = LFS2_DISK_VERSION_LITTLEFS2;
 +    lfs2->ext_bitmap = NULL;
 +    lfs2->ext_head = 0;
 +    lfs2->ext_count = 0;
@@ -398,62 +377,7 @@ index 6c3c3ece..a51453dc 100644
      return 0;
  }
  
-@@ -4415,7 +4551,9 @@ static int lfs2_format_(lfs2_t *lfs2, const struct lfs2_config *cfg) {
- 
-         // write one superblock
-         lfs2_superblock_t superblock = {
--            .version     = lfs2_fs_disk_version(lfs2),
-+            // Format at the safe baseline: stock littlefs can still mount an
-+            // image that has never had an extent.
-+            .version     = LFS2_DISK_VERSION_LITTLEFS2,
-             .block_size  = lfs2->cfg->block_size,
-             .block_count = lfs2->block_count,
-             .name_max    = lfs2->name_max,
-@@ -4530,31 +4668,27 @@ static int lfs2_mount_(lfs2_t *lfs2, const struct lfs2_config *cfg) {
-             // check version
-             uint16_t major_version = (0xffff & (superblock.version >> 16));
-             uint16_t minor_version = (0xffff & (superblock.version >>  0));
--            if (major_version != lfs2_fs_disk_version_major(lfs2)
--                    || minor_version > lfs2_fs_disk_version_minor(lfs2)) {
-+            if (major_version != LFS2_DISK_VERSION_EXTENTS_MAJOR
-+                    || minor_version > LFS2_DISK_VERSION_EXTENTS_MINOR) {
-                 LFS2_ERROR("Invalid version "
-                         "v%"PRIu16".%"PRIu16" != v%"PRIu16".%"PRIu16,
-                         major_version,
-                         minor_version,
--                        lfs2_fs_disk_version_major(lfs2),
--                        lfs2_fs_disk_version_minor(lfs2));
-+                        (uint16_t)LFS2_DISK_VERSION_EXTENTS_MAJOR,
-+                        (uint16_t)LFS2_DISK_VERSION_EXTENTS_MINOR);
-                 err = LFS2_ERR_INVAL;
-                 goto cleanup;
-             }
- 
--            // found older minor version? set an in-device only bit in the
--            // gstate so we know we need to rewrite the superblock before
--            // the first write
--            bool needssuperblock = false;
--            if (minor_version < lfs2_fs_disk_version_minor(lfs2)) {
--                LFS2_DEBUG("Found older minor version "
--                        "v%"PRIu16".%"PRIu16" < v%"PRIu16".%"PRIu16,
--                        major_version,
--                        minor_version,
--                        lfs2_fs_disk_version_major(lfs2),
--                        lfs2_fs_disk_version_minor(lfs2));
--                needssuperblock = true;
-+            // Preserve the on-disk version; do not silently upgrade a 2.1
-+            // image on the first write. The extent commit raises it
-+            // explicitly before any extent tag can exist.
-+            if (minor_version >= 1) {
-+                lfs2->disk_version = superblock.version;
-+            } else {
-+                lfs2->disk_version = LFS2_DISK_VERSION_LITTLEFS2;
-             }
-+            bool needssuperblock = (minor_version < 1);
-             // note this bit is reserved on disk, so fetching more gstate
-             // will not interfere here
-             lfs2_fs_prepsuperblock(lfs2, needssuperblock);
-@@ -4735,6 +4869,27 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
+@@ -4735,6 +4871,27 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
          }
  
          for (uint16_t id = 0; id < dir.count; id++) {
@@ -481,7 +405,7 @@ index 6c3c3ece..a51453dc 100644
              struct lfs2_ctz ctz;
              lfs2_stag_t tag = lfs2_dir_get(lfs2, &dir, LFS2_MKTAG(0x700, 0x3ff, 0),
                      LFS2_MKTAG(LFS2_TYPE_STRUCT, id, sizeof(ctz)), &ctz);
-@@ -4771,7 +4926,8 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
+@@ -4771,7 +4928,8 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
              continue;
          }
  
@@ -491,7 +415,7 @@ index 6c3c3ece..a51453dc 100644
              int err = lfs2_ctz_traverse(lfs2, &f->cache, &lfs2->rcache,
                      f->ctz.head, f->ctz.size, cb, data);
              if (err) {
-@@ -5968,6 +6124,490 @@ cleanup:
+@@ -5968,6 +6126,460 @@ cleanup:
  
  // Public API
  #ifndef LFS2_READONLY
@@ -851,42 +775,12 @@ index 6c3c3ece..a51453dc 100644
 +    return 0;
 +}
 +
-+int lfs2_fs_set_disk_version(lfs2_t *lfs2, uint32_t version) {
-+    if (version <= lfs2->disk_version) {
-+        return 0;
-+    }
-+    if ((0xffff & (version >> 16)) != LFS2_DISK_VERSION_EXTENTS_MAJOR
-+            || (0xffff & version) > LFS2_DISK_VERSION_EXTENTS_MINOR) {
-+        return LFS2_ERR_INVAL;
-+    }
-+    int err = lfs2_fs_forceconsistency(lfs2);
-+    if (err) {
-+        return err;
-+    }
-+    uint32_t old = lfs2->disk_version;
-+    lfs2->disk_version = version;
-+    lfs2_fs_prepsuperblock(lfs2, true);
-+    err = lfs2_fs_desuperblock(lfs2);
-+    if (err) {
-+        lfs2->disk_version = old;
-+    }
-+    return err;
-+}
-+
 +int lfs2_ext_commit(lfs2_t *lfs2, const char *path, uint32_t crc) {
 +    if (!lfs2->ext_bitmap || lfs2->ext_count == 0) {
 +        return LFS2_ERR_INVAL;
 +    }
 +
 +    int err = lfs2_bd_sync(lfs2, &lfs2->pcache, &lfs2->rcache, false);
-+    if (err) {
-+        lfs2_ext_clear_exclude(lfs2);
-+        return err;
-+    }
-+
-+    // Stock littlefs must not be able to mount an image that contains (or
-+    // may contain) an extent; raise the version before writing the tag.
-+    err = lfs2_fs_set_disk_version(lfs2, LFS2_DISK_VERSION_EXTENTS);
 +    if (err) {
 +        lfs2_ext_clear_exclude(lfs2);
 +        return err;
@@ -983,10 +877,10 @@ index 6c3c3ece..a51453dc 100644
      int err = LFS2_LOCK(cfg);
      if (err) {
 diff --git a/lib/littlefs/lfs2.h b/lib/littlefs/lfs2.h
-index 77477aaf..a8b60705 100644
+index 77477aaf..87e1f264 100644
 --- a/lib/littlefs/lfs2.h
 +++ b/lib/littlefs/lfs2.h
-@@ -21,16 +21,37 @@ extern "C"
+@@ -21,14 +21,27 @@ extern "C"
  // Software library version
  // Major (top-nibble), incremented on backwards incompatible changes
  // Minor (bottom-nibble), incremented on feature additions
@@ -998,35 +892,24 @@ index 77477aaf..a8b60705 100644
  // Version of On-disk data structures
  // Major (top-nibble), incremented on backwards incompatible changes
  // Minor (bottom-nibble), incremented on feature additions
--#define LFS2_DISK_VERSION 0x00020001
 +//
-+// littlefs2e (extent files) is a deliberately high minor under the same
-+// major: the metadata format and every tag older littlefs knows are
-+// unchanged, but a stock littlefs must refuse the image once an extent can
-+// exist (it does not know LFS2_TYPE_EXTSTRUCT, so it would hand the extent
-+// blocks out as free). LFS2_DISK_VERSION_LITTLEFS2 is the safe baseline an
-+// image is formatted with; the superblock is upgraded to
-+// LFS2_DISK_VERSION_EXTENTS before the first extent is committed.
-+#define LFS2_DISK_VERSION_LITTLEFS2 0x00020001
-+#define LFS2_DISK_VERSION_EXTENTS   0x0002E000
++// littlefs2e (extent files) keeps the standard 2.1 disk version. The
++// metadata format and every tag older littlefs knows are unchanged; an
++// extent is a new tag that stock littlefs ignores. A stock littlefs can
++// therefore mount the image, but it treats the extent's blocks as free
++// space, so stock tools must be treated as read-only. The stored CRC
++// detects a stock write or flash corruption.
+ #define LFS2_DISK_VERSION 0x00020001
 +
 +// Fixed bookkeeping for an in-flight extent reservation or defrag window.
 +// 1024 bytes covers 8192 blocks, i.e. a 32 MiB filesystem at 4 KiB blocks.
 +// littlefs is built with LFS2_NO_MALLOC on MicroPython, so the extent code
 +// must not call the allocator.
 +#define LFS2_EXT_MAP_MAX 1024
-+// The format baseline (what lfs2_format writes and what an image without
-+// extents reports) stays 2.1. The extent minor is opt-in and is committed
-+// before the first extent tag.
-+#define LFS2_DISK_VERSION LFS2_DISK_VERSION_LITTLEFS2
  #define LFS2_DISK_VERSION_MAJOR (0xffff & (LFS2_DISK_VERSION >> 16))
  #define LFS2_DISK_VERSION_MINOR (0xffff & (LFS2_DISK_VERSION >>  0))
-+#define LFS2_DISK_VERSION_EXTENTS_MAJOR (0xffff & (LFS2_DISK_VERSION_EXTENTS >> 16))
-+#define LFS2_DISK_VERSION_EXTENTS_MINOR (0xffff & (LFS2_DISK_VERSION_EXTENTS >>  0))
  
- 
- /// Definitions ///
-@@ -83,6 +104,7 @@ enum lfs2_error {
+@@ -83,6 +96,7 @@ enum lfs2_error {
      LFS2_ERR_NOMEM       = -12,  // No more memory available
      LFS2_ERR_NOATTR      = -61,  // No data/attr available
      LFS2_ERR_NAMETOOLONG = -36,  // File name too long
@@ -1034,7 +917,7 @@ index 77477aaf..a8b60705 100644
  };
  
  // File types
-@@ -108,6 +130,9 @@ enum lfs2_type {
+@@ -108,6 +122,9 @@ enum lfs2_type {
      LFS2_TYPE_DIRSTRUCT      = 0x200,
      LFS2_TYPE_CTZSTRUCT      = 0x202,
      LFS2_TYPE_INLINESTRUCT   = 0x201,
@@ -1044,7 +927,7 @@ index 77477aaf..a8b60705 100644
      LFS2_TYPE_SOFTTAIL       = 0x600,
      LFS2_TYPE_HARDTAIL       = 0x601,
      LFS2_TYPE_MOVESTATE      = 0x7ff,
-@@ -135,14 +160,16 @@ enum lfs2_open_flags {
+@@ -135,14 +152,16 @@ enum lfs2_open_flags {
  
      // internally used flags
  #ifndef LFS2_READONLY
@@ -1066,7 +949,7 @@ index 77477aaf..a8b60705 100644
  };
  
  // File seek flags
-@@ -396,6 +423,18 @@ typedef struct lfs2_dir {
+@@ -396,6 +415,18 @@ typedef struct lfs2_dir {
      lfs2_block_t head[2];
  } lfs2_dir_t;
  
@@ -1085,7 +968,7 @@ index 77477aaf..a8b60705 100644
  // littlefs file type
  typedef struct lfs2_file {
      struct lfs2_file *next;
-@@ -408,6 +447,8 @@ typedef struct lfs2_file {
+@@ -408,6 +439,8 @@ typedef struct lfs2_file {
          lfs2_size_t size;
      } ctz;
  
@@ -1094,13 +977,10 @@ index 77477aaf..a8b60705 100644
      uint32_t flags;
      lfs2_off_t pos;
      lfs2_block_t block;
-@@ -463,6 +504,16 @@ typedef struct lfs2 {
+@@ -463,6 +496,13 @@ typedef struct lfs2 {
      lfs2_size_t file_max;
      lfs2_size_t attr_max;
      lfs2_size_t inline_max;
-+    // On-disk version this mount will write. Initialised from the superblock
-+    // (2.1) and raised to LFS2_DISK_VERSION_EXTENTS before the first extent.
-+    uint32_t disk_version;
 +    // Blocks reserved for an in-flight extent creation or defrag window.
 +    // Consulted by the allocator until the extent tag is committed.
 +    uint8_t *ext_bitmap;
@@ -1111,7 +991,7 @@ index 77477aaf..a8b60705 100644
  
  #ifdef LFS2_MIGRATE
      struct lfs21 *lfs21;
-@@ -794,6 +845,67 @@ int lfs2_migrate(lfs2_t *lfs2, const struct lfs2_config *cfg);
+@@ -794,6 +834,63 @@ int lfs2_migrate(lfs2_t *lfs2, const struct lfs2_config *cfg);
  #endif
  
  
@@ -1166,10 +1046,6 @@ index 77477aaf..a8b60705 100644
 +// Only one range may be active at a time.
 +int lfs2_ext_exclude(lfs2_t *lfs2, lfs2_block_t head, lfs2_block_t count);
 +void lfs2_ext_clear_exclude(lfs2_t *lfs2);
-+
-+// Raise the on-disk version (currently only to LFS2_DISK_VERSION_EXTENTS).
-+// Commits a new superblock before returning.
-+int lfs2_fs_set_disk_version(lfs2_t *lfs2, uint32_t version);
 +#endif
 +
 +// Number of blocks, useful for sizing the maps above.
