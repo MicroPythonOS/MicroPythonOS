@@ -252,6 +252,19 @@ def _wad_zip():
     return path
 
 
+def _require_ram(size):
+    """Refuse an unpack that cannot fit, before the allocator fails mid-way."""
+    try:
+        import gc
+        free = gc.mem_free()
+    except Exception:
+        return
+    if free and free < size + 1024 * 1024:
+        raise RuntimeError(
+            "not enough free RAM for the WAD (%d KB free, %d KB needed plus "
+            "the engine's zone)" % (free // 1024, size // 1024))
+
+
 def prepare_wad(intent, engine_name, loading):
     """The WAD source for this launch, or None when there is no WAD at all.
 
@@ -274,6 +287,7 @@ def prepare_wad(intent, engine_name, loading):
         loading("Unpacking WAD", done, total)
 
     if engine_name == "core":
+        _require_ram(zipasset.entry_size(archive))
         buffer, size = zipasset.load(archive, progress=progress)
         return _WadSource(WAD_ZIP_NAME[:-4], size, buffer=buffer)
 

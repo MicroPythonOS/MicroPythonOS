@@ -54,6 +54,16 @@ def entries(path):
     return names
 
 
+def entry_size(path, entry=None):
+    """The entry's declared uncompressed size, or 0 when it is missing."""
+    try:
+        with open(path, "rb") as archive:
+            found = _find(archive, entry)
+    except OSError:
+        return 0
+    return found["uncompressed_size"] if found is not None else 0
+
+
 def load(path, entry=None, progress=None):
     """Inflate ``entry`` (default: the first file) and return its buffer.
 

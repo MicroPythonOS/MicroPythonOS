@@ -1,6 +1,6 @@
 import unittest
 
-from mpos.zipasset import ZipAssetError, entries, load
+from mpos.zipasset import ZipAssetError, entries, entry_size, load
 
 FIXTURES = "../tests/zipasset"
 PAYLOAD = bytes((i * 13 + 7) & 0xFF for i in range(20000))
@@ -9,6 +9,13 @@ PAYLOAD = bytes((i * 13 + 7) & 0xFF for i in range(20000))
 class TestZipAsset(unittest.TestCase):
     def test_lists_entries(self):
         self.assertEqual(entries(FIXTURES + "/asset_deflated.zip"), ["doom1.wad"])
+
+    def test_reports_the_declared_size_without_inflating(self):
+        self.assertEqual(entry_size(FIXTURES + "/asset_deflated.zip"), len(PAYLOAD))
+        self.assertEqual(entry_size(FIXTURES + "/asset_deflated.zip", "doom1.wad"),
+                         len(PAYLOAD))
+        self.assertEqual(entry_size(FIXTURES + "/asset_deflated.zip", "nope"), 0)
+        self.assertEqual(entry_size(FIXTURES + "/does-not-exist.zip"), 0)
 
     def test_loads_stored_entry(self):
         buffer, size = load(FIXTURES + "/asset_stored.zip")
