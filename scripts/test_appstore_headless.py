@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from mpos_controller import _build_test_code
 
-TESTS = ("update_flow", "async_refresh", "uninstall_refresh", "list_build", "ratings", "install_safety")
+TESTS = ("update_flow", "async_refresh", "uninstall_refresh", "list_build", "ratings", "install_safety", "owner_lifecycle", "builtin_source")
 HEADER = """import micropython
 micropython.opt_level(0)
 import sys

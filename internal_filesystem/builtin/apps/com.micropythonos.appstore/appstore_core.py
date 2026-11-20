@@ -283,6 +283,8 @@ class AppUpdateManager:
     # ------------------------------------------------------------------
 
     def start(self):
+        if self._running:
+            return
         self._running = True
         self._connectivity_manager = ConnectivityManager.get()
         self._connectivity_manager.register_callback(self._network_changed)
@@ -305,6 +307,8 @@ class AppUpdateManager:
                 await TaskManager.sleep(self.LOOP_POLL_INTERVAL)
 
     def stop(self):
+        if not self._running:
+            return
         if __debug__: logger.debug("stopping")
         self._running = False
         if self._connectivity_manager:
@@ -364,7 +368,7 @@ class AppUpdateManager:
             if index_url is None:
                 index_url = store_source.index_url()
 
-            print("APPSTORE_UPDATE_SOURCE", selected_source, index_url)
+            if __debug__: logger.debug("APPSTORE_UPDATE_SOURCE %s %s", selected_source, index_url)
             try:
                 response = await store_source.fetch_updates(index_url)
             except Exception as e:
@@ -438,7 +442,7 @@ class AppUpdateManager:
                 title="App updates available",
                 text=text,
                 priority=Notification.PRIORITY_DEFAULT,
-                intent=Intent(app_fullname="com.micropythonos.appstore").putExtra("category", "Updates"),
+                intent=Intent(action="com.micropythonos.appstore.updates", data="mpos-appstore://updates", app_fullname="com.micropythonos.appstore").putExtra("category", "Updates"),
                 auto_cancel=True,
                 app_fullname="com.micropythonos.appstore",
             )

@@ -33,17 +33,19 @@ class AppDetail(Activity):
     _rated = False
     _submit_rating_btn = None
     _icon_download_started = False
+    _icon_timer = None
+    _icon_token = None
 
     # Received from the Intent extras:
     app = None
     appstore = None
 
     def _open_app(self, app_fullname):
-        print("APPSTORE_OPEN_REQUEST", app_fullname)
+        if __debug__: logger.debug("APPSTORE_OPEN_REQUEST %s", app_fullname)
         if not AppManager.start_app(app_fullname):
             if self.has_foreground():
                 self.long_desc_label.set_text("App failed to open. Check its dependencies or uninstall and retry.")
-            print("APPSTORE_OPEN_FAILED", app_fullname)
+            logger.warning("APPSTORE_OPEN_FAILED %s", app_fullname)
 
     def _sync_open_button(self):
         if self._open_button is None:
@@ -269,9 +271,43 @@ class AppDetail(Activity):
         TaskManager.create_task(self.fetch_and_set_app_details())
 
     def _start_icon_download(self):
-        if not self.app.icon_data and self.app.icon_url and not self._icon_download_started:
+        if self.has_foreground() and not self.app.icon_data and self.app.icon_url and not self._icon_download_started:
             self._icon_download_started = True
-            lv.timer_create(lambda t: (t.delete(), TaskManager.create_task(self._download_icon())), 500, None)
+            token = object()
+            self._icon_token = token
+            self._icon_timer = lv.timer_create(lambda timer: self._download_icon_after_timer(timer, token), 500, None)
+
+    def _download_icon_after_timer(self, timer, token=None):
+        if token is not self._icon_token or self._icon_timer is None:
+            return
+        pending = self._icon_timer
+        self._icon_timer = None
+        self._icon_token = None
+        pending.delete()
+        if self.has_foreground():
+            TaskManager.create_task(self._download_icon())
+        else:
+            self._icon_download_started = False
+
+    def onPause(self, screen):
+        super().onPause(screen)
+        timer = self._icon_timer
+        self._icon_timer = None
+        self._icon_token = None
+        if timer is not None:
+            timer.delete()
+            self._icon_download_started = False
+
+    def onDestroy(self, screen):
+        self.onPause(screen)
+        self.appstore = None
+        for name in (
+            "install_button", "update_button", "progress_bar", "install_label", "long_desc_label",
+            "version_label", "installed_version_label", "buttoncont", "publisher_label", "_open_button",
+            "icon_image", "rate_cont", "_stars", "_submit_rating_btn",
+        ):
+            setattr(self, name, None)
+        super().onDestroy(screen)
 
     @staticmethod
     def _read_installed_version(app_fullname):
@@ -369,7 +405,7 @@ class AppDetail(Activity):
             await self.fetch_badgehub_app_details(self.app)
             self._details_error = False
         except Exception as error:
-            print("APPSTORE_DETAILS_FAILED", self.app.fullname, type(error).__name__, str(error))
+            logger.warning("APPSTORE_DETAILS_FAILED %s %s %s", self.app.fullname, type(error).__name__, str(error))
             self._details_error = True
             if self.has_foreground():
                 self.long_desc_label.set_text("Store details unavailable: %s. Tap Install to retry or return to the list." % store_source.error_text(error)[:90])
@@ -442,13 +478,13 @@ class AppDetail(Activity):
                 raise OSError("Application directory could not be removed")
             clear_app_cache(destination)
             forget_receipt(app_fullname)
-            print("APPSTORE_UNINSTALL_SUCCESS", app_fullname)
+            logger.info("APPSTORE_UNINSTALL_SUCCESS %s", app_fullname)
             if self.has_foreground() and self.long_desc_label is not None:
                 self.long_desc_label.set_text(self._description_text())
             await self._update_progress(100, wait=False)
             self._trigger_update_recheck()
         except Exception as error:
-            print("APPSTORE_UNINSTALL_FAILED", app_fullname, error)
+            logger.warning("APPSTORE_UNINSTALL_FAILED %s %s", app_fullname, error)
             if self.has_foreground():
                 self.long_desc_label.set_text("Uninstall failed: %s. Retry or return to the list." % store_source.error_text(error)[:110])
         finally:
@@ -480,7 +516,7 @@ class AppDetail(Activity):
                 app_obj._remote_version = receipt["version"]
                 app_obj.revision = receipt.get("revision")
         except Exception as e:
-            print("APPSTORE_INSTALL_FAILED", app_fullname, type(e).__name__, str(e))
+            logger.warning("APPSTORE_INSTALL_FAILED %s %s %s", app_fullname, type(e).__name__, str(e))
             logger.error("download failed: %s", store_source.error_text(e))
             self._action_in_progress = False
             if self.has_foreground():

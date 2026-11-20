@@ -30,6 +30,8 @@ def package(output_dir, revision):
             ):
                 continue
             data = path.read_bytes()
+            if path.suffix.lower() in (".py", ".json", ".md"):
+                data = data.replace(b"\r\n", b"\n")
             relative = path.relative_to(source).as_posix()
             entry = zipfile.ZipInfo(FULLNAME + "/" + relative, (2026, 1, 1, 0, 0, 0))
             entry.compress_type = zipfile.ZIP_DEFLATED

@@ -2,7 +2,7 @@
 
 This branch adapts `com.micropythonos.appstore`, retaining its Activity, boot
 Service and UI. It does not ship the earlier standalone uPyStore prototype.
-The development AppStore version is **1.5.1**, based on organization main
+The development AppStore version is **1.5.3**, based on organization main
 `8484908a5ceade80a7a5854925b85d662a3b480b`. This is a fork build, not an
 upstream-published AppStore release.
 
@@ -13,11 +13,13 @@ upstream-published AppStore release.
   Open, Uninstall and Update actions.
 - Sequential Update All, the boot update service and update notifications.
 - Icon, work-in-progress and notification preferences; the existing QR entry.
-- BadgeHub remains selectable in Settings. uPyStore is this integration's default.
+- This project build defaults to uPyStore. BadgeHub remains selectable;
+  existing explicit source preferences are retained.
 
 Store Source and Search Store are added to the existing settings UI. Foreground
 views and the background update service read the same source preference. A search
-never restricts background update discovery. The latter fetches every API page,
+never restricts background update discovery or clears pending update state.
+Only changing the actual source resets provider-specific results. The latter fetches every API page,
 including revisions, so an updated revision of the same semantic version can be
 noticed. Receipts prevent automatic updates across a known change of provider.
 
@@ -30,7 +32,7 @@ noticed. Receipts prevent automatic updates across a known change of provider.
 - Details use `/api/v1/apps/{slug}` and its returned `versions` metadata. The
   version matching the current revision supplies the size, SHA256 and MPK URL.
 - Downloads use the complete revision-specific MPK, not individual-file endpoints.
-- Store metadata, icons and package requests share an application-local queue to
+- uPyStore metadata, icons and package requests share an application-local queue to
   limit concurrent TLS work. JSON collection is bounded. The large compatibility
   catalog has a longer deadline than individual metadata requests.
 - uPyStore packages require matching size/SHA256, a matching top-level app
@@ -38,7 +40,10 @@ noticed. Receipts prevent automatic updates across a known change of provider.
   the app directory is rejected, not silently removed.
 - Extraction is staged. Identity/version, Activity paths, Python syntax, class
   name syntax and a single intent filter containing both `main` and `launcher`
-  are checked before promotion. Runtime dependencies and Activity initialization
+  are checked before promotion. Compiled `.mpy` entrypoints and `.py` manifest
+  entries backed by `.mpy` files retain AppManager's import behavior; compiled
+  headers are checked without executing downloaded code. Runtime ABI,
+  dependencies and Activity initialization
   are checked separately by actually launching the app.
 - Promotion clears cached modules from the final application's relative and
   absolute paths and refreshes AppManager's registry. Receipt-write/promotion
@@ -46,18 +51,32 @@ noticed. Receipts prevent automatic updates across a known change of provider.
   power-loss-safe filesystem transactions.
 - Uninstall checks that the user installation was removed before dropping its
   receipt. Failed requests restore usable actions and show a retry instruction.
+- Downloads and staging use `cache/com.micropythonos.appstore/install`; receipts
+  use `prefs/com.micropythonos.appstore/receipts`. Receipts from the earlier local
+  `data/appstore/receipts` layout remain readable and migrate on access. Uninstall
+  removes both receipt locations to prevent an old receipt from reappearing.
+  A pending legacy install backup blocks another install until recovery.
+- Pausing a detail page cancels its pending icon timer. Destroyed pages release
+  widget references; late network results can update data without touching
+  destroyed widgets. Installation work may finish safely after leaving its page.
 
 There is no `/lib/mpos` overlay and no board or global OS source modification.
+Source changes are in `internal_filesystem/builtin/apps/com.micropythonos.appstore`.
+On-device validation installs a same-fullname update under `/apps`, which takes
+precedence over the firmware's older built-in copy. It is the existing AppStore
+entry, not a separately installed storefront. A firmware rebuild would bundle
+these sources in the normal built-in archive. The independent 1.1.0 branch is
+historical and is not deployed alongside this version.
 
 ## Build and install the development MPK
 
 From the repository root, using host Python:
 
 ```text
-python scripts/package_appstore.py --output-dir tmp/appstore-release --revision 1
+python scripts/package_appstore.py --output-dir tmp/appstore-builtin-release --revision 3
 ```
 
-The script writes `com.micropythonos.appstore_r1.mpk` and `release.json`, including
+The script writes `com.micropythonos.appstore_r3.mpk` and `release.json`, including
 package and per-file SHA256 values. The local revision is not a store publication.
 It preserves the official flat app layout and packages only this builtin app.
 
@@ -67,7 +86,7 @@ do not repeatedly interrupt it with raw-REPL attach commands. In the running REP
 
 ```python
 from mpos import AppManager
-AppManager.install_mpk('/data/com.micropythonos.appstore_r1.mpk',
+AppManager.install_mpk('/data/com.micropythonos.appstore_r3.mpk',
                        '/apps/com.micropythonos.appstore')
 import machine
 machine.reset()
@@ -82,10 +101,15 @@ to search for `CC Skill Smoke`, save, and return to the list. Install, Open,
 calculate `2 + 3 = 5`, return and Uninstall.
 Check installation and launch separately. Never copy this app into `/lib`.
 
+This organization build uses uPyStore when no valid source preference is saved.
+Select BadgeHub explicitly to use the original backend. This does not change
+the default in the official upstream repository or claim upstream acceptance.
+
 ## Regression commands
 
 ```text
 python tests/cpython_appstore_upystore.py
+python tests/cpython_appstore_review.py
 make lint
 make syntax-tests
 make check-app-versions ARGS=--changed

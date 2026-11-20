@@ -9,7 +9,7 @@ Frameworks:
 - AudioManager: MP3 playback through the native `mp3dec` module (minimp3) — MPEG-1/2/2.5 Layer III, CBR and VBR, mono/stereo, 8-48 kHz. Decoding releases the GIL so the UI keeps rendering, the file's own sample rate is used (no resampling), and volume is applied as a fixed-point right shift. ID3v2/ID3v1 tags are skipped. `get_info()` reads rate, channels and duration in pure Python, and the music player lists `.mp3` files when the firmware has `mp3dec`. On desktop, MP3 is played by `ffplay`/`mpg123`/`afplay`, or decoded to a temporary WAV when only `aplay`/`paplay` exists.
 
 Builtin Apps:
-- AppStore: add a selectable uPyStore source for the existing catalog, details and background updates; verify and stage installs, reject missing launchers, and clear helper caches on upgrade.
+- AppStore: connect the existing built-in UI and update service to uPyStore by default in this project build, retaining selectable BadgeHub; verify and stage installs, validate source/compiled launchers, clear helper caches and obsolete files on upgrade, migrate receipts to app preferences, and clean up page timers and widgets.
 - Music Player: `.mp3` files are only offered in the file picker and only accepted when the firmware provides the `mp3dec` module, so updating the app on an older build does not offer files it cannot play; opening one anyway shows a clear message instead of an audio-device error.
 
 Testing:

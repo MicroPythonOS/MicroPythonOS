@@ -1,14 +1,20 @@
 import gc
 import hashlib
 import json
+import logging
 import os
 import shutil
 import struct
+import sys
 
 from mpos import AppManager, BuildInfo, ConnectivityManager
 from store_source import absolute_url, current_source, fetch_details, identity, request
 
+logger = logging.getLogger(__name__)
 MAX_PACKAGE_BYTES = 33554432
+WORK_DIR = "cache/com.micropythonos.appstore/install"
+RECEIPTS_DIR = "prefs/com.micropythonos.appstore/receipts"
+LEGACY_RECEIPTS_DIR = "data/appstore/receipts"
 _INSTALLING = False
 
 
@@ -109,12 +115,24 @@ def validate_manifest(path, fullname, version):
         raise ValueError("No application Activity in package")
     for activity in activities + manifest.get("services", []):
         entry = activity.get("entrypoint", "")
-        if entry.startswith("/") or ".." in entry.split("/") or "\\" in entry or not entry.endswith(".py"):
+        if entry.startswith("/") or ".." in entry.split("/") or "\\" in entry or not (entry.endswith(".py") or entry.endswith(".mpy")):
             raise ValueError("Invalid application entrypoint")
-        if not exists(path + "/" + entry) or not activity.get("classname"):
+        base = entry[:-4] if entry.endswith(".mpy") else entry[:-3]
+        source_path = path + "/" + base + ".py"
+        compiled_path = path + "/" + base + ".mpy"
+        if not activity.get("classname"):
             raise ValueError("Application entrypoint is missing")
-        with open(path + "/" + entry) as entry_file:
-            compile(entry_file.read(), entry, "exec")
+        if exists(source_path):
+            with open(source_path) as entry_file:
+                compile(entry_file.read(), entry, "exec")
+        elif exists(compiled_path):
+            with open(compiled_path, "rb") as entry_file:
+                header = entry_file.read(4)
+            runtime_mpy = getattr(sys.implementation, "_mpy", None)
+            if len(header) != 4 or header[0] != 77 or (runtime_mpy is not None and header[1] != runtime_mpy & 255):
+                raise ValueError("Invalid or incompatible compiled entrypoint")
+        else:
+            raise ValueError("Application entrypoint is missing")
     launcher = any(
         any(f.get("action") == "main" and f.get("category") == "launcher" for f in activity.get("intent_filters", []))
         for activity in activities
@@ -161,23 +179,36 @@ def promote(stage, destination, backup):
 
 
 def read_receipt(fullname):
-    try:
-        with open("data/appstore/receipts/" + identity(fullname) + ".json") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return None
+    filename = identity(fullname) + ".json"
+    for directory in (RECEIPTS_DIR, LEGACY_RECEIPTS_DIR):
+        try:
+            with open(directory + "/" + filename) as f:
+                value = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(value, dict):
+            continue
+        if directory == LEGACY_RECEIPTS_DIR:
+            try:
+                write_receipt(fullname, value)
+            except OSError as error:
+                logger.warning("APPSTORE_RECEIPT_MIGRATION_PENDING %s %s", fullname, error)
+        return value
+    return None
 
 
 def write_receipt(fullname, value):
-    mkdirs("data/appstore/receipts")
-    path = "data/appstore/receipts/" + identity(fullname) + ".json"
+    mkdirs(RECEIPTS_DIR)
+    path = RECEIPTS_DIR + "/" + identity(fullname) + ".json"
     with open(path + ".tmp", "w") as f:
         json.dump(value, f)
     os.rename(path + ".tmp", path)
 
 
 def forget_receipt(fullname):
-    remove_tree("data/appstore/receipts/" + identity(fullname) + ".json")
+    filename = identity(fullname) + ".json"
+    for directory in (RECEIPTS_DIR, LEGACY_RECEIPTS_DIR):
+        remove_tree(directory + "/" + filename)
 
 
 def update_available(fullname, version, revision=None, source=None):
@@ -213,6 +244,8 @@ async def _install_package(app, progress_callback):
         if isinstance(app, dict)
         else getattr(app, "_store_source", current_source())
     )
+    if source not in ("upystore", "badgehub"):
+        raise ValueError("Unknown store source")
     slug = app.get("_store_slug") if isinstance(app, dict) else getattr(app, "_store_slug", None)
     if not ConnectivityManager.is_online():
         raise RuntimeError("Offline: connect WiFi and retry")
@@ -236,7 +269,7 @@ async def _install_package(app, progress_callback):
     ):
         raise ValueError("Published package size or SHA256 unavailable")
     url = absolute_url(detail["download_url"]) if source == "upystore" else detail["download_url"]
-    work = "data/appstore/install"
+    work = WORK_DIR
     mkdirs("apps")
     mkdirs(work + "/stage")
     mkdirs(work + "/backup")
@@ -244,7 +277,7 @@ async def _install_package(app, progress_callback):
     backup = work + "/backup/" + fullname
     destination = "apps/" + fullname
     archive = work + "/download.mpk"
-    if exists(backup):
+    if exists(backup) or exists("data/appstore/install/backup/" + fullname):
         raise RuntimeError("Previous install backup exists; recovery required")
     remove_tree(stage)
     remove_tree(archive)
@@ -252,7 +285,7 @@ async def _install_package(app, progress_callback):
     previous_receipt = read_receipt(fullname)
     promoted = False
     had_old = False
-    print("APPSTORE_PACKAGE_REQUEST", url)
+    if __debug__: logger.debug("APPSTORE_PACKAGE_REQUEST %s", url)
     try:
         with open(archive, "wb") as output:
 
@@ -271,7 +304,7 @@ async def _install_package(app, progress_callback):
         actual_hash = verify_package(archive, size, digest) if source == "upystore" else None
         if source != "upystore" and size and os.stat(archive)[6] != size:
             raise ValueError("Package size mismatch")
-        print("APPSTORE_PACKAGE_CHECKED", fullname, source, os.stat(archive)[6], actual_hash)
+        logger.info("APPSTORE_PACKAGE_CHECKED %s %s %s %s", fullname, source, os.stat(archive)[6], actual_hash)
         gc.collect()
         stats = os.statvfs(".")
         check_archive(archive, fullname, stats[0] * stats[4])
@@ -293,13 +326,13 @@ async def _install_package(app, progress_callback):
             try:
                 remove_tree(backup)
             except Exception as error:
-                print("APPSTORE_BACKUP_CLEANUP_PENDING", fullname, error)
+                logger.warning("APPSTORE_BACKUP_CLEANUP_PENDING %s %s", fullname, error)
         if progress_callback:
             try:
                 await progress_callback(100)
             except Exception as error:
-                print("APPSTORE_PROGRESS_UNAVAILABLE", error)
-        print("APPSTORE_INSTALL_SUCCESS", json.dumps(receipt))
+                logger.warning("APPSTORE_PROGRESS_UNAVAILABLE %s", error)
+        logger.info("APPSTORE_INSTALL_SUCCESS %s", fullname)
         return receipt
     except Exception:
         if promoted:
@@ -314,6 +347,9 @@ async def _install_package(app, progress_callback):
             AppManager.refresh_apps()
         raise
     finally:
-        remove_tree(archive)
-        remove_tree(stage)
+        for temporary in (archive, stage):
+            try:
+                remove_tree(temporary)
+            except OSError as error:
+                logger.warning("APPSTORE_TEMP_CLEANUP_PENDING %s %s", temporary, error)
         gc.collect()

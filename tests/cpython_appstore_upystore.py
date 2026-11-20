@@ -222,6 +222,7 @@ class HostTests(EnvironmentMixin, unittest.TestCase):
         self.assertEqual(value["revision"], 2)
 
     def test_background_updates_ignore_search_and_keep_revisions(self):
+        self.prefs["store_source"] = "upystore"
         self.prefs["store_query"] = "calculator"
         requests = []
 
@@ -395,7 +396,7 @@ class InstallationTests(EnvironmentMixin, unittest.TestCase):
         self.assertEqual(result["version"], "1.1.0")
         self.assertEqual(self.install.read_receipt(app.fullname)["revision"], 2)
         self.assertTrue(Path("apps/com.example.upgrade/main.py").is_file())
-        self.assertFalse(Path("data/appstore/install/download.mpk").exists())
+        self.assertFalse(Path("cache/com.micropythonos.appstore/install/download.mpk").exists())
 
     def test_real_import_old_helper_then_upgrade_then_import_new(self):
         app = self.prepare_archive()
@@ -424,7 +425,7 @@ class InstallationTests(EnvironmentMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "launcher"):
             asyncio.run(self.install.install_package(app))
         self.assertEqual((dest / "saved").read_text(), "old")
-        self.assertEqual(list(Path("data/appstore/install/stage").iterdir()), [])
+        self.assertEqual(list(Path("cache/com.micropythonos.appstore/install/stage").iterdir()), [])
 
     def test_invalid_entry_syntax_rejected(self):
         self.manifest(Path("stage"))

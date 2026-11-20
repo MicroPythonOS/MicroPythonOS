@@ -183,5 +183,119 @@ class TestInstallSafety(unittest.TestCase):
             manager.check_for_updates_now = original_check
 
 
+    def test_pausing_detail_cancels_pending_icon_timer(self):
+        detail = app_detail.AppDetail()
+        detail._has_foreground = True
+        detail.app = type("App", (), {"icon_data": None, "icon_url": "https://example.test/icon"})()
+        calls = []
+
+        class Timer:
+            def delete(self):
+                calls.append("deleted")
+
+        class TimerAPI:
+            def timer_create(self, callback, *args):
+                return Timer()
+
+        original = app_detail.lv
+        app_detail.lv = TimerAPI()
+        try:
+            detail._start_icon_download()
+            detail.onPause(None)
+            self.assertEqual(calls, ["deleted"])
+            self.assertFalse(detail._icon_download_started)
+        finally:
+            app_detail.lv = original
+
+    def test_destroyed_detail_releases_widget_references(self):
+        detail = app_detail.AppDetail()
+        detail._has_foreground = False
+        detail.install_button = Widget()
+        detail.long_desc_label = Widget()
+        detail.appstore = object()
+        detail.onDestroy(None)
+        self.assertIsNone(detail.install_button)
+        self.assertIsNone(detail.long_desc_label)
+        self.assertIsNone(detail.appstore)
+
+    def test_icon_callback_accepts_a_new_lvgl_timer_wrapper(self):
+        detail = app_detail.AppDetail()
+        detail._has_foreground = True
+        detail.app = type("App", (), {"icon_data": None, "icon_url": "https://example.test/icon"})()
+        callbacks = []
+        scheduled = []
+        deleted = []
+
+        class Timer:
+            def delete(self):
+                deleted.append(True)
+
+        class TimerAPI:
+            def timer_create(self, callback, *args):
+                callbacks.append(callback)
+                return Timer()
+
+        original_lv = app_detail.lv
+        original_task = app_detail.TaskManager.create_task
+        app_detail.lv = TimerAPI()
+        app_detail.TaskManager.create_task = lambda task: scheduled.append(task)
+        detail._download_icon = lambda: "icon-request"
+        try:
+            detail._start_icon_download()
+            callbacks[0](object())
+            self.assertEqual(scheduled, ["icon-request"])
+            self.assertEqual(deleted, [True])
+            self.assertIsNone(detail._icon_timer)
+        finally:
+            app_detail.lv = original_lv
+            app_detail.TaskManager.create_task = original_task
+
+    def test_cancelled_icon_callback_cannot_consume_a_new_timer(self):
+        detail = app_detail.AppDetail()
+        detail._has_foreground = True
+        detail.app = type("App", (), {"icon_data": None, "icon_url": "https://example.test/icon"})()
+        callbacks = []
+
+        class Timer:
+            def delete(self):
+                pass
+
+        class TimerAPI:
+            def timer_create(self, callback, *args):
+                callbacks.append(callback)
+                return Timer()
+
+        original = app_detail.lv
+        app_detail.lv = TimerAPI()
+        try:
+            detail._start_icon_download()
+            detail.onPause(None)
+            detail._has_foreground = True
+            detail._start_icon_download()
+            current = detail._icon_timer
+            callbacks[0](object())
+            self.assertIs(detail._icon_timer, current)
+            detail.onPause(None)
+        finally:
+            app_detail.lv = original
+
+    def test_destroyed_store_only_clears_its_own_icon_widgets(self):
+        store = appstore.AppStore()
+        store._has_foreground = False
+        owned = object()
+        newer = object()
+        first = type("App", (), {"fullname": "com.test.first", "image_icon_widget": owned})()
+        second = type("App", (), {"fullname": "com.test.second", "image_icon_widget": newer})()
+        store.apps = [first, second]
+        store._icon_widgets = {first.fullname: owned, second.fullname: object()}
+        store.main_screen = object()
+        store._stop_all_timers = lambda: None
+        store.onDestroy(None)
+        self.assertIsNone(first.image_icon_widget)
+        self.assertIs(second.image_icon_widget, newer)
+        self.assertIsNone(store.main_screen)
+        self.assertEqual(store._icon_widgets, {})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,17 +1,20 @@
 import gc
 import json
+import logging
 
 from mpos import BuildInfo, DownloadManager, SharedPreferences, TaskManager
 
+logger = logging.getLogger(__name__)
 BASE_URL = "https://upystore.io"
+DEFAULT_SOURCE = "upystore"
 _REQUESTS = []
 
 BADGEHUB_INDEX = "https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_%s" % BuildInfo.version.api_level
 
 
 def current_source():
-    value = SharedPreferences("com.micropythonos.appstore").get_string("store_source", "upystore")
-    return value if value in ("upystore", "badgehub") else "upystore"
+    value = SharedPreferences("com.micropythonos.appstore").get_string("store_source", DEFAULT_SOURCE)
+    return value if value in ("upystore", "badgehub") else DEFAULT_SOURCE
 
 
 def index_url(source=None):
@@ -99,14 +102,14 @@ async def request(url, timeout=35, **kwargs):
         await TaskManager.wait_for(wait_turn(), 120)
         return await TaskManager.wait_for(DownloadManager.download_url(url, **kwargs), timeout)
     except Exception as error:
-        print("APPSTORE_HTTP_FAILED", url, type(error).__name__, str(error))
+        logger.warning("APPSTORE_HTTP_FAILED %s %s %s", url, type(error).__name__, str(error))
         raise
     finally:
         _REQUESTS.remove(ticket)
 
 
 async def json_get(url, limit=2097152):
-    print("APPSTORE_SOURCE_REQUEST", url)
+    if __debug__: logger.debug("APPSTORE_SOURCE_REQUEST %s", url)
     if url.startswith(BASE_URL + "/"):
         response = bytearray()
 

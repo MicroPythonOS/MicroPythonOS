@@ -60,6 +60,8 @@ class AppStore(Activity):
     _update_labels = {}
 
     def onCreate(self):
+        self.apps = []
+        self._destroyed = False
         self.prefs = SharedPreferences(self.appFullName)
         self._hide_wip = self.prefs.get_string("hide_wip", "true") == "true"
         self._wip_apps = []
@@ -131,6 +133,10 @@ class AppStore(Activity):
     def onResume(self, screen):
         super().onResume(screen)
 
+        if getattr(self, "_pending_deeplink", None) and self._data_loaded and not self._refresh_in_progress and not getattr(self, "_catalog_error", False):
+            self._resolve_pending_deeplink()
+            return
+
         # Attach to AppUpdateManager so the banner refreshes live
         try:
             from appstore_core import AppUpdateManager
@@ -191,6 +197,26 @@ class AppStore(Activity):
         except Exception as e:
             logger.warning("could not detach from AppUpdateManager: %s", e)
         super().onPause(screen)
+
+    def onDestroy(self, screen):
+        self._has_foreground = False
+        self._destroyed = True
+        self._pending_deeplink = None
+        self._stop_all_timers()
+        widgets = getattr(self, "_icon_widgets", {})
+        for app in self.apps:
+            owned = widgets.get(app.fullname)
+            if owned is not None and getattr(app, "image_icon_widget", None) is owned:
+                app.image_icon_widget = None
+        self._icon_widgets = {}
+        self._displayed_apps = []
+        self._update_labels = {}
+        for name in (
+            "main_screen", "apps_list", "app_list", "please_wait_label", "settings_button",
+            "top_bar", "category_dropdown", "update_all_button", "update_all_label",
+        ):
+            setattr(self, name, None)
+        super().onDestroy(screen)
 
     # ------------------------------------------------------------------
     # Update-banner helpers
@@ -320,10 +346,10 @@ class AppStore(Activity):
         intent.putExtra("prefs", self.prefs)
         intent.putExtra("settings", [
             {"title": "Store Source", "key": "store_source", "ui": "radiobuttons",
-             "default_value": "upystore", "ui_options": [("uPyStore", "upystore"), ("BadgeHub", "badgehub")],
+             "default_value": store_source.DEFAULT_SOURCE, "ui_options": [("uPyStore", "upystore"), ("BadgeHub", "badgehub")],
              "changed_callback": self._store_source_changed},
             {"title": "Search Store", "key": "store_query", "ui": "textarea",
-             "default_value": "", "changed_callback": self._store_source_changed},
+             "default_value": "", "changed_callback": self._store_query_changed},
             {"title": "App List Icons",
              "key": "icon_pipeline",
              "ui": "radiobuttons",
@@ -355,6 +381,9 @@ class AppStore(Activity):
              "changed_callback": self._update_notifications_changed},
         ])
         self.startActivity(intent)
+
+    def _store_query_changed(self, value):
+        self._data_loaded = False
 
     def _store_source_changed(self, value):
         self._data_loaded = False
@@ -472,7 +501,7 @@ class AppStore(Activity):
             if installed_app.installed_path and "builtin" in installed_app.installed_path:
                 self._builtin_fullnames.add(installed_app.fullname)
                 continue
-            self.apps.append(installed_app)
+            self.apps.append(self._copy_installed_app(installed_app))
         if getattr(self, "_default_to_installed", False):
             self._default_to_installed = False
             n_installed = sum(1 for app in self.apps if app.installed_path is not None)
@@ -499,10 +528,12 @@ class AppStore(Activity):
         except Exception as e:
             if __debug__: logger.debug("store index unavailable (%s), showing installed apps only", e)
             self._catalog_error = True
-            print("APPSTORE_CATALOG_FAILED", type(e).__name__, str(e))
+            logger.warning("APPSTORE_CATALOG_FAILED %s %s", type(e).__name__, str(e))
             if self.has_foreground():
                 self._show_scan_message("Store unavailable", "%s. Check WiFi and reopen the store to retry. Installed apps remain available." % store_source.error_text(e)[:90])
             self._resolve_pending_deeplink(index_available=False)
+            return
+        if getattr(self, "_destroyed", False):
             return
         if __debug__:
             _net_took = time.ticks_diff(time.ticks_ms(), _t_net)
@@ -568,6 +599,7 @@ class AppStore(Activity):
         # back_screen() while the download was in flight), skip the rebuild:
         # acting on deleted LVGL objects can segfault the device.
         if not self.has_foreground():
+            self._data_loaded = False
             self._resolve_pending_deeplink()
             return
         if __debug__:
@@ -686,6 +718,7 @@ class AppStore(Activity):
                 icon_spacer = lv.image(item)
                 icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
                 app.image_icon_widget = icon_spacer
+                self._icon_widgets[app.fullname] = icon_spacer
                 if app.icon_data:
                     self._set_icon_widget(app)
                 elif self._restore_cached_icon(app, icon_spacer):
@@ -951,7 +984,7 @@ class AppStore(Activity):
         except Exception:
             pass
         self._download_in_progress = False
-        if app.icon_data:
+        if app.icon_data and self.has_foreground():
             try:
                 self._set_icon_widget(app)
             except Exception:
@@ -1060,6 +1093,8 @@ class AppStore(Activity):
 
     def _try_early_deeplink(self):
         """Open a pending deep link now if the app is already resolvable."""
+        if not self.has_foreground():
+            return
         fullname = getattr(self, "_pending_deeplink", None)
         if not fullname:
             return
@@ -1069,6 +1104,8 @@ class AppStore(Activity):
             self.show_app_detail(app)
 
     def _resolve_pending_deeplink(self, index_available=True):
+        if not self.has_foreground():
+            return
         fullname = getattr(self, "_pending_deeplink", None)
         if not fullname:
             return
@@ -1092,6 +1129,18 @@ class AppStore(Activity):
         close = mbox.add_close_button()
         close.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CLICKED, None)
         mbox.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CANCEL, None)
+
+    @staticmethod
+    def _copy_installed_app(app):
+        copied = App(load_icons=False)
+        for name in (
+            "name", "publisher", "short_description", "long_description", "fullname",
+            "version", "categories", "activities", "services", "installed_path",
+            "icon_path", "icon_data", "main_launcher_activity",
+        ):
+            if hasattr(app, name):
+                setattr(copied, name, getattr(app, name))
+        return copied
 
     @staticmethod
     def badgehub_app_to_mpos_app(bhapp):

@@ -20,8 +20,11 @@ file containing package SHA256 values. Each of the two apps has:
 | 2 | 1.1.0 | `v2 / 105` | Update and prove the new helper was imported |
 | 3 | 1.2.0 | `v3 / 205` | Invalid package without a main/launcher filter |
 
-The Activity source is identical between revisions of each app; the helper module
-changes. The two helper module names are distinct. Packages have deterministic
+The peer app keeps its helper filename and changes its implementation. The
+upgrade app additionally imports an old-only helper at revision 1, then renames
+its primary helper and removes the old-only file in revision 2. Its Activity
+import changes accordingly. This proves that removed/renamed files and cached
+modules do not survive whole-directory promotion. Packages have deterministic
 entries and the required application root directory.
 
 Upload `fixture-bundle.zip` to `/data`. In the running MPOS REPL:
@@ -32,7 +35,7 @@ from mpos import AppManager, SharedPreferences
 AppManager.install_mpk('/data/fixture-bundle.zip', '/data/appstore-test')
 sys.path.insert(0, '/data/appstore-test')
 import device_transport
-SharedPreferences('com.micropythonos.appstore').edit().put_string('store_query', '').commit()
+SharedPreferences('com.micropythonos.appstore').edit().put_string('store_source', 'upystore').put_string('store_query', '').commit()
 device_transport.install()
 ```
 
@@ -46,7 +49,12 @@ device_transport.install()
    `appstore_core`. With notifications enabled, verify that two updates are found.
 4. Open the update notification, verify the Updates category, and use Update All.
    Both apps must become version 1.1.0. Open each again: both must show
-   `TEST helper v2 / 105`. Check the actual Activity output, not just the manifest.
+   `TEST helper v2 / 105`, without resetting the device between old and new runs.
+   Check that `dshell_storetest_upgrade_helper.py` and
+   `dshell_storetest_upgrade_helper_removed.py` no longer exist under the
+   upgrade app's `assets` directory, that their modules are absent from
+   `sys.modules`, and that `dshell_storetest_upgrade_helper_renamed.py` exists.
+   Check the actual Activity output, not just the manifest.
 5. Uninstall both through AppStore. Their user app directories and receipts must
    disappear. No former helper module should remain in `sys.modules`.
 
