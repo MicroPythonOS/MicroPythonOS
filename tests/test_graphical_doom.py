@@ -220,6 +220,7 @@ class _FakeCore:
         return self.quit
 
 
+
 class TestTheEngineSpeaksDoomsProtocol(unittest.TestCase):
 
     def test_the_native_module_exposes_the_engine_api(self):
