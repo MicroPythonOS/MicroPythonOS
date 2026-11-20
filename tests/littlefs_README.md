@@ -29,3 +29,22 @@ version, including its minor-version compatibility rules.
 
 The full suite is the gate for any change to `lfs2_alloc`, `fs_traverse`,
 metadata commits, or the version checks.
+
+## Stock compatibility
+
+`littlefs_stock_mount.sh` builds the same test program twice - once against the
+fork, once against stock v2.11.3 - and runs one image through both:
+
+1. the fork formats a 2.1 image with a normal file and a 9000-byte extent, and
+   its CRC reads back intact;
+2. stock littlefs mounts that image, reads the normal file, and sees the
+   extent's inode as a file (it does not know the extent struct, so it reports
+   no size);
+3. a stock write that fills the free space lands on the extent's blocks, and the
+   fork's CRC check catches it.
+
+That last step is the reason for the CRC and for the "stock tools are read-only"
+rule: stock littlefs treats an extent's blocks as free space and will overwrite
+the payload.
+
+    ./tests/littlefs_stock_mount.sh
