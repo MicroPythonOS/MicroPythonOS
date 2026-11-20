@@ -157,6 +157,7 @@ Hardware facts that cost time to rediscover:
 
 - **TDD:** write failing test → fix → test passes.
 - **Order lists alphabetically** by default: boards, drivers, docs nav entries, "related" links, board tables. Use another order only when the order carries meaning (pipeline stages, priority, a deliberate capability grouping) and say why in the surrounding text.
+- **Fewer directories:** each littlefs directory costs about 8 KiB of metadata. Prefer a flat layout in `.mpk` packages and small MPOS trees; add a subdirectory only when the file count or readability needs it (roughly ten related files, or a distinct subsystem). If a path can be a filename, use the filename.
 - **Lint:** every change must pass `make lint`. Ruff, double quotes.
 - **Names:** use descriptive names, never bare numbers or opaque suffixes. When a framework forces a numeric variant (e.g. display drivers select `_<driver>_init_type<N>.py` through `init(type=N)`), export named constants from the package and use those at every call site (`init(st7789.PROFILE_LEGACY)`), keeping the numeric mapping in one documented place.
 - **Comments/docstrings:** never add/remove/modify unless explicitly asked.
