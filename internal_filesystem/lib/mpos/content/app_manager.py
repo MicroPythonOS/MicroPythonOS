@@ -920,21 +920,21 @@ class AppManager:
         entrypoint_dir = app.installed_path
         if "/" in entrypoint:
             entrypoint_dir = entrypoint_path.rsplit("/", 1)[0]
-        # Starting the activity that is already on the stack would run a second
+        # Starting the activity that is already in front would run a second
         # copy of it. For an app with a native engine that means stopping the
         # core and remapping it under the copy that is still ticking, which
-        # crashes the board. A start that carries an intent is left alone: that
-        # is how a file is opened in an app that is already on the stack.
+        # crashes the board. Only the top activity is skipped: a start of an
+        # app that is further down the stack is how it is brought back, and a
+        # start that carries an intent is how a file is opened in one.
         if intent is None and result_callback is None:
             import mpos.ui.view as view
-            for entry in view.screen_stack:
-                running = entry[0]
-                if (getattr(running, "appFullName", None) == fullname
-                        and type(running).__name__ == classname):
-                    logger.warning(
-                        "start_app: %s %s is already running",
-                        fullname, classname)
-                    return True
+            running = view.screen_stack[-1][0] if view.screen_stack else None
+            if (getattr(running, "appFullName", None) == fullname
+                    and type(running).__name__ == classname):
+                logger.warning(
+                    "start_app: %s %s is already in front",
+                    fullname, classname)
+                return True
         result = AppManager.execute_script(
             entrypoint_path,
             classname,

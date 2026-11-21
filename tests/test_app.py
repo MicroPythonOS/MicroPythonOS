@@ -376,6 +376,40 @@ class TestAppManagerStartApp(unittest.TestCase):
             AppManager.get = saved_get
             AppManager.execute_script = saved_execute
 
+    def test_start_app_brings_a_background_app_back(self):
+        # start_app is also how an app that is further down the stack is
+        # brought forward; only the activity already in front is skipped.
+        import mpos.ui.view as view
+
+        class FakeApp:
+            fullname = "com.example.background"
+            installed_path = "apps/com.example.background"
+            main_launcher_activity = {
+                "entrypoint": "main.py", "classname": "Main"}
+
+        class Main:
+            appFullName = "com.example.background"
+
+        class Other:
+            appFullName = "com.example.other"
+
+        started = []
+        saved_get = AppManager.get
+        saved_execute = AppManager.execute_script
+        AppManager.get = staticmethod(lambda fullname: FakeApp())
+        AppManager.execute_script = staticmethod(
+            lambda *args, **kwargs: started.append(args) or True)
+        view.screen_stack.append((Main(), None, None, None))
+        view.screen_stack.append((Other(), None, None, None))
+        try:
+            self.assertTrue(AppManager.start_app("com.example.background"))
+            self.assertEqual(len(started), 1, "the app was not brought back")
+        finally:
+            view.screen_stack.pop()
+            view.screen_stack.pop()
+            AppManager.get = saved_get
+            AppManager.execute_script = saved_execute
+
 
 if __name__ == "__main__":
     unittest.main()
