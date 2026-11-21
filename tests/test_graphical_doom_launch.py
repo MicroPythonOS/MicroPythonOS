@@ -79,12 +79,16 @@ class TestDoomPackage(unittest.TestCase):
         self.assertEqual(updates[-1][1], updates[-1][2])
 
         # The core reads it through the host callbacks: a chunk in the middle
-        # has to come from the same buffer.
+        # has to come from the same buffer. The plain doom1.wad is a developer
+        # artefact (gitignored), so compare against the buffer, and against the
+        # file as well when a checkout happens to have it.
         chunk = bytearray(64)
         self.assertEqual(wad.read_into(1000, chunk), 64)
-        with open("doom1.wad", "rb") as f:
-            f.seek(1000)
-            self.assertEqual(bytes(chunk), f.read(64))
+        self.assertEqual(bytes(chunk), bytes(wad.buffer[1000:1064]))
+        if os.path.exists("doom1.wad"):
+            with open("doom1.wad", "rb") as f:
+                f.seek(1000)
+                self.assertEqual(bytes(chunk), f.read(64))
         self.assertEqual(wad.read_into(wad.size - 10, chunk), 10)
 
 

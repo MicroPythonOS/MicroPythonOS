@@ -16,6 +16,7 @@ those tests skip when none is installed. Put one at ``internal_filesystem/doom1.
 (or /doom1.wad on the device) to run them.
 """
 
+import os
 import sys
 import time
 import unittest
@@ -556,17 +557,23 @@ class TestDoomOnAHostWithoutAnEngine(unittest.TestCase):
         self.activity._started = False
 
     def test_the_engine_is_chosen_per_host(self):
+        # A WAD that exists on any checkout: the unpacked doom1.wad is a
+        # developer artefact (gitignored), so give the launch one of our own.
+        path = "test-engine-choice.wad"
+        with open(path, "wb") as f:
+            f.write(b"IWAD")
         fake = _FakeEngine()
         doom._make_engine = lambda: fake
         real_find_wad = doom.find_wad
-        doom.find_wad = lambda intent=None: "doom1.wad"
+        doom.find_wad = lambda intent=None: path
         self._start_with()
         try:
             self.activity.onResume(None)
         finally:
             doom.find_wad = real_find_wad
+            os.remove(path)
         self.assertIs(self.activity.get_stats()["engine"], "fake")
-        self.assertEqual(fake.started[0][0].name, "doom1.wad")
+        self.assertEqual(fake.started[0][0].name, path)
         self.activity.onPause(None)
 
     def test_a_firmware_without_the_core_says_so(self):
