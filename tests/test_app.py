@@ -358,6 +358,9 @@ class TestAppManagerStartApp(unittest.TestCase):
             main_launcher_activity = {
                 "entrypoint": "main.py", "classname": "Main"}
 
+            def is_valid_launcher(self):
+                return False
+
         class Main:
             appFullName = "com.example.duplicate"
 
@@ -386,6 +389,9 @@ class TestAppManagerStartApp(unittest.TestCase):
             installed_path = "apps/com.example.background"
             main_launcher_activity = {
                 "entrypoint": "main.py", "classname": "Main"}
+
+            def is_valid_launcher(self):
+                return False
 
         class Main:
             appFullName = "com.example.background"
