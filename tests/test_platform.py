@@ -33,6 +33,10 @@ class TestPlatformKeys(unittest.TestCase):
     def test_desktop_is_x64(self):
         if sys.platform == "esp32":
             return
+        if natmod_arch() is None:
+            # MicroPython's natmod table has no aarch64 entry, so the Linux
+            # arm64 runner reports None (and no Doom module is shipped there).
+            raise unittest.SkipTest("this desktop has no natmod architecture")
         self.assertEqual(natmod_arch(), "x64")
 
     def test_native_keys_lists_both_namespaces(self):
