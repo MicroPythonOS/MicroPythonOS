@@ -6,8 +6,10 @@ The same staging code feeds two targets:
   * the web build, which preloads ``apps`` and ``data`` into the browser
     filesystem and seeds them into the persistent /apps and /data stores on
     first boot (see web/shell.html);
-  * the ESP32-family full images, which pack the same tree into a littlefs2
-    image and merge it into the vfs partition of the flash image.
+  * the ESP32-family full images, which pack the same tree into a littlefs2e
+    image (with the third_party/mklittlefs submodule; every ``*.xip`` becomes
+    a contiguous extent the badge maps from flash) and merge it into the vfs
+    partition of the flash image.
 
 Usage:
     preload_fs.py stage --out DIR [--march xtensawin|rv32imc]
