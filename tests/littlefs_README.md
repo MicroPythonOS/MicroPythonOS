@@ -22,7 +22,8 @@ unprefixed `lfs.c` exactly as upstream does:
 ## Running
 
 `littlefs_run.sh` runs those two case files inside the submodule, so no copy
-and no download are involved:
+and no download are involved. It needs the `toml` module
+(`python3 -m pip install toml`) for the fork's runner:
 
     ./tests/littlefs_run.sh
 

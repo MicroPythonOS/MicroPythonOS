@@ -265,7 +265,11 @@ jobs:
 
       - name: Run littlefs2e extent and defragmentation tests
         run: |
-          ./tests/littlefs_run.sh --full
+          # The fork's test runner parses the .toml cases with the `toml`
+          # module, which the runner images do not ship.
+          python3 -m venv .venv-littlefs
+          .venv-littlefs/bin/pip install --disable-pip-version-check toml
+          PATH="$PWD/.venv-littlefs/bin:$PATH" ./tests/littlefs_run.sh --full
 
       - name: Run unit tests on unix
         run: |

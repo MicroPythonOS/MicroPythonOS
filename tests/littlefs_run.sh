@@ -18,6 +18,12 @@ if [ ! -f "$src/lfs.c" ]; then
     exit 1
 fi
 
+if ! python3 -c "import toml" >/dev/null 2>&1; then
+    echo "FATAL: the littlefs test runner needs the 'toml' module:" >&2
+    echo "         python3 -m pip install toml" >&2
+    exit 1
+fi
+
 cd "$src"
 
 if [ "${1:-}" = "--full" ]; then
