@@ -178,7 +178,7 @@ class _FakeExtent:
     def available(self):
         return True
 
-    def ensure(self, path, align=1, defrag_first=True):
+    def ensure(self, path, align=1, defrag_first=True, progress=None):
         return (0x1000, 0x2000, 0xDEADBEEF)
 
 

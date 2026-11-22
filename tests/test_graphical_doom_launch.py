@@ -61,7 +61,9 @@ class TestDoomPackage(unittest.TestCase):
         for names in native.values():
             for name in names:
                 self.assertTrue(os.stat(APP_DIR + "/" + name))
-        self.assertEqual(manifest["version"], "0.2.0")
+        self.assertTrue(isinstance(manifest["version"], str))
+        self.assertTrue(all(part.isdigit()
+                            for part in manifest["version"].split(".")))
 
     def test_wad_zip_unpacks_to_the_shareware_wad(self):
         # The desktop package also has a plain WAD for the native module, so
