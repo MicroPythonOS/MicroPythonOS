@@ -21,10 +21,11 @@ class ExtentFileTest(unittest.TestCase):
     PATH = "/extent-test.bin"
 
     def tearDown(self):
-        try:
-            os.remove(self.PATH)
-        except OSError:
-            pass
+        for path in (self.PATH, self.PATH + ".small", self.PATH + ".large"):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
     def _write(self, data):
         with open(self.PATH, "wb") as f:
@@ -48,6 +49,23 @@ class ExtentFileTest(unittest.TestCase):
         self.assertIsNone(extent.info(self.PATH))
         with open(self.PATH, "rb") as f:
             self.assertEqual(f.read(), b"small")
+
+    def test_small_files_stay_inline(self):
+        # inline_max is block_size/8 (512 bytes here) whichever cache size the
+        # VFS uses, so a small file still lives in its directory's metadata and
+        # allocates no data block.
+        small = self.PATH + ".small"
+        large = self.PATH + ".large"
+        with open(small, "wb") as f:
+            f.write(b"s" * 512)
+        with open(large, "wb") as f:
+            f.write(b"l" * 513)
+        self.assertEqual(extent.lfs2e.file_blocks(small), [])
+        self.assertTrue(len(extent.lfs2e.file_blocks(large)) > 0)
+        with open(small, "rb") as f:
+            self.assertEqual(f.read(), b"s" * 512)
+        with open(large, "rb") as f:
+            self.assertEqual(f.read(), b"l" * 513)
 
     def test_remove_frees_the_run(self):
         self._write(b"x" * 12000)

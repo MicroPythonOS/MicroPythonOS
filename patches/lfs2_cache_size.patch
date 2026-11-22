@@ -1,0 +1,18 @@
+diff --git a/extmod/vfs_lfsx.c b/extmod/vfs_lfsx.c
+index bbdd21cf..c9320cb0 100644
+--- a/extmod/vfs_lfsx.c
++++ b/extmod/vfs_lfsx.c
+@@ -99,7 +99,12 @@ static void MP_VFS_LFSx(init_config)(MP_OBJ_VFS_LFSx * self, mp_obj_t bdev, size
+     config->lookahead_buffer = m_new(uint8_t, config->lookahead / 8);
+     #else
+     config->block_cycles = 100;
+-    config->cache_size = MIN(config->block_size, (4 * MAX(read_size, prog_size)));
++    // A whole block, so a metadata scan or rewrite crosses the Python block
++    // device once instead of block_size/cache_size times. Costs cache_size of
++    // RAM per open file and two caches at mount; inline_max still clamps to
++    // block_size/8, so the on-disk layout and the inline threshold are
++    // unchanged.
++    config->cache_size = config->block_size;
+     config->lookahead_size = lookahead;
+     config->read_buffer = m_new(uint8_t, config->cache_size);
+     config->prog_buffer = m_new(uint8_t, config->cache_size);

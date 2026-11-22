@@ -88,13 +88,31 @@ every data tag (the 0x700 mask matches DIRSTRUCT, INLINE, CTZ and EXTSTRUCT;
 `type3` tells them apart), and the name of an entry is read only when the
 window keeps it, because each of those reads is another full metadata scan.
 
-The cost is the device, not the algorithm: a metadata block scan is ~11 ms
-here, so the scan of a ~140-file tree is ~5 s and an install-time defrag takes
-18 s on a 7 MiB filesystem with 192 KiB to clear (5 s per scan, one extra
-round, the rest moving 48 blocks and erasing the window). If that needs to be
-faster, raise the VFS `cache_size` to the block size: a metadata scan would be
-one block read instead of four, which is 4x on every tag access at the cost of
-8 KiB of RAM for the two filesystem caches.
+The cost is the device, not the algorithm. On a MaTouch, a 48-block window on
+a 7 MiB filesystem with ~270 four-block files took 18.3 s before the VFS work
+below and 10.8 s after. The split is now ~2 s scanning, ~3.4 s moving the
+files in the window and ~2.1 s erasing it. Erasing 48 blocks at ~43 ms each is
+a floor, and the moves are write-bound: the badge writes at ~58 KB/s (a 16 KiB
+copy costs ~290 ms however it is chunked) and reads at ~1.5 MB/s.
+
+The VFS is the lever, not the step machine. With `cache_size` at the upstream
+default of a quarter block, every metadata block crosses the Python block
+device four times and every 16 KiB copy flushes its program cache eight times.
+`patches/lfs2_cache_size.patch` makes `cache_size` the block size: on the same
+fixture the scan drops from 4.8 s to 2.0 s and the moves from 6.0 s to 3.4 s
+(the erase phase does not change). That patch is RAM only. The image builder
+(`-r 256 -m 1024`) and the mount (`readsize=256, progsize=256`) are untouched,
+and `inline_max` is clamped to `block_size/8` (512 bytes) on both sides, so the
+layout, the inline threshold and the space used stay identical. The price is
+memory: 6 KiB more for the two mount caches and one block per open file (the
+VFS file object embeds its own cache; ~4.2 KiB against ~1.2 KiB before, out of
+a 7.4 MiB PSRAM heap).
+
+The defragmenter's four run buffers (two file caches, the copy chunk and a
+private read cache for the per-entry data-block walks) live in its
+single-flight state rather than on the C stack: the firmware builds littlefs
+with `LFS2_NO_MALLOC`, and another 16 KiB of stack under the Python block
+device call would not fit the MicroPython task stack.
 
 A split directory's tail pair cannot be relocated this way: `lfs2_fs_parent()`
 finds a child through its `DIRSTRUCT` entry, while a tail is referenced by a

@@ -22,6 +22,11 @@ Frameworks:
   the defragmenter runs in steps that yield to the UI. A large window's round
   budget now scales with its size, so a fragmented filesystem can still take a
   Doom-sized engine.
+- littlefs2 caches a whole block instead of a quarter of one, so a metadata
+  scan crosses the block device once per block and the defragmenter is about
+  twice as fast (a 48-block window on a 7 MiB filesystem: 18 s to 11 s). It
+  costs 6 KiB of RAM at mount and about 3 KiB per open file; the on-disk
+  format and the inline threshold are unchanged.
 - App packages can carry a `"native"` map in `MANIFEST.JSON` (platform key to
   file names) and the App Store installs only the files for the running host:
   `<soc>.xip` for a flash-resident core, `module_<arch>.mpy` for a native

@@ -44,7 +44,7 @@ index 1fdf792f..a477ae8c 100644
  extern const mp_obj_type_t mp_type_vfs_lfs1_fileio;
  extern const mp_obj_type_t mp_type_vfs_lfs1_textio;
 diff --git a/lib/littlefs/lfs2.c b/lib/littlefs/lfs2.c
-index 6c3c3ece..7629bb9a 100644
+index 6c3c3ece..2d666c40 100644
 --- a/lib/littlefs/lfs2.c
 +++ b/lib/littlefs/lfs2.c
 @@ -258,7 +258,7 @@ static int lfs2_bd_prog(lfs2_t *lfs2,
@@ -622,7 +622,7 @@ index 6c3c3ece..7629bb9a 100644
              int err = lfs2_ctz_traverse(lfs2, &f->cache, &lfs2->rcache,
                      f->ctz.head, f->ctz.size, cb, data);
              if (err) {
-@@ -5968,37 +6148,1462 @@ cleanup:
+@@ -5968,37 +6148,1471 @@ cleanup:
  
  // Public API
  #ifndef LFS2_READONLY
@@ -1292,8 +1292,7 @@ index 6c3c3ece..7629bb9a 100644
 +#define LFS2_EXT_MAX_OCCUPANTS 8
 +#define LFS2_EXT_MAX_PATH 96
 +#define LFS2_EXT_MAX_DEPTH 6
-+#define LFS2_EXT_COPY_BUF 512
-+#define LFS2_EXT_FILE_BUF 1024
++#define LFS2_EXT_CACHE_MAX 4096
 +
 +struct lfs2_ext_block_check {
 +    lfs2_block_t head;
@@ -1388,7 +1387,8 @@ index 6c3c3ece..7629bb9a 100644
 +    return 0;
 +}
 +
-+static int lfs2_ext_move_file(lfs2_t *lfs2, const char *path) {
++static int lfs2_ext_move_file(lfs2_t *lfs2, const char *path,
++        uint8_t *inbuf, uint8_t *outbuf, uint8_t *copy) {
 +    char tmp[LFS2_EXT_MAX_PATH+4];
 +    lfs2_size_t plen = strlen(path);
 +    if (plen + 4 > sizeof(tmp)) {
@@ -1402,12 +1402,11 @@ index 6c3c3ece..7629bb9a 100644
 +        return err;
 +    }
 +
-+    uint8_t inbuf[LFS2_EXT_FILE_BUF];
-+    uint8_t outbuf[LFS2_EXT_FILE_BUF];
 +    struct lfs2_file_config incfg = {.buffer = inbuf, .attrs = NULL};
 +    struct lfs2_file_config outcfg = {.buffer = outbuf, .attrs = NULL};
 +    lfs2_file_t in;
 +    lfs2_file_t out;
++    lfs2_size_t chunk = lfs2->cfg->cache_size;
 +
 +    err = lfs2_file_opencfg(lfs2, &in, path, LFS2_O_RDONLY, &incfg);
 +    if (err) {
@@ -1421,9 +1420,8 @@ index 6c3c3ece..7629bb9a 100644
 +        return err;
 +    }
 +
-+    uint8_t buf[LFS2_EXT_COPY_BUF];
 +    while (true) {
-+        lfs2_ssize_t n = lfs2_file_read(lfs2, &in, buf, sizeof(buf));
++        lfs2_ssize_t n = lfs2_file_read(lfs2, &in, copy, chunk);
 +        if (n < 0) {
 +            err = (int)n;
 +            break;
@@ -1432,7 +1430,7 @@ index 6c3c3ece..7629bb9a 100644
 +            err = 0;
 +            break;
 +        }
-+        lfs2_ssize_t written = lfs2_file_write(lfs2, &out, buf, n);
++        lfs2_ssize_t written = lfs2_file_write(lfs2, &out, copy, n);
 +        if (written != n) {
 +            err = (written < 0) ? (int)written : LFS2_ERR_IO;
 +            break;
@@ -1505,6 +1503,11 @@ index 6c3c3ece..7629bb9a 100644
 +    int file_index;
 +    lfs2_block_t erase_next;
 +    lfs2_ext_t out;
++    uint8_t file_in[LFS2_EXT_CACHE_MAX];
++    uint8_t file_out[LFS2_EXT_CACHE_MAX];
++    uint8_t copy[LFS2_EXT_CACHE_MAX];
++    lfs2_cache_t check;
++    uint8_t check_buf[LFS2_EXT_CACHE_MAX];
 +};
 +
 +static struct lfs2_ext_defrag_state lfs2_ext_defrag_state;
@@ -1623,7 +1626,7 @@ index 6c3c3ece..7629bb9a 100644
 +    } else if (lfs2_tag_type3(tag) == LFS2_TYPE_CTZSTRUCT) {
 +        lfs2_ctz_fromle32(&data.ctz);
 +        struct lfs2_ext_block_check check = {s->head, s->count, 0, false};
-+        int err = lfs2_ctz_traverse(lfs2, NULL, &lfs2->rcache,
++        int err = lfs2_ctz_traverse(lfs2, NULL, &s->check,
 +                data.ctz.head, data.ctz.size,
 +                lfs2_ext_block_check_cb, &check);
 +        if (err) {
@@ -1724,12 +1727,17 @@ index 6c3c3ece..7629bb9a 100644
 +        return LFS2_ERR_NOSPC;
 +    }
 +    if (lfs2_ext_map_size(lfs2) > LFS2_EXT_MAP_MAX
-+            || lfs2->cfg->cache_size > LFS2_EXT_FILE_BUF) {
++            || lfs2->cfg->cache_size > LFS2_EXT_CACHE_MAX) {
 +        return LFS2_ERR_NOMEM;
 +    }
 +
 +    memset(&lfs2_ext_defrag_state, 0, sizeof(lfs2_ext_defrag_state));
 +    struct lfs2_ext_defrag_state *s = &lfs2_ext_defrag_state;
++    // A private read cache for the per-entry data-block walks: reusing the
++    // shared one would evict the directory block that the next entry's tag
++    // scan needs.
++    s->check.buffer = s->check_buf;
++    s->check.block = LFS2_BLOCK_NULL;
 +    s->active = true;
 +    s->fixed = fixed;
 +    s->lfs2 = lfs2;
@@ -1914,7 +1922,8 @@ index 6c3c3ece..7629bb9a 100644
 +        }
 +        if (s->file_index < s->w.file_count) {
 +            int res = lfs2_ext_move_file(lfs2,
-+                    s->w.files[s->file_index].path);
++                    s->w.files[s->file_index].path,
++                    s->file_in, s->file_out, s->copy);
 +            s->file_index += 1;
 +            if (res) {
 +                err = res;
