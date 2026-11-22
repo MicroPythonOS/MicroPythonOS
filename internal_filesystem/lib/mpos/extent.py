@@ -8,11 +8,12 @@ littlefs can mount the image, but it treats the extent's blocks as free
 space, so stock tools must be treated as read-only. The stored CRC lets a
 consumer detect a stock write (or flash corruption) before using the data.
 
-The low-level work is in the `lfs2e` C module; this file is policy:
-chunked streaming, CRC, and a targeted defragmenter for when the free space
-is large enough but not contiguous.
+The low-level work is in the `lfs2e` C module (including the targeted
+defragmenter); this file is policy: chunked streaming, the progress driver
+for the defragmenter, and CRC.
 """
 
+import asyncio
 import binascii
 import os
 
@@ -22,11 +23,14 @@ except ImportError:  # desktop/web: no extents
     lfs2e = None
 
 _CHUNK = 4096
-# A window may not contain a directory pair: metadata is moved by littlefs
-# itself, not by the defragmenter.
+# LFS2_ERR_NOCONTIG: free space exists, but no contiguous run of that size.
 _NOCONTIG = 129
 # An XIP core is mapped into the ESP32 MMU, whose page is 64 KiB.
 XIP_ALIGN_BLOCKS = 16
+# Defrag progress phases reported by lfs2e.defrag_step().
+PHASE_SPACE = 0
+PHASE_MOVE = 1
+PHASE_ERASE = 2
 
 
 def _abs(path):
@@ -70,7 +74,7 @@ class Writer:
     ``path``.
     """
 
-    def __init__(self, length, align=1, defrag_first=True):
+    def __init__(self, length, align=1, defrag_first=True, _reserved=False):
         if lfs2e is None:
             raise OSError("extent support is not available on this host")
         length = int(length)
@@ -80,16 +84,16 @@ class Writer:
         self.offset = 0
         self._crc = 0
         self._done = False
+        if _reserved:
+            # open_writer() already reserved the run.
+            return
         try:
             lfs2e.reserve(length, align)
         except OSError as error:
-            block_size, _, _ = lfs2e.geometry()
-            need = (length + block_size - 1) // block_size
             if not defrag_first or not error.args or error.args[0] != _NOCONTIG:
                 raise
-            if not defrag(need, align):
-                raise
-            lfs2e.reserve(length, align)
+            # Returns with the run reserved, like reserve().
+            lfs2e.defrag(length, align)
 
     def write(self, data):
         if self._done:
@@ -123,13 +127,94 @@ class Writer:
             pass
 
 
-def _create(path, align, defrag_first=True):
+async def open_writer(length, align=1, defrag_first=True, progress=None):
+    """Reserve an extent, defragmenting in steps so the UI keeps painting.
+
+    ``progress`` is awaited as ``progress(phase, percent)``; phase is one of
+    ``PHASE_SPACE`` (choosing/scanning a window, no meaningful percent),
+    ``PHASE_MOVE`` or ``PHASE_ERASE``, and percent is a best-effort 0..100.
+    """
+    if lfs2e is None:
+        raise OSError("extent support is not available on this host")
+    length = int(length)
+    if length <= 0:
+        raise OSError("extent length must be positive")
+    try:
+        lfs2e.reserve(length, align)
+        return Writer(length, align, _reserved=True)
+    except OSError as error:
+        if not defrag_first or not error.args or error.args[0] != _NOCONTIG:
+            raise
+
+    shown = 0
+    reported = -1
+    lfs2e.defrag_begin(length, align, 0)
+    try:
+        while True:
+            running, phase, percent = lfs2e.defrag_step()
+            if phase == PHASE_MOVE:
+                shown = max(shown, 40 + (40 * percent) // 100)
+            elif phase == PHASE_ERASE:
+                shown = max(shown, 80 + (20 * percent) // 100)
+            # A step is ~17 ms; repainting per step would cost more than the
+            # defrag itself, so report only when the percentage moves.
+            if progress is not None and shown != reported:
+                reported = shown
+                await progress(phase, shown)
+            if not running:
+                break
+            await asyncio.sleep(0)
+        lfs2e.defrag_result()
+        lfs2e.defrag_abort()
+    except BaseException:
+        lfs2e.defrag_abort()
+        raise
+    return Writer(length, align, _reserved=True)
+
+
+def _reserve_sync(length, align, defrag_first, progress):
+    """Reserve, driving the defrag steps with a *synchronous* progress hook.
+
+    The caller's hook may repaint (``lv.refr_now()``) between steps, which is
+    how a launch screen keeps its message alive without an event loop.
+    """
+    try:
+        lfs2e.reserve(length, align)
+    except OSError as error:
+        if not defrag_first or not error.args or error.args[0] != _NOCONTIG:
+            raise
+        shown = 0
+        reported = -1
+        lfs2e.defrag_begin(length, align, 0)
+        try:
+            while True:
+                running, phase, percent = lfs2e.defrag_step()
+                if phase == PHASE_MOVE:
+                    shown = max(shown, 40 + (40 * percent) // 100)
+                elif phase == PHASE_ERASE:
+                    shown = max(shown, 80 + (20 * percent) // 100)
+                # A step is ~17 ms and a repaint costs about as much again, so
+                # only report when the percentage moves.
+                if progress is not None and shown != reported:
+                    reported = shown
+                    progress(phase, shown)
+                if not running:
+                    break
+            lfs2e.defrag_result()
+            lfs2e.defrag_abort()
+        except BaseException:
+            lfs2e.defrag_abort()
+            raise
+
+
+def _create(path, align, defrag_first=True, progress=None):
     path = _abs(path)
     size = os.stat(path)[6]
     if size <= 0:
         raise OSError("extent source is empty")
 
-    writer = Writer(size, align, defrag_first)
+    _reserve_sync(size, align, defrag_first, progress)
+    writer = Writer(size, align, _reserved=True)
     try:
         with open(path, "rb") as source:
             while True:
@@ -145,180 +230,14 @@ def _create(path, align, defrag_first=True):
         raise
 
 
-# Defrag only relocates files on the root littlefs. Other mounts (the frozen
-# /builtin VFS, an SD card) are read-only or a different filesystem; walking
-# them would fail in every lfs2e call and can be very large.
-_OTHER_MOUNTS = ("/builtin", "/sdcard", "/roms")
-
-
-def _walk(root="/"):
-    """Yield (path, size) for regular files on the root littlefs."""
-    stack = [root]
-    while stack:
-        directory = stack.pop()
-        try:
-            names = os.listdir(directory)
-        except OSError:
-            continue
-        for name in names:
-            path = directory.rstrip("/") + "/" + name
-            if path in _OTHER_MOUNTS:
-                continue
-            try:
-                st = os.stat(path)
-            except OSError:
-                continue
-            if st[0] & 0x4000:
-                stack.append(path)
-            elif st[0] & 0x8000:
-                yield path, st[6]
-
-
-def _bit_get(map_, bit):
-    return (map_[bit >> 3] >> (bit & 7)) & 1
-
-
-def defrag(need, align=1, budget=None):
-    """Free one aligned run of `need` blocks by relocating the files in it.
-
-    Returns True when a run of `need` blocks is available afterwards. Moves
-    whole files with copy+rename (atomic per file) and excludes the window
-    from the allocator while doing so. Only normal files are moved: extents
-    are immutable and metadata pairs are left alone.
-    """
-    # TODO(later): the window scan below is O(block_count²) in Python.
-    # Precompute free-run intervals (or a run list) so a candidate window's
-    # outside max hole is O(runs) instead of a full map scan per candidate.
-    # 77 s worst case on a full 7 MiB badge is acceptable for a one-time
-    # install; do not add a progress callback until this is faster.
-    if lfs2e is None:
-        return False
-    block_size, block_count, _ = lfs2e.geometry()
-    if need <= 0 or need > block_count:
-        return False
-    align = max(1, align)
-
-    used = lfs2e.used_map()
-    meta = lfs2e.meta_map()
-    used_blocks = 0
-    for i in range(block_count):
-        used_blocks += _bit_get(used, i)
-    free_bytes = (block_count - used_blocks) * block_size
-    extent_bytes = need * block_size
-    if budget is None:
-        budget = min(
-            4 * extent_bytes,
-            max(256 * 1024, (block_count * block_size) // 8),
-            free_bytes // 2,
-        )
-
-    # Map every data block to the file that owns it. Extent blocks are
-    # unmovable, so a window containing one is skipped.
-    owners = {}
-    files = {}
-    unmovable = set()
-    for path, size in _walk("/"):
-        try:
-            blocks = lfs2e.file_blocks(path)
-        except OSError:
-            continue
-        if not blocks:
-            continue
-        if info(path) is not None:
-            for block in blocks:
-                unmovable.add(block)
-            continue
-        files[path] = (size, blocks)
-        for block in blocks:
-            owners[block] = path
-
-    best = None
-    best_cost = None
-    for start in range(0, block_count - need + 1, align):
-        ok = True
-        occupants = {}
-        for block in range(start, start + need):
-            if _bit_get(meta, block) or block in unmovable:
-                ok = False
-                break
-            path = owners.get(block)
-            if path is not None:
-                occupants[path] = True
-        if not ok:
-            continue
-        # A file can only be moved if a run of its block count exists outside
-        # the window (the copy is made before the old blocks are freed). Skip
-        # windows whose occupants are too large for any available hole.
-        max_hole = 0
-        run = 0
-        for block in range(block_count):
-            if start <= block < start + need:
-                run = 0
-                continue
-            if _bit_get(used, block):
-                run = 0
-            else:
-                run += 1
-                if run > max_hole:
-                    max_hole = run
-        for path in occupants:
-            # The current file's block list is the exact count its copy will
-            # need (CTZ packing can need one more block than ceil(size/bs)).
-            blocks = len(files[path][1])
-            if blocks > max_hole:
-                ok = False
-                break
-        if not ok:
-            continue
-        cost = 0
-        for path in occupants:
-            cost += files[path][0]
-        if best_cost is None or cost < best_cost:
-            best_cost = cost
-            best = start
-            if cost == 0:
-                break
-
-    if best is None or best_cost is None or best_cost > budget:
-        return False
-
-    # Move the occupants out of the window. The allocator exclusion keeps the
-    # copies (and any metadata commit) from landing back inside it.
-    lfs2e.exclude(best, need)
-    try:
-        for path in occupants:
-            tmp = path + ".dfg"
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-            try:
-                with open(path, "rb") as source:
-                    with open(tmp, "wb") as dest:
-                        while True:
-                            chunk = source.read(_CHUNK)
-                            if not chunk:
-                                break
-                            dest.write(chunk)
-                os.rename(tmp, path)
-            except OSError:
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    pass
-                return False
-    finally:
-        lfs2e.clear_exclude()
-
-    return lfs2e.largest_run(align) >= need
-
-
-def ensure(path, align=1, defrag_first=True):
+def ensure(path, align=1, defrag_first=True, progress=None):
     """Return (offset, length, crc) for `path`, converting it to an extent.
 
     An existing extent is returned as-is. A normal file (including an extent
     whose inode was later overwritten with normal data) is streamed into a
     fresh run, with one defrag attempt if the space is fragmented.
+    ``progress(phase, percent)`` is called while defragmenting; it runs on the
+    calling thread and may repaint.
     """
     if lfs2e is None:
         raise OSError("extent support is not available on this host")
@@ -337,4 +256,4 @@ def ensure(path, align=1, defrag_first=True):
     if size <= 0:
         raise OSError("empty file is not an extent: %s" % path)
 
-    return _create(path, align, defrag_first)
+    return _create(path, align, defrag_first, progress=progress)

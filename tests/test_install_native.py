@@ -49,9 +49,9 @@ def _manifest(native=None, extra=None):
     return json.dumps(fields).encode()
 
 
-def _feed(extractor, data, chunk=512):
+def _feed(extractor, data, chunk=512, space_handler=None):
     for i in range(0, len(data), chunk):
-        extractor.feed(data[i:i + chunk])
+        extractor.feed_all(data[i:i + chunk], space_handler)
     extractor.finish()
 
 
@@ -163,6 +163,31 @@ class TestNativeInstall(unittest.TestCase):
         self.assertEqual(writer.committed[1],
                          binascii.crc32(payload, 0) & 0xFFFFFFFF)
         self.assertFalse(writer.aborted)
+
+    def test_extent_writer_request_is_handed_to_the_caller(self):
+        # Reserving an extent may defragment, which has to yield to the UI and
+        # must not straddle an open archive, so the parser stops and lets the
+        # caller build the writer.
+        extent_files.available = lambda: True
+        extent_files.Writer = FakeWriter
+        requests = []
+
+        def handler(length, align):
+            requests.append((length, align))
+            return extent_files.Writer(length, align)
+
+        app_dir = APP + "/"
+        extractor = StreamingUnzip(DEST, expected_app_name=APP,
+                                   native_keys=["esp32s3"])
+        _feed(extractor, _zip([
+            (app_dir, b""),
+            (app_dir + "MANIFEST.JSON", _manifest({"esp32s3": ["esp32s3.xip"]})),
+            (app_dir + "esp32s3.xip", b"X" * 300),
+        ]), space_handler=handler)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0], (300, extent_files.XIP_ALIGN_BLOCKS))
+        self.assertEqual(len(FakeWriter.instances), 1)
+        self.assertEqual(bytes(FakeWriter.instances[0].data), b"X" * 300)
 
     def test_board_falls_back_to_a_file_without_extents(self):
         extent_files.available = lambda: False

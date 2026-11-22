@@ -186,15 +186,26 @@ class StreamingUnzip:
         # The running extent sink for a selected .xip, if any.
         self._extent = None
         self._extent_target = None
+        # (length, align) while the parser waits for an extent writer.
+        self._space_request = None
         self._skip_remaining = 0
 
     def feed(self, data):
-        """Inject the next download chunk (bytes)."""
-        if not data:
-            return
-        self._buf += data
+        """Inject the next chunk.
+
+        Returns None, or ``(length, align)`` when the parser reached a file
+        that must be written as an extent: the caller reserves it (which may
+        defragment) and hands the writer back with :meth:`resume`.
+        """
+        if data:
+            self._buf += data
+        return self._process()
+
+    def _process(self):
         try:
             while True:
+                if self._state == "space":
+                    return self._space_request
                 if self._state == "idle":
                     if not self._parse_next_header():
                         break
@@ -215,6 +226,34 @@ class StreamingUnzip:
                     pass
                 self._file_fd = None
             raise
+        return None
+
+    def resume(self, writer):
+        """Attach the writer for the last space request and keep parsing."""
+        self._extent = writer
+        self._space_request = None
+        self._state = "data"
+        return self._process()
+
+    def feed_all(self, data, space_handler=None):
+        """Drive :meth:`feed` to completion synchronously."""
+        request = self.feed(data)
+        while request is not None:
+            if space_handler is not None:
+                writer = space_handler(request[0], request[1])
+            else:
+                writer = extent_files.Writer(
+                    request[0], request[1], defrag_first=True)
+            request = self.resume(writer)
+        return None
+
+    async def feed_async(self, data, space_handler):
+        """Like :meth:`feed_all`, awaiting the handler between chunks."""
+        request = self.feed(data)
+        while request is not None:
+            writer = await space_handler(request[0], request[1])
+            request = self.resume(writer)
+        return None
 
     def finish(self):
         """Called when the download stream is closed.
@@ -347,11 +386,17 @@ class StreamingUnzip:
             self._crc = 0
             if action == "xip":
                 self._extent_target = target
-                self._extent = extent_files.Writer(
-                    vals[_FH_UNCOMPRESSED_SIZE], extent_files.XIP_ALIGN_BLOCKS)
                 self._file_fd = None
+                # Reserving the run may defragment the filesystem, which has
+                # to yield to the UI and must not straddle an open archive.
+                # Stop here and let the caller build the writer.
+                self._space_request = (
+                    int(vals[_FH_UNCOMPRESSED_SIZE]),
+                    extent_files.XIP_ALIGN_BLOCKS)
+                next_state = "space"
             else:
                 self._file_fd = open(target, "wb")
+                next_state = "data"
             self._current_header = {
                 "filename": filename,
                 "target": target,
@@ -364,7 +409,7 @@ class StreamingUnzip:
             }
             if filename == MANIFEST_NAME:
                 self._manifest_buf = bytearray()
-            self._state = "data"
+            self._state = next_state
             return True
 
     def _classify(self, filename, uncompressed_size):

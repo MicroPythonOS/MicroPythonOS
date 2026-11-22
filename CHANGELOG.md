@@ -11,6 +11,17 @@ Frameworks:
   `open(path, "wb")` converts an extent back to an ordinary file, and extent
   creation defragments a fragmented filesystem by relocating the files in the
   target window. Native cores can be stored and executed this way.
+- littlefs2e: the defragmenter also relocates directory metadata pairs, so a
+  filesystem whose free space is only broken up by directories can still yield
+  a contiguous XIP run. It is now one C pass (`lfs2e.defrag`), which replaces
+  the Python scan, and a local `.mpk` install closes the archive around the
+  defrag so no open handle straddles a moved file. A split directory's tail
+  pair still cannot be moved, so a window holding one is skipped.
+- The App Store install shows "Defragmenting storage... 60%" while an extent
+  is being made room for, instead of freezing on the last download percentage:
+  the defragmenter runs in steps that yield to the UI. A large window's round
+  budget now scales with its size, so a fragmented filesystem can still take a
+  Doom-sized engine.
 - App packages can carry a `"native"` map in `MANIFEST.JSON` (platform key to
   file names) and the App Store installs only the files for the running host:
   `<soc>.xip` for a flash-resident core, `module_<arch>.mpy` for a native

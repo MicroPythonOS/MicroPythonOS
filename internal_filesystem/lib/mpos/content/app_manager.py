@@ -518,7 +518,8 @@ class AppManager:
         cls._app_list.sort(key=lambda a: a.name.lower())
 
     @staticmethod
-    async def download_and_install_package(download_url, fullname, download_url_size=None, progress_callback=None):
+    async def download_and_install_package(download_url, fullname, download_url_size=None,
+                                           progress_callback=None, space_callback=None):
         """Download an .mpk package and install it into apps/<fullname>.
 
         The download is fed directly into a streaming ZIP extractor so no
@@ -526,11 +527,16 @@ class AppManager:
         once the first chunk arrives, and the archive is validated against the
         strict MPK spec (single top-level dir matching ``fullname``).
 
+        ``space_callback`` is awaited as ``(phase, percent)`` while an extent
+        reservation defragments the filesystem, so the caller can keep the UI
+        alive and report progress.
+
         Raises an exception on failure so the caller can handle UI feedback.
         Returns True on success.
         """
         import os
         import shutil
+        from .. import extent as extent_files
         from ..net.download_manager import DownloadManager
         from .streaming_unzip import StreamingUnzip
 
@@ -561,8 +567,12 @@ class AppManager:
             free_space_limit=lambda req: AppManager._check_free_space(".", req),
         )
 
+        async def _space_handler(length, align):
+            return await extent_files.open_writer(
+                length, align, defrag_first=True, progress=space_callback)
+
         async def _chunk_callback(chunk):
-            extractor.feed(chunk)
+            await extractor.feed_async(chunk, _space_handler)
 
         try:
             result = await DownloadManager.download_url(
@@ -647,6 +657,7 @@ class AppManager:
     def install_mpk(temp_zip_path, dest_folder):
         import shutil
         import os
+        from .. import extent as extent_files
         from .streaming_unzip import StreamingUnzip
 
         try:
@@ -678,12 +689,30 @@ class AppManager:
                 free_space_limit=lambda req: AppManager._check_free_space(".", req),
             )
 
-            with open(temp_zip_path, "rb") as f:
+            f = open(temp_zip_path, "rb")
+            try:
+                def _space_handler(length, align):
+                    # Reserving an extent may defragment the filesystem, which
+                    # moves files. An open handle would then read blocks that
+                    # the move freed, so close the archive around the call and
+                    # resume from the same position afterwards. No UI to
+                    # yield to here: this path is synchronous.
+                    nonlocal f
+                    position = f.tell()
+                    f.close()
+                    try:
+                        return extent_files.Writer(length, align)
+                    finally:
+                        f = open(temp_zip_path, "rb")
+                        f.seek(position)
+
                 while True:
                     chunk = f.read(4096)
                     if not chunk:
                         break
-                    extractor.feed(chunk)
+                    extractor.feed_all(chunk, _space_handler)
+            finally:
+                f.close()
             extractor.finish()
 
             if __debug__: logger.debug("Unzipped successfully")
