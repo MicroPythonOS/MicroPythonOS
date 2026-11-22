@@ -9,6 +9,7 @@ exclude = [
     "micropython-camera-API",
     "micropython-nostr",
     "secp256k1-embedded-ecdh",
+    "third_party", # littlefs2e and mklittlefs forks
 ]
 
 [lint]
