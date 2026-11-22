@@ -49,6 +49,16 @@ class ParseAppsTest(unittest.TestCase):
                              ["com.example.one", "com.example.two", "com.example.three"])
             self.assertEqual(entries[2]["options"], {"version": "1.2.3", "sha256": "abcd"})
 
+    def test_target_option_is_parsed_and_validated(self):
+        with tempfile.TemporaryDirectory() as temp:
+            apps = Path(temp) / "apps.txt"
+            _write(apps, "repo com.example.one target=device\n")
+            entries = preload_fs.parse_apps(apps)
+            self.assertEqual(entries[0]["options"], {"target": "device"})
+            _write(apps, "repo com.example.one target=watch\n")
+            with self.assertRaises(preload_fs.PreloadError):
+                preload_fs.parse_apps(apps)
+
     def test_unknown_source_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             apps = Path(temp) / "apps.txt"
@@ -128,6 +138,31 @@ class StageTest(unittest.TestCase):
             self.assertTrue((out / "apps" / "com.example.app" / "MANIFEST.JSON").is_file())
             self.assertTrue((out / "apps" / "com.example.app" / "main.py").is_file())
             self.assertTrue((out / "data" / "images" / "sample.txt").is_file())
+
+    def test_stage_filters_by_target(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo_apps, data_dir, apps_file = self._fixture(root)
+            for name in ("com.example.device", "com.example.web"):
+                _write(repo_apps / name / "MANIFEST.JSON", '{"name": "App"}')
+                _write(repo_apps / name / "main.py", "print('hi')\n")
+            _write(
+                apps_file,
+                "repo com.example.device target=device\n"
+                "repo com.example.web target=web\n"
+                "repo com.example.both\n",
+            )
+            _write(repo_apps / "com.example.both" / "MANIFEST.JSON", '{"name": "App"}')
+            device_out = root / "device"
+            web_out = root / "web"
+            preload_fs.stage(device_out, apps_file=apps_file, repo_apps_dir=repo_apps,
+                             data_dir=data_dir, target="device")
+            preload_fs.stage(web_out, apps_file=apps_file, repo_apps_dir=repo_apps,
+                             data_dir=data_dir, target="web")
+            self.assertEqual(sorted(os.listdir(device_out / "apps")),
+                             ["com.example.both", "com.example.device"])
+            self.assertEqual(sorted(os.listdir(web_out / "apps")),
+                             ["com.example.both", "com.example.web"])
 
     def test_missing_repo_app_is_an_error(self):
         with tempfile.TemporaryDirectory() as temp:

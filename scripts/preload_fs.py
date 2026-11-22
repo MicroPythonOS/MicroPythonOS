@@ -36,6 +36,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APPS_LIST = REPO_ROOT / "scripts" / "preload_apps.txt"
+STAGE_TARGETS = ("device", "web")
 REPO_APPS_DIR = REPO_ROOT / "internal_filesystem" / "apps"
 DATA_DIR = REPO_ROOT / "internal_filesystem_data"
 COMPILE_SCRIPT = REPO_ROOT / "scripts" / "compile_dir.sh"
@@ -110,6 +111,11 @@ def parse_apps(apps_file):
                 raise PreloadError("%s:%d: expected key=value, got %r" % (apps_file, line_number, item))
             key, value = item.split("=", 1)
             options[key] = value
+        target = options.get("target")
+        if target is not None and target not in STAGE_TARGETS:
+            raise PreloadError(
+                "%s:%d: target must be one of %s, got %r"
+                % (apps_file, line_number, ", ".join(STAGE_TARGETS), target))
         entries.append({"source": source, "fullname": fullname, "options": options})
     if not entries:
         raise PreloadError("%s does not list any apps" % apps_file)
@@ -247,6 +253,10 @@ def _stage_apps(apps_file, repo_apps_dir, cache_dir, offline, options, destinati
 
     for entry in entries:
         fullname = entry["fullname"]
+        wanted = entry["options"].get("target")
+        if wanted is not None and wanted != options["target"]:
+            _log("  skipping %s (target %s)" % (fullname, wanted))
+            continue
         target = raw_dir / fullname
         if entry["source"] == "repo":
             source = repo_apps_dir / fullname
@@ -279,7 +289,7 @@ def _stage_apps(apps_file, repo_apps_dir, cache_dir, offline, options, destinati
 
 
 def stage(out_dir, apps_file=APPS_LIST, repo_apps_dir=REPO_APPS_DIR, data_dir=DATA_DIR,
-          cache_dir=DEFAULT_CACHE_DIR, offline=False, march=None):
+          cache_dir=DEFAULT_CACHE_DIR, offline=False, march=None, target="device"):
     out_dir = Path(out_dir)
     if out_dir.resolve() in (Path("/"), REPO_ROOT):
         raise PreloadError("refusing to stage into %s" % out_dir)
@@ -289,7 +299,7 @@ def stage(out_dir, apps_file=APPS_LIST, repo_apps_dir=REPO_APPS_DIR, data_dir=DA
     _log("Staging preloaded apps into %s ..." % out_dir)
     _stage_apps(
         Path(apps_file), Path(repo_apps_dir), Path(cache_dir), offline,
-        {"march": march}, out_dir / "apps",
+        {"march": march, "target": target}, out_dir / "apps",
     )
 
     if not Path(data_dir).is_dir():
@@ -480,6 +490,7 @@ def all_command(args):
         cache_dir=args.cache_dir,
         offline=args.offline,
         march=args.march,
+        target=args.target,
     )
     pack(stage_dir, args.partitions, image_path)
     return merge(args.build_dir, args.partitions, image_path)
@@ -494,6 +505,8 @@ def build_parser():
     common.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR))
     common.add_argument("--offline", action="store_true",
                         help="use the BadgeHub cache; never download")
+    common.add_argument("--target", choices=STAGE_TARGETS, default="device",
+                        help="stage only apps for this target (default: device)")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -527,7 +540,8 @@ def main(argv=None):
     try:
         if args.command == "stage":
             stage(args.out, apps_file=args.apps_file, repo_apps_dir=args.repo_apps_dir,
-                  data_dir=args.data_dir, cache_dir=args.cache_dir, offline=args.offline, march=args.march)
+                  data_dir=args.data_dir, cache_dir=args.cache_dir, offline=args.offline,
+                  march=args.march, target=args.target)
         elif args.command == "pack":
             pack(args.source, args.partitions, args.image)
         elif args.command == "merge":

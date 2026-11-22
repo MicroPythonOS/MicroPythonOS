@@ -651,6 +651,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 			--build-dir "$codebasedir/lvgl_micropython/lib/micropython/ports/esp32/$builddir" \
 			--partitions "$partition_csv" \
 			--march "$builtin_march" \
+			--target device \
 			--work-dir "$codebasedir/tmp/preload/$target" \
 			--cache-dir "$codebasedir/tmp/preload_cache"
 		preload_status=$?
@@ -935,6 +936,7 @@ elif [ "$target" == "web" ]; then
 	staged_bundled="$codebasedir"/web/.preload_stage
 	rm -rf "$staged_bundled"
 	python3 "$mydir"/preload_fs.py stage --out "$staged_bundled" \
+		--target web \
 		--cache-dir "$codebasedir/tmp/preload_cache"
 	staged_bundled_apps="$staged_bundled"/apps
 	staged_bundled_data="$staged_bundled"/data
