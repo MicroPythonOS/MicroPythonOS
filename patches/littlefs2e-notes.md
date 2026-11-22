@@ -62,7 +62,9 @@ otherwise leave it behind).
 
 1. A used map ranks aligned windows by how many used blocks they hold.
 2. A window holding an extent, the root pair or a split directory's **tail**
-   pair is rejected; a window holding an open file's blocks is rejected too.
+   pair is rejected. A window holding an open file's blocks is dropped and the
+   next candidate is tried: a sideloaded engine is defragmented while the app
+   still has its WAD open, and one busy window must not abort the whole run.
 3. `lfs2_ext_clear_window()` excludes the window from the allocator, relocates
    every directory whose pair intersects it (`lfs2_ext_relocate_dir()`), then
    copies each occupying ordinary file to `<name>.dfg` and renames it back.

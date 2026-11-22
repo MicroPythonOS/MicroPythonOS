@@ -44,7 +44,7 @@ index 1fdf792f..a477ae8c 100644
  extern const mp_obj_type_t mp_type_vfs_lfs1_fileio;
  extern const mp_obj_type_t mp_type_vfs_lfs1_textio;
 diff --git a/lib/littlefs/lfs2.c b/lib/littlefs/lfs2.c
-index 6c3c3ece..2d666c40 100644
+index 6c3c3ece..20f1064f 100644
 --- a/lib/littlefs/lfs2.c
 +++ b/lib/littlefs/lfs2.c
 @@ -258,7 +258,7 @@ static int lfs2_bd_prog(lfs2_t *lfs2,
@@ -622,7 +622,7 @@ index 6c3c3ece..2d666c40 100644
              int err = lfs2_ctz_traverse(lfs2, &f->cache, &lfs2->rcache,
                      f->ctz.head, f->ctz.size, cb, data);
              if (err) {
-@@ -5968,37 +6148,1471 @@ cleanup:
+@@ -5968,37 +6148,1478 @@ cleanup:
  
  // Public API
  #ifndef LFS2_READONLY
@@ -1890,7 +1890,14 @@ index 6c3c3ece..2d666c40 100644
 +            break;
 +        }
 +        if (lfs2_ext_open_hits(lfs2, s->head, s->count)) {
-+            err = LFS2_ERR_NOSPC;
++            // An open file's blocks are in this window, so it cannot be
++            // cleared. Drop this candidate and let the rank pick another.
++            if (s->fixed) {
++                err = LFS2_ERR_NOSPC;
++            } else {
++                s->state = LFS2_EXT_STATE_RANK;
++                s->map_built = false;
++            }
 +            break;
 +        }
 +        if (s->free_blocks < s->w.max_file_blocks + 2 + 2*s->w.pair_count) {
