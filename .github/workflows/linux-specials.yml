@@ -165,12 +165,6 @@ jobs:
           restore-keys: |
             preload-apps-v1-
 
-      - name: Set up littlefs-python for the preloaded filesystem
-        run: |
-          python3 -m venv .venv-preload
-          .venv-preload/bin/pip install --disable-pip-version-check littlefs-python==0.19.0
-          echo "MPOS_PRELOAD_PYTHON=$PWD/.venv-preload/bin/python" >> "$GITHUB_ENV"
-
       - name: Build LVGL MicroPython unphone
         run: |
           ./scripts/build_mpos.sh unphone
@@ -260,12 +254,6 @@ jobs:
           key: preload-apps-v1-${{ hashFiles('scripts/preload_apps.txt') }}
           restore-keys: |
             preload-apps-v1-
-
-      - name: Set up littlefs-python for the preloaded filesystem
-        run: |
-          python3 -m venv .venv-preload
-          .venv-preload/bin/pip install --disable-pip-version-check littlefs-python==0.19.0
-          echo "MPOS_PRELOAD_PYTHON=$PWD/.venv-preload/bin/python" >> "$GITHUB_ENV"
 
       - name: Build LVGL MicroPython esp32p4
         run: |

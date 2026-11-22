@@ -4,13 +4,15 @@
 Run with:
     python3 tests/cpython_preload_fs.py
 
-The littlefs round-trip needs littlefs-python:
+The image checks need mklittlefs built (scripts/build_mklittlefs.sh) and, for
+the read-back assertions, littlefs-python:
     python3 -m pip install littlefs-python==0.19.0
 """
 
 import hashlib
 import importlib.util
 import os
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -176,6 +178,12 @@ class StageTest(unittest.TestCase):
 
 
 class PackTest(unittest.TestCase):
+    def setUp(self):
+        try:
+            self.tool = preload_fs._find_mklittlefs()
+        except preload_fs.PreloadError:
+            self.skipTest("mklittlefs is not built; run scripts/build_mklittlefs.sh")
+
     def test_vfs_row(self):
         row = preload_fs._partition_row(REPO_ROOT / "partitions" / "esp32s3_16mb_badge.csv", "vfs")
         self.assertEqual(row["offset"], 0x900000)
@@ -220,11 +228,6 @@ class PackTest(unittest.TestCase):
                 fs.unmount()
 
     def test_too_large_tree_is_reported(self):
-        try:
-            import littlefs  # noqa: F401
-        except ImportError:
-            self.skipTest("littlefs-python is not installed")
-
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             source = root / "source"
@@ -238,6 +241,63 @@ class PackTest(unittest.TestCase):
             )
             with self.assertRaises(preload_fs.PreloadError):
                 preload_fs.pack(source, partitions, root / "fs.img")
+
+
+class ExtentPackTest(unittest.TestCase):
+    def setUp(self):
+        try:
+            self.tool = preload_fs._find_mklittlefs()
+        except preload_fs.PreloadError:
+            self.skipTest("mklittlefs is not built; run scripts/build_mklittlefs.sh")
+
+    def test_native_core_is_packed_as_extent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source"
+            payload = bytes((index * 7 + 3) & 0xFF for index in range(20000))
+            app = source / "apps" / "com.example.app"
+            app.mkdir(parents=True)
+            (app / "engine.xip").write_bytes(payload)
+            _write(app / "main.py", "print('hi')\n")
+            partitions = root / "partitions.csv"
+            # 64 blocks, so the default 16-block extent alignment has room.
+            _write(
+                partitions,
+                "factory,app,factory,0x10000,0x10000,\n"
+                "vfs,data,fat,0x20000,0x40000,\n",
+            )
+            image = root / "fs.img"
+            preload_fs.pack(source, partitions, image)
+
+            # The packer writes the payload into one contiguous run, and its
+            # own reader (littlefs2e) returns it intact.
+            unpacked = root / "unpacked"
+            subprocess.run(
+                [str(self.tool), "-u", str(unpacked), str(image)],
+                check=True, capture_output=True,
+            )
+            self.assertEqual((unpacked / "apps" / "com.example.app" / "engine.xip").read_bytes(),
+                             payload)
+
+            # A stock littlefs cannot see an extent: it mounts the image and
+            # reads the inode as empty, which is what makes the file an extent
+            # rather than ordinary CTZ data.
+            try:
+                import littlefs
+            except ImportError:
+                return
+            fs = littlefs.LittleFS(
+                context=littlefs.UserContextFile(str(image)),
+                block_size=preload_fs.BLOCK_SIZE,
+                block_count=0x40000 // preload_fs.BLOCK_SIZE,
+                read_size=preload_fs.READ_SIZE,
+                prog_size=preload_fs.PROG_SIZE,
+                cache_size=preload_fs.CACHE_SIZE,
+            )
+            try:
+                self.assertEqual(fs.stat("/apps/com.example.app/engine.xip").size, 0)
+            finally:
+                fs.unmount()
 
 
 if __name__ == "__main__":

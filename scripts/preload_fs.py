@@ -42,6 +42,7 @@ DATA_DIR = REPO_ROOT / "internal_filesystem_data"
 COMPILE_SCRIPT = REPO_ROOT / "scripts" / "compile_dir.sh"
 DEFAULT_CACHE_DIR = REPO_ROOT / "tmp" / "preload_cache"
 DEFAULT_WORK_DIR = REPO_ROOT / "tmp" / "preload"
+MKLITTLEFS = REPO_ROOT / "third_party" / "mklittlefs" / "mklittlefs"
 
 BADGEHUB_API = "https://badgehub.eu/api/v3"
 USER_AGENT = "MicroPythonOS-preload/1.0"
@@ -52,6 +53,10 @@ BLOCK_SIZE = 4096
 READ_SIZE = 256
 PROG_SIZE = 256
 CACHE_SIZE = 1024
+
+# littlefs2e: a native core is packed as a contiguous extent so it can be
+# mapped from flash without a first-launch conversion.
+EXTENT_SUFFIX = ".xip"
 
 JUNK_DIRS = {"__pycache__"}
 JUNK_FILES = {".DS_Store"}
@@ -341,63 +346,65 @@ def _app_partition(partitions_csv):
     raise PreloadError("%s has no ota_0/factory app partition" % partitions_csv)
 
 
-def _copy_into_littlefs(fs, source, prefix=""):
-    source = Path(source)
-    for entry in sorted(source.iterdir(), key=lambda item: item.name):
-        target = prefix + "/" + entry.name
-        if entry.is_dir():
-            try:
-                fs.makedirs(target)
-            except Exception as error:  # littlefs-python raises its own error type
-                if getattr(error, "code", None) != -17:  # LFS_ERR_EXIST
-                    raise
-            _copy_into_littlefs(fs, entry, target)
-        else:
-            with open(entry, "rb") as reader, fs.open(target, "wb") as writer:
-                shutil.copyfileobj(reader, writer)
+def _find_mklittlefs(explicit=None):
+    for candidate in (explicit, os.environ.get("MPOS_MKLITTLEFS"), MKLITTLEFS):
+        if candidate and Path(candidate).is_file():
+            return Path(candidate)
+    raise PreloadError(
+        "mklittlefs is not built; run scripts/build_mklittlefs.sh "
+        "or pass --mklittlefs")
 
 
-def pack(source_dir, partitions_csv, image_path):
-    import littlefs  # imported lazily so "stage" works without littlefs-python
+def pack(source_dir, partitions_csv, image_path, mklittlefs=None):
+    """Pack the staged tree into a littlefs2e image.
 
+    Files ending in ``.xip`` are written as extents: one contiguous, 64 KiB
+    aligned run that the device maps straight out of flash. A native core then
+    needs no defragmentation or conversion on first launch.
+    """
+    source_dir = Path(source_dir)
     vfs = _partition_row(partitions_csv, "vfs")
     if vfs["size"] % BLOCK_SIZE:
         raise PreloadError("vfs size 0x%X is not a multiple of %d" % (vfs["size"], BLOCK_SIZE))
+    tool = _find_mklittlefs(mklittlefs)
     image_path = Path(image_path)
     image_path.parent.mkdir(parents=True, exist_ok=True)
     image_path.unlink(missing_ok=True)
-    image_path.touch()
 
-    block_count = vfs["size"] // BLOCK_SIZE
-    context = littlefs.UserContextFile(str(image_path))
-    fs = littlefs.LittleFS(
-        context=context,
-        block_size=BLOCK_SIZE,
-        block_count=block_count,
-        read_size=READ_SIZE,
-        prog_size=PROG_SIZE,
-        cache_size=CACHE_SIZE,
-    )
-    try:
-        _copy_into_littlefs(fs, source_dir)
-    except littlefs.errors.LittleFSError as error:
-        if getattr(error, "code", None) == -28:  # LFS_ERR_NOSPC
+    extents = sorted(path.relative_to(source_dir) for path in source_dir.rglob("*" + EXTENT_SUFFIX))
+    command = [
+        str(tool),
+        "-b", str(BLOCK_SIZE),
+        "-p", str(PROG_SIZE),
+        "-r", str(READ_SIZE),
+        "-m", str(CACHE_SIZE),
+        "-N",
+        "-s", str(vfs["size"]),
+        "-c", str(source_dir),
+    ]
+    for extent in extents:
+        command.extend(["-x", str(extent)])
+    command.append(str(image_path))
+
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        if "full" in detail.lower():
             raise PreloadError(
                 "preloaded tree (%s) does not fit in the %s vfs partition"
                 % (_format_size(_tree_size(source_dir)), _format_size(vfs["size"]))
             )
-        raise
-    finally:
-        fs.unmount()
+        raise PreloadError("mklittlefs failed: %s" % (detail or "exit %d" % result.returncode))
 
     written = image_path.stat().st_size
-    if written > vfs["size"]:
-        raise PreloadError("littlefs wrote %d bytes, larger than the vfs partition" % written)
-    if written < vfs["size"]:
-        with open(image_path, "ab") as padding:
-            padding.write(b"\xff" * (vfs["size"] - written))
-    _log("Packed %s into %s (vfs at 0x%X, %s)"
-         % (_format_size(_tree_size(source_dir)), image_path.name, vfs["offset"], _format_size(vfs["size"])))
+    if written != vfs["size"]:
+        raise PreloadError(
+            "mklittlefs wrote %d bytes, expected the %s vfs partition"
+            % (written, _format_size(vfs["size"])))
+    _log("Packed %s into %s (vfs at 0x%X, %s%s)"
+         % (_format_size(_tree_size(source_dir)), image_path.name, vfs["offset"],
+            _format_size(vfs["size"]),
+            ", %d extent(s)" % len(extents) if extents else ""))
     return vfs
 
 
@@ -492,7 +499,7 @@ def all_command(args):
         march=args.march,
         target=args.target,
     )
-    pack(stage_dir, args.partitions, image_path)
+    pack(stage_dir, args.partitions, image_path, mklittlefs=args.mklittlefs)
     return merge(args.build_dir, args.partitions, image_path)
 
 
@@ -519,6 +526,8 @@ def build_parser():
     pack_parser.add_argument("--source", required=True)
     pack_parser.add_argument("--partitions", required=True)
     pack_parser.add_argument("--image", required=True)
+    pack_parser.add_argument("--mklittlefs", default=None,
+                             help="mklittlefs binary (default: third_party/mklittlefs)")
 
     merge_parser = subparsers.add_parser("merge", help="merge a filesystem image into the firmware")
     merge_parser.add_argument("--build-dir", required=True)
@@ -530,6 +539,8 @@ def build_parser():
     all_parser.add_argument("--partitions", required=True)
     all_parser.add_argument("--march", default=None)
     all_parser.add_argument("--work-dir", default=str(DEFAULT_WORK_DIR))
+    all_parser.add_argument("--mklittlefs", default=None,
+                            help="mklittlefs binary (default: third_party/mklittlefs)")
 
     return parser
 
@@ -543,7 +554,7 @@ def main(argv=None):
                   data_dir=args.data_dir, cache_dir=args.cache_dir, offline=args.offline,
                   march=args.march, target=args.target)
         elif args.command == "pack":
-            pack(args.source, args.partitions, args.image)
+            pack(args.source, args.partitions, args.image, mklittlefs=args.mklittlefs)
         elif args.command == "merge":
             merge(args.build_dir, args.partitions, args.image)
         else:

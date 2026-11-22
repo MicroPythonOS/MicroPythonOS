@@ -139,6 +139,25 @@ the installer awaits it with a progress callback. Doom's launch screen, which
 has no event loop to yield to, uses `ensure(progress=...)`: the hook calls
 `lv.refr_now()` between steps, the same way its other launch messages work.
 
+## Packing images
+
+`scripts/preload_fs.py` packs the preloaded filesystem with the
+`third_party/mklittlefs` submodule (MicroPythonOS/mklittlefs_with_extents),
+not littlefs-python: the tool is the littlefs2e fork of mklittlefs and writes
+every `*.xip` in the staged tree as an extent (`-x`, `-X 16`). A preinstalled
+engine is therefore one contiguous, 64 KiB aligned run from the first boot,
+and `mpos.extent.ensure()` returns its info instead of copying it. Images are
+built with `-N` (no `t`/`c` timestamps), so a release image is reproducible.
+`scripts/build_mklittlefs.sh` builds the tool; `build_mpos.sh` runs it before
+the preload step.
+
+The lookahead is the subtle part. `lfs_ext_commit()` drops the allocator's
+lookahead window: the run's blocks never went through `lfs_alloc()`, so the
+window would still read them as free and the next file written in the same
+session (the app icon after the engine, in a packer) would land on the
+payload. A rescan sees the extent tag and counts the run. `lfs_ext_abort()`
+drops it too, so an aborted run's blocks are offered again immediately.
+
 ## MicroPython glue
 
 - `extmod/vfs_lfs.c/h`: `mp_vfs_lfs2_root_lfs2()`, because the mounted

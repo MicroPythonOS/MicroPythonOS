@@ -27,6 +27,11 @@ Frameworks:
   twice as fast (a 48-block window on a 7 MiB filesystem: 18 s to 11 s). It
   costs 6 KiB of RAM at mount and about 3 KiB per open file; the on-disk
   format and the inline threshold are unchanged.
+- Writing a file after creating an extent could land on the extent's blocks:
+  the allocator's lookahead still read the freshly committed run as free, so
+  an extracted `.xip` could be overwritten by the next file in the same
+  session and fail its CRC later. Committing (or aborting) an extent now drops
+  the lookahead, so the next allocation rescans the tree.
 - App packages can carry a `"native"` map in `MANIFEST.JSON` (platform key to
   file names) and the App Store installs only the files for the running host:
   `<soc>.xip` for a flash-resident core, `module_<arch>.mpy` for a native
@@ -138,7 +143,7 @@ Testing:
 Build:
 - Full flash images ship a filesystem: `scripts/preload_fs.py` stages the sample media and a shared set of apps, precompiles them and packs them into a littlefs image merged into the vfs partition. The same staging feeds the web bundle. `--no-preload-fs` (`MPOS_PRELOAD_FS=0`) builds a firmware-only image; the 4 MB targets skip it.
 - Partition tables: full images use the compact badge preamble and a 7 MB filesystem at `0x900000` on the 16 MB layout; `.ota` images stay partition-offset independent, so in-place updates keep working.
-- littlefs-python 0.19.0 is only needed to pack the device filesystem (CI installs it in a venv, pointed at with `MPOS_PRELOAD_PYTHON`).
+- The preloaded filesystem is packed by the `third_party/mklittlefs` submodule instead of littlefs-python, so the build needs no Python package for it. Native cores (`*.xip`) are written as littlefs2e extents: one contiguous, 64 KiB aligned run, so a preinstalled engine starts without a first-launch defragmentation and conversion.
 - ESP32-P4: images stay compatible with rev <3.0 chips — the esp32p4 build sets `CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y` (a no-op on ESP-IDF 5.5.1; from 5.5.3 its default would build a v3-only image and a v1.x board would refuse the OTA update), and lvgl_micropython lets ESP-IDF pick the MIPI-DSI PHY PLL reference clock, which a rev 3.x LL build no longer accepts and would abort on (#376).
 - App releases: `bundle_apps.sh --app <fullname>` packages only the named apps and merges just their entries into the existing index, preserving index-only fixes and every other entry; `make check-app-versions` and a CI job for PRs touching `internal_filesystem/apps/` report apps with commits after their last `MANIFEST.JSON` version bump (and uncommitted edits), so a source change can no longer miss users silently (#388).
 

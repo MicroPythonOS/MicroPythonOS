@@ -21,3 +21,6 @@
 [submodule "third_party/littlefs2e"]
 	path = third_party/littlefs2e
 	url = https://github.com/MicroPythonOS/littlefs_with_extents_and_defrag
+[submodule "third_party/mklittlefs"]
+	path = third_party/mklittlefs
+	url = https://github.com/MicroPythonOS/mklittlefs_with_extents

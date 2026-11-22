@@ -642,12 +642,10 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 
 	if [ -n "$partition_csv" ]; then
 		preload_python="${MPOS_PRELOAD_PYTHON:-python3}"
-		if ! "$preload_python" -c "import littlefs" >/dev/null 2>&1; then
-			echo "ERROR: littlefs-python is required to build the preloaded filesystem." >&2
-			echo "       Install it (python3 -m pip install littlefs-python==0.19.0)," >&2
-			echo "       point MPOS_PRELOAD_PYTHON at a venv that has it, or use --no-preload-fs." >&2
-			exit 1
-		fi
+		# The packer is not a Python module: it is the third_party/mklittlefs
+		# submodule, which packs native cores as littlefs2e extents (so a
+		# sideloaded engine needs no first-launch conversion).
+		"$mydir"/build_mklittlefs.sh
 		echo ""
 		echo "=== Preloaded filesystem ($target) ==="
 		"$preload_python" "$mydir"/preload_fs.py all \

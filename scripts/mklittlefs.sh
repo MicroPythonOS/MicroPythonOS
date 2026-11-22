@@ -1,14 +1,28 @@
 #!/bin/sh
+# Pack internal_filesystem/ into a littlefs2e image with the vendored tool.
+#
+# Native cores (*.xip) are packed as extents: one contiguous, 64 KiB aligned
+# run that a badge maps straight out of flash, so the first launch does not
+# have to defragment and convert them.
+set -eu
 
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
+root=$(dirname "$mydir")
+tool="$root/third_party/mklittlefs/mklittlefs"
 
-#size=0x200000 # 2MB
-#~/sources/mklittlefs/mklittlefs -c "$mydir"/../internal_filesystem/ -s "$size" internal_filesystem.bin
+if [ ! -x "$tool" ]; then
+    "$mydir"/build_mklittlefs.sh
+fi
 
-#size=0x520000
-#~/sources/mklittlefs/mklittlefs -c "$mydir"/../../../internalsd_zips_removed_gb_romart -s "$size" internalsd_zips_removed_gb_romart.bin
+size=0x700000 # 7 MB filesystem
 
-size=0x700000 # 16MB filesystem
-# ESP32 doesnt support anything other than -b 4096, unfortunately...
-~/sources/mklittlefs/mklittlefs -b 4096 -c "$mydir"/../internal_filesystem/ -s "$size" internal_filesystem.bin
+extents=""
+for xip in "$root"/internal_filesystem/apps/*/*.xip; do
+    [ -f "$xip" ] || continue
+    relative=${xip#"$root"/internal_filesystem/}
+    extents="$extents -x $relative"
+done
+
+# shellcheck disable=SC2086
+"$tool" -b 4096 -c "$root"/internal_filesystem/ -s "$size" $extents internal_filesystem.bin
