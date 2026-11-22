@@ -3,6 +3,7 @@ import logging
 import lvgl as lv
 
 from mpos import Activity, DownloadManager, AppManager, TaskManager, WidgetAnimator
+from mpos import extent as extent_files
 from mpos.ui import STAR_SYMBOL, add_focus_highlight
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
 
@@ -415,6 +416,15 @@ class AppDetail(Activity):
         scaled_percent += scaled_percent_start
         self.progress_bar.set_value(scaled_percent, True)
 
+    async def space_progress(self, phase, percent):
+        """Called while an extent reservation defragments the filesystem."""
+        if phase == extent_files.PHASE_SPACE or percent <= 0:
+            self.install_label.set_text("Defragmenting storage...")
+        else:
+            self.install_label.set_text("Defragmenting storage... %d%%" % percent)
+        # The download bar keeps its position; this is a separate phase.
+        await TaskManager.sleep(1)
+
     async def download_and_install(self, app_obj, dest_folder):
         app_fullname = app_obj.fullname
         download_url_size = getattr(app_obj, "download_url_size", None)
@@ -426,6 +436,7 @@ class AppDetail(Activity):
                 app_fullname,
                 download_url_size=download_url_size,
                 progress_callback=self.pcb,
+                space_callback=self.space_progress,
             )
         except Exception as e:
             logger.error("download failed: %s", e)

@@ -328,6 +328,8 @@ class _CoreEngine:
         import mpos_core
         self._core = mpos_core
         self._surface = None
+        # The activity's progress hook, set before start().
+        self.progress = None
         self._keys = []
         self._files = {}
         self._wad = None
@@ -377,7 +379,8 @@ class _CoreEngine:
         # A sideloaded (or older-installer) engine is a normal file: convert it
         # once. The AppStore writes it as an extent at install time.
         offset, length, crc = extent.ensure(
-            path, align=extent.XIP_ALIGN_BLOCKS, defrag_first=True)
+            path, align=extent.XIP_ALIGN_BLOCKS, defrag_first=True,
+            progress=self.progress)
         self._core_file = path
         self._wad = wad
         # The engine writes .default.cfg and .savegame/ here; it is absolute,
@@ -619,6 +622,13 @@ class Doom(NativeActivity):
         except Exception:
             pass
 
+    def _extent_progress(self, phase, percent):
+        """Repaint the launch message while an extent is defragmented."""
+        if phase == extent.PHASE_SPACE or percent <= 0:
+            self._loading("Defragmenting storage...")
+        else:
+            self._loading("Defragmenting storage... %d%%" % percent)
+
     def start_engine(self, surface):
         self._loading("Checking the Doom engine")
         try:
@@ -634,6 +644,7 @@ class Doom(NativeActivity):
             return False
         self._wad = wad
         self._loading("Starting the engine")
+        self.engine.progress = self._extent_progress
         self.engine.start(wad, surface)
         if self.hint is not None:
             self._clear_hint()
