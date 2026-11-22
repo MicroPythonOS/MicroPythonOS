@@ -55,6 +55,71 @@ static mp_obj_t lfs2e_reserve(size_t n_args, const mp_obj_t *args) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(lfs2e_reserve_obj, 1, 2, lfs2e_reserve);
 
+static mp_obj_t lfs2e_defrag(size_t n_args, const mp_obj_t *args) {
+    lfs2_t *lfs = lfs2e_get();
+    mp_uint_t length = mp_obj_get_int_truncated(args[0]);
+    mp_uint_t align = (n_args > 1) ? mp_obj_get_int_truncated(args[1]) : 1;
+    mp_uint_t budget = (n_args > 2) ? mp_obj_get_int_truncated(args[2]) : 0;
+    lfs2_ext_t ext;
+    int err = lfs2_ext_defrag(lfs, length, align, budget, &ext);
+    lfs2e_check(err);
+    mp_obj_t tuple[2] = {
+        mp_obj_new_int_from_uint(ext.head),
+        mp_obj_new_int_from_uint(ext.count),
+    };
+    return mp_obj_new_tuple(2, tuple);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(lfs2e_defrag_obj, 1, 3, lfs2e_defrag);
+
+// The step driver: begin() reserves nothing on its own; step() returns
+// (running, phase, percent) until it returns running == 0, at which point the
+// run is reserved; result() reports it. abort() drops a stale run (a mount
+// does the same).
+static mp_obj_t lfs2e_defrag_begin(size_t n_args, const mp_obj_t *args) {
+    lfs2_t *lfs = lfs2e_get();
+    mp_uint_t length = mp_obj_get_int_truncated(args[0]);
+    mp_uint_t align = (n_args > 1) ? mp_obj_get_int_truncated(args[1]) : 1;
+    mp_uint_t budget = (n_args > 2) ? mp_obj_get_int_truncated(args[2]) : 0;
+    lfs2e_check(lfs2_ext_defrag_begin(lfs, length, align, budget));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(lfs2e_defrag_begin_obj, 1, 3,
+        lfs2e_defrag_begin);
+
+static mp_obj_t lfs2e_defrag_step(void) {
+    lfs2_t *lfs = lfs2e_get();
+    uint8_t phase = 0;
+    uint8_t percent = 0;
+    int res = lfs2_ext_defrag_step(lfs, &phase, &percent);
+    lfs2e_check(res);
+    mp_obj_t tuple[3] = {
+        mp_obj_new_int(res),
+        mp_obj_new_int(phase),
+        mp_obj_new_int(percent),
+    };
+    return mp_obj_new_tuple(3, tuple);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(lfs2e_defrag_step_obj, lfs2e_defrag_step);
+
+static mp_obj_t lfs2e_defrag_result(void) {
+    lfs2_t *lfs = lfs2e_get();
+    lfs2_ext_t ext;
+    lfs2e_check(lfs2_ext_defrag_result(lfs, &ext));
+    mp_obj_t tuple[2] = {
+        mp_obj_new_int_from_uint(ext.head),
+        mp_obj_new_int_from_uint(ext.count),
+    };
+    return mp_obj_new_tuple(2, tuple);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(lfs2e_defrag_result_obj, lfs2e_defrag_result);
+
+static mp_obj_t lfs2e_defrag_abort(void) {
+    lfs2_t *lfs = lfs2e_get();
+    lfs2_ext_defrag_abort(lfs);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(lfs2e_defrag_abort_obj, lfs2e_defrag_abort);
+
 static mp_obj_t lfs2e_write(mp_obj_t offset_in, mp_obj_t buf_in) {
     lfs2_t *lfs = lfs2e_get();
     mp_uint_t offset = mp_obj_get_int_truncated(offset_in);
@@ -183,6 +248,11 @@ static const mp_rom_map_elem_t lfs2e_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_lfs2e) },
     { MP_ROM_QSTR(MP_QSTR_geometry), MP_ROM_PTR(&lfs2e_geometry_obj) },
     { MP_ROM_QSTR(MP_QSTR_reserve), MP_ROM_PTR(&lfs2e_reserve_obj) },
+    { MP_ROM_QSTR(MP_QSTR_defrag), MP_ROM_PTR(&lfs2e_defrag_obj) },
+    { MP_ROM_QSTR(MP_QSTR_defrag_begin), MP_ROM_PTR(&lfs2e_defrag_begin_obj) },
+    { MP_ROM_QSTR(MP_QSTR_defrag_step), MP_ROM_PTR(&lfs2e_defrag_step_obj) },
+    { MP_ROM_QSTR(MP_QSTR_defrag_result), MP_ROM_PTR(&lfs2e_defrag_result_obj) },
+    { MP_ROM_QSTR(MP_QSTR_defrag_abort), MP_ROM_PTR(&lfs2e_defrag_abort_obj) },
     { MP_ROM_QSTR(MP_QSTR_write), MP_ROM_PTR(&lfs2e_write_obj) },
     { MP_ROM_QSTR(MP_QSTR_commit), MP_ROM_PTR(&lfs2e_commit_obj) },
     { MP_ROM_QSTR(MP_QSTR_abort), MP_ROM_PTR(&lfs2e_abort_obj) },

@@ -9,15 +9,32 @@ upstream `littlefs/tests/*.toml`). It exercises:
 - the disk version staying at 2.1 across an extent and a remount;
 - a clean `LFS_ERR_NOCONTIG` when the filesystem has no large enough run.
 
+`littlefs_test_relocate.toml` covers metadata-pair relocation and the
+defragmenter: contents and remount after a relocation, the root refusal, the
+two-pass window clear, the parent chain (forced through injected bad blocks), a
+split directory's tail pair pinning a window, a fragmented image that the
+defragmenter must clear and reserve, budget/extent refusals, a 7 MiB
+badge-sized image, the resumable `begin`/`step` driver (phase order, a second
+begin refused) and a window whose occupants are all one-block files (the round
+budget). Its helpers live in `relocate_test_helpers.h` and are
+injected into every generated case file with `--include` (so that header
+includes `runners/test_runner.h` itself). Two cases are `reentrant`, which makes
+the runner replay them under power loss.
+
 ## Running
 
 The upstream runner is not vendored in this repository. `littlefs_run.sh` downloads
 littlefs v2.11.3, copies the **patched** prefixed sources from
 `lvgl_micropython/lib/micropython/lib/littlefs` (apply `patches/littlefs2e.patch`
 first, which `build_mpos.sh` does), reverse-prefixes them to `lfs_*` for the
-upstream runner, and runs the extent cases.
+upstream runner, and runs the extent and relocation cases.
 
     ./tests/littlefs_run.sh
+
+Power loss: the script runs `-P none,linear` (one cut at every write offset)
+plus a few fixed two-cut sequences. **Never use `-Pexhaustive` here**: it forks
+a copy of the whole block device at every cut point and keeps the branch tree,
+which needs gigabytes — it has OOM-killed a 7.7 GB machine on these cases.
 
 To run the full upstream suite as well:
 

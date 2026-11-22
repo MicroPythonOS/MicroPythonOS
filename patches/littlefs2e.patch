@@ -44,7 +44,7 @@ index 1fdf792f..a477ae8c 100644
  extern const mp_obj_type_t mp_type_vfs_lfs1_fileio;
  extern const mp_obj_type_t mp_type_vfs_lfs1_textio;
 diff --git a/lib/littlefs/lfs2.c b/lib/littlefs/lfs2.c
-index 6c3c3ece..63ac398b 100644
+index 6c3c3ece..7629bb9a 100644
 --- a/lib/littlefs/lfs2.c
 +++ b/lib/littlefs/lfs2.c
 @@ -258,7 +258,7 @@ static int lfs2_bd_prog(lfs2_t *lfs2,
@@ -110,7 +110,19 @@ index 6c3c3ece..63ac398b 100644
      (void)lfs2;
  #ifdef LFS2_MULTIVERSION
      if (lfs2->cfg->disk_version) {
-@@ -658,6 +687,22 @@ static int lfs2_alloc_scan(lfs2_t *lfs2) {
+@@ -560,7 +589,10 @@ static int lfs2_dir_commit(lfs2_t *lfs2, lfs2_mdir_t *dir,
+         const struct lfs2_mattr *attrs, int attrcount);
+ static int lfs2_dir_compact(lfs2_t *lfs2,
+         lfs2_mdir_t *dir, const struct lfs2_mattr *attrs, int attrcount,
+-        lfs2_mdir_t *source, uint16_t begin, uint16_t end);
++        lfs2_mdir_t *source, uint16_t begin, uint16_t end,
++        bool force_relocate);
++static int lfs2_dir_propagate_relocation(lfs2_t *lfs2,
++        lfs2_block_t pair[2], lfs2_mdir_t *dir, int state);
+ static lfs2_ssize_t lfs2_file_flushedwrite(lfs2_t *lfs2, lfs2_file_t *file,
+         const void *buffer, lfs2_size_t size);
+ static lfs2_ssize_t lfs2_file_write_(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -658,6 +690,22 @@ static int lfs2_alloc_scan(lfs2_t *lfs2) {
          return err;
      }
  
@@ -133,7 +145,7 @@ index 6c3c3ece..63ac398b 100644
      return 0;
  }
  #endif
-@@ -673,6 +718,15 @@ static int lfs2_alloc(lfs2_t *lfs2, lfs2_block_t *block) {
+@@ -673,6 +721,15 @@ static int lfs2_alloc(lfs2_t *lfs2, lfs2_block_t *block) {
                  *block = (lfs2->lookahead.start + lfs2->lookahead.next)
                          % lfs2->block_count;
  
@@ -149,7 +161,7 @@ index 6c3c3ece..63ac398b 100644
                  // eagerly find next free block to maximize how many blocks
                  // lfs2_alloc_ckpoint makes available for scanning
                  while (true) {
-@@ -1291,6 +1345,7 @@ static lfs2_stag_t lfs2_dir_fetchmatch(lfs2_t *lfs2,
+@@ -1291,6 +1348,7 @@ static lfs2_stag_t lfs2_dir_fetchmatch(lfs2_t *lfs2,
  
              // found a match for our fetcher?
              if ((fmask & tag) == (fmask & ftag)) {
@@ -157,7 +169,7 @@ index 6c3c3ece..63ac398b 100644
                  int res = cb(data, tag, &(struct lfs2_diskoff){
                          dir->pair[0], off+sizeof(tag)});
                  if (res < 0) {
-@@ -1427,6 +1482,21 @@ static int lfs2_dir_getinfo(lfs2_t *lfs2, lfs2_mdir_t *dir,
+@@ -1427,6 +1485,21 @@ static int lfs2_dir_getinfo(lfs2_t *lfs2, lfs2_mdir_t *dir,
  
      info->type = lfs2_tag_type3(tag);
  
@@ -179,7 +191,7 @@ index 6c3c3ece..63ac398b 100644
      struct lfs2_ctz ctz;
      tag = lfs2_dir_get(lfs2, dir, LFS2_MKTAG(0x700, 0x3ff, 0),
              LFS2_MKTAG(LFS2_TYPE_STRUCT, id, sizeof(ctz)), &ctz);
-@@ -1501,7 +1571,7 @@ nextname:
+@@ -1501,7 +1574,7 @@ nextname:
          if (lfs2_tag_type3(tag) == LFS2_TYPE_DIR) {
              name += strspn(name, "/");
          }
@@ -188,7 +200,7 @@ index 6c3c3ece..63ac398b 100644
  
          // skip '.'
          if (namelen == 1 && memcmp(name, ".", 1) == 0) {
-@@ -1520,7 +1590,7 @@ nextname:
+@@ -1520,7 +1593,7 @@ nextname:
          int depth = 1;
          while (true) {
              suffix += strspn(suffix, "/");
@@ -197,7 +209,7 @@ index 6c3c3ece..63ac398b 100644
              if (sufflen == 0) {
                  break;
              }
-@@ -1761,7 +1831,7 @@ static int lfs2_dir_commitcrc(lfs2_t *lfs2, struct lfs2_commit *commit) {
+@@ -1761,7 +1834,7 @@ static int lfs2_dir_commitcrc(lfs2_t *lfs2, struct lfs2_commit *commit) {
  
          commit->off = noff;
          // perturb valid bit?
@@ -206,7 +218,193 @@ index 6c3c3ece..63ac398b 100644
          // reset crc for next commit
          commit->crc = 0xffffffff;
  
-@@ -3142,20 +3212,67 @@ static int lfs2_file_opencfg_(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -1892,7 +1965,8 @@ static int lfs2_dir_split(lfs2_t *lfs2,
+     tail.tail[1] = dir->tail[1];
+ 
+     // note we don't care about LFS2_OK_RELOCATED
+-    int res = lfs2_dir_compact(lfs2, &tail, attrs, attrcount, source, split, end);
++    int res = lfs2_dir_compact(lfs2, &tail, attrs, attrcount, source,
++            split, end, false);
+     if (res < 0) {
+         return res;
+     }
+@@ -1951,10 +2025,11 @@ static bool lfs2_dir_needsrelocation(lfs2_t *lfs2, lfs2_mdir_t *dir) {
+ #ifndef LFS2_READONLY
+ static int lfs2_dir_compact(lfs2_t *lfs2,
+         lfs2_mdir_t *dir, const struct lfs2_mattr *attrs, int attrcount,
+-        lfs2_mdir_t *source, uint16_t begin, uint16_t end) {
++        lfs2_mdir_t *source, uint16_t begin, uint16_t end,
++        bool force_relocate) {
+     // save some state in case block is bad
+     bool relocated = false;
+-    bool tired = lfs2_dir_needsrelocation(lfs2, dir);
++    bool tired = force_relocate || lfs2_dir_needsrelocation(lfs2, dir);
+ 
+     // increment revision count
+     dir->rev += 1;
+@@ -2226,7 +2301,8 @@ static int lfs2_dir_splittingcompact(lfs2_t *lfs2, lfs2_mdir_t *dir,
+         }
+     }
+ 
+-    return lfs2_dir_compact(lfs2, dir, attrs, attrcount, source, begin, end);
++    return lfs2_dir_compact(lfs2, dir, attrs, attrcount, source, begin, end,
++            false);
+ }
+ #endif
+ 
+@@ -2405,68 +2481,15 @@ fixmlist:;
+ #endif
+ 
+ #ifndef LFS2_READONLY
+-static int lfs2_dir_orphaningcommit(lfs2_t *lfs2, lfs2_mdir_t *dir,
+-        const struct lfs2_mattr *attrs, int attrcount) {
+-    // check for any inline files that aren't RAM backed and
+-    // forcefully evict them, needed for filesystem consistency
+-    for (lfs2_file_t *f = (lfs2_file_t*)lfs2->mlist; f; f = f->next) {
+-        if (dir != &f->m && lfs2_pair_cmp(f->m.pair, dir->pair) == 0 &&
+-                f->type == LFS2_TYPE_REG && (f->flags & LFS2_F_INLINE) &&
+-                f->ctz.size > lfs2->cfg->cache_size) {
+-            int err = lfs2_file_outline(lfs2, f);
+-            if (err) {
+-                return err;
+-            }
+-
+-            err = lfs2_file_flush(lfs2, f);
+-            if (err) {
+-                return err;
+-            }
+-        }
+-    }
+-
+-    lfs2_block_t lpair[2] = {dir->pair[0], dir->pair[1]};
++// Point the parent (and any grandparent that relocates as a result) at the
++// new pair, then unlink the old one. Split out of
++// lfs2_dir_orphaningcommit unchanged so the extent defragmenter can relocate
++// a directory it chose with the same bookkeeping.
++static int lfs2_dir_propagate_relocation(lfs2_t *lfs2,
++        lfs2_block_t pair[2], lfs2_mdir_t *dir, int state) {
++    lfs2_block_t lpair[2] = {pair[0], pair[1]};
+     lfs2_mdir_t ldir = *dir;
+     lfs2_mdir_t pdir;
+-    int state = lfs2_dir_relocatingcommit(lfs2, &ldir, dir->pair,
+-            attrs, attrcount, &pdir);
+-    if (state < 0) {
+-        return state;
+-    }
+-
+-    // update if we're not in mlist, note we may have already been
+-    // updated if we are in mlist
+-    if (lfs2_pair_cmp(dir->pair, lpair) == 0) {
+-        *dir = ldir;
+-    }
+-
+-    // commit was successful, but may require other changes in the
+-    // filesystem, these would normally be tail recursive, but we have
+-    // flattened them here avoid unbounded stack usage
+-
+-    // need to drop?
+-    if (state == LFS2_OK_DROPPED) {
+-        // steal state
+-        int err = lfs2_dir_getgstate(lfs2, dir, &lfs2->gdelta);
+-        if (err) {
+-            return err;
+-        }
+-
+-        // steal tail, note that this can't create a recursive drop
+-        lpair[0] = pdir.pair[0];
+-        lpair[1] = pdir.pair[1];
+-        lfs2_pair_tole32(dir->tail);
+-        state = lfs2_dir_relocatingcommit(lfs2, &pdir, lpair, LFS2_MKATTRS(
+-                    {LFS2_MKTAG(LFS2_TYPE_TAIL + dir->split, 0x3ff, 8),
+-                        dir->tail}),
+-                NULL);
+-        lfs2_pair_fromle32(dir->tail);
+-        if (state < 0) {
+-            return state;
+-        }
+-
+-        ldir = pdir;
+-    }
+ 
+     // need to relocate?
+     bool orphans = false;
+@@ -2597,6 +2620,75 @@ static int lfs2_dir_orphaningcommit(lfs2_t *lfs2, lfs2_mdir_t *dir,
+ }
+ #endif
+ 
++#ifndef LFS2_READONLY
++static int lfs2_dir_orphaningcommit(lfs2_t *lfs2, lfs2_mdir_t *dir,
++        const struct lfs2_mattr *attrs, int attrcount) {
++    // check for any inline files that aren't RAM backed and
++    // forcefully evict them, needed for filesystem consistency
++    for (lfs2_file_t *f = (lfs2_file_t*)lfs2->mlist; f; f = f->next) {
++        if (dir != &f->m && lfs2_pair_cmp(f->m.pair, dir->pair) == 0 &&
++                f->type == LFS2_TYPE_REG && (f->flags & LFS2_F_INLINE) &&
++                f->ctz.size > lfs2->cfg->cache_size) {
++            int err = lfs2_file_outline(lfs2, f);
++            if (err) {
++                return err;
++            }
++
++            err = lfs2_file_flush(lfs2, f);
++            if (err) {
++                return err;
++            }
++        }
++    }
++
++    lfs2_block_t lpair[2] = {dir->pair[0], dir->pair[1]};
++    lfs2_mdir_t ldir = *dir;
++    lfs2_mdir_t pdir;
++    int state = lfs2_dir_relocatingcommit(lfs2, &ldir, dir->pair,
++            attrs, attrcount, &pdir);
++    if (state < 0) {
++        return state;
++    }
++
++    // update if we're not in mlist, note we may have already been
++    // updated if we are in mlist
++    if (lfs2_pair_cmp(dir->pair, lpair) == 0) {
++        *dir = ldir;
++    }
++
++    // commit was successful, but may require other changes in the
++    // filesystem, these would normally be tail recursive, but we have
++    // flattened them here avoid unbounded stack usage
++
++    // need to drop?
++    if (state == LFS2_OK_DROPPED) {
++        // steal state
++        int err = lfs2_dir_getgstate(lfs2, dir, &lfs2->gdelta);
++        if (err) {
++            return err;
++        }
++
++        // steal tail, note that this can't create a recursive drop
++        lpair[0] = pdir.pair[0];
++        lpair[1] = pdir.pair[1];
++        lfs2_pair_tole32(dir->tail);
++        state = lfs2_dir_relocatingcommit(lfs2, &pdir, lpair, LFS2_MKATTRS(
++                    {LFS2_MKTAG(LFS2_TYPE_TAIL + dir->split, 0x3ff, 8),
++                        dir->tail}),
++                NULL);
++        lfs2_pair_fromle32(dir->tail);
++        if (state < 0) {
++            return state;
++        }
++
++        ldir = pdir;
++    }
++
++    // need to relocate?
++    return lfs2_dir_propagate_relocation(lfs2, lpair, &ldir, state);
++}
++#endif
++
+ #ifndef LFS2_READONLY
+ static int lfs2_dir_commit(lfs2_t *lfs2, lfs2_mdir_t *dir,
+         const struct lfs2_mattr *attrs, int attrcount) {
+@@ -3142,20 +3234,67 @@ static int lfs2_file_opencfg_(lfs2_t *lfs2, lfs2_file_t *file,
          err = LFS2_ERR_ISDIR;
          goto cleanup;
  #ifndef LFS2_READONLY
@@ -282,7 +480,7 @@ index 6c3c3ece..63ac398b 100644
      }
  
      // fetch attrs
-@@ -3244,10 +3361,12 @@ static int lfs2_file_open_(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -3244,10 +3383,12 @@ static int lfs2_file_open_(lfs2_t *lfs2, lfs2_file_t *file,
  #endif
  
  static int lfs2_file_close_(lfs2_t *lfs2, lfs2_file_t *file) {
@@ -298,7 +496,7 @@ index 6c3c3ece..63ac398b 100644
  #endif
  
      // remove from list of mdirs
-@@ -3429,18 +3548,12 @@ relocate:
+@@ -3429,18 +3570,12 @@ relocate:
  
  #ifndef LFS2_READONLY
  static int lfs2_file_sync_(lfs2_t *lfs2, lfs2_file_t *file) {
@@ -317,7 +515,7 @@ index 6c3c3ece..63ac398b 100644
      if ((file->flags & LFS2_F_DIRTY) &&
              !lfs2_pair_isnull(file->m.pair)) {
          // before we commit metadata, we need sync the disk to make sure
-@@ -3485,6 +3598,17 @@ static int lfs2_file_sync_(lfs2_t *lfs2, lfs2_file_t *file) {
+@@ -3485,6 +3620,17 @@ static int lfs2_file_sync_(lfs2_t *lfs2, lfs2_file_t *file) {
          file->flags &= ~LFS2_F_DIRTY;
      }
  
@@ -335,7 +533,7 @@ index 6c3c3ece..63ac398b 100644
      return 0;
  }
  #endif
-@@ -3506,7 +3630,12 @@ static lfs2_ssize_t lfs2_file_flushedread(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -3506,7 +3652,12 @@ static lfs2_ssize_t lfs2_file_flushedread(lfs2_t *lfs2, lfs2_file_t *file,
          // check if we need a new block
          if (!(file->flags & LFS2_F_READING) ||
                  file->off == lfs2->cfg->block_size) {
@@ -349,7 +547,7 @@ index 6c3c3ece..63ac398b 100644
                  int err = lfs2_ctz_find(lfs2, NULL, &file->cache,
                          file->ctz.head, file->ctz.size,
                          file->pos, &file->block, &file->off);
-@@ -3692,7 +3821,7 @@ static lfs2_ssize_t lfs2_file_write_(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -3692,7 +3843,7 @@ static lfs2_ssize_t lfs2_file_write_(lfs2_t *lfs2, lfs2_file_t *file,
          return nsize;
      }
  
@@ -358,7 +556,7 @@ index 6c3c3ece..63ac398b 100644
      return nsize;
  }
  #endif
-@@ -3725,6 +3854,7 @@ static lfs2_soff_t lfs2_file_seek_(lfs2_t *lfs2, lfs2_file_t *file,
+@@ -3725,6 +3876,7 @@ static lfs2_soff_t lfs2_file_seek_(lfs2_t *lfs2, lfs2_file_t *file,
      // if we're only reading and our new offset is still in the file's cache
      // we can avoid flushing and needing to reread the data
      if ((file->flags & LFS2_F_READING)
@@ -366,7 +564,7 @@ index 6c3c3ece..63ac398b 100644
              && file->off != lfs2->cfg->block_size) {
          int oindex = lfs2_ctz_index(lfs2, &(lfs2_off_t){file->pos});
          lfs2_off_t noff = npos;
-@@ -4198,6 +4328,10 @@ static int lfs2_removeattr_(lfs2_t *lfs2, const char *path, uint8_t type) {
+@@ -4198,6 +4350,10 @@ static int lfs2_removeattr_(lfs2_t *lfs2, const char *path, uint8_t type) {
  static int lfs2_init(lfs2_t *lfs2, const struct lfs2_config *cfg) {
      lfs2->cfg = cfg;
      lfs2->block_count = cfg->block_count;  // May be 0
@@ -377,7 +575,7 @@ index 6c3c3ece..63ac398b 100644
      int err = 0;
  
  #ifdef LFS2_MULTIVERSION
-@@ -4382,6 +4516,8 @@ static int lfs2_deinit(lfs2_t *lfs2) {
+@@ -4382,6 +4538,8 @@ static int lfs2_deinit(lfs2_t *lfs2) {
          lfs2_free(lfs2->lookahead.buffer);
      }
  
@@ -386,7 +584,7 @@ index 6c3c3ece..63ac398b 100644
      return 0;
  }
  
-@@ -4735,6 +4871,27 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
+@@ -4735,6 +4893,27 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
          }
  
          for (uint16_t id = 0; id < dir.count; id++) {
@@ -414,7 +612,7 @@ index 6c3c3ece..63ac398b 100644
              struct lfs2_ctz ctz;
              lfs2_stag_t tag = lfs2_dir_get(lfs2, &dir, LFS2_MKTAG(0x700, 0x3ff, 0),
                      LFS2_MKTAG(LFS2_TYPE_STRUCT, id, sizeof(ctz)), &ctz);
-@@ -4771,7 +4928,8 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
+@@ -4771,7 +4950,8 @@ int lfs2_fs_traverse_(lfs2_t *lfs2,
              continue;
          }
  
@@ -424,10 +622,12 @@ index 6c3c3ece..63ac398b 100644
              int err = lfs2_ctz_traverse(lfs2, &f->cache, &lfs2->rcache,
                      f->ctz.head, f->ctz.size, cb, data);
              if (err) {
-@@ -5968,6 +6126,460 @@ cleanup:
+@@ -5968,37 +6148,1462 @@ cleanup:
  
  // Public API
  #ifndef LFS2_READONLY
+-int lfs2_format(lfs2_t *lfs2, const struct lfs2_config *cfg) {
+-    int err = LFS2_LOCK(cfg);
 +
 +/// littlefs2e extent files ///
 +
@@ -469,7 +669,8 @@ index 6c3c3ece..63ac398b 100644
 +            lfs2_ext_map_set(meta, p[1]);
 +        }
 +        lfs2_mdir_t m;
-+        if (lfs2_dir_fetch(lfs2, &m, p)) {
++        if (lfs2_dir_fetch(lfs2, &m, p) || !m.split) {
++            // A soft tail (deorphan pred pointer) is not a tail chain.
 +            break;
 +        }
 +        p[0] = m.tail[0];
@@ -485,11 +686,32 @@ index 6c3c3ece..63ac398b 100644
 +
 +    lfs2_dir_t dir;
 +    int err = lfs2_dir_open(lfs2, &dir, path);
-+    if (err) {
-+        return err;
-+    }
+     if (err) {
+         return err;
+     }
+-    LFS2_TRACE("lfs2_format(%p, %p {.context=%p, "
+-                ".read=%p, .prog=%p, .erase=%p, .sync=%p, "
+-                ".read_size=%"PRIu32", .prog_size=%"PRIu32", "
+-                ".block_size=%"PRIu32", .block_count=%"PRIu32", "
+-                ".block_cycles=%"PRId32", .cache_size=%"PRIu32", "
+-                ".lookahead_size=%"PRIu32", .read_buffer=%p, "
+-                ".prog_buffer=%p, .lookahead_buffer=%p, "
+-                ".name_max=%"PRIu32", .file_max=%"PRIu32", "
+-                ".attr_max=%"PRIu32"})",
+-            (void*)lfs2, (void*)cfg, cfg->context,
+-            (void*)(uintptr_t)cfg->read, (void*)(uintptr_t)cfg->prog,
+-            (void*)(uintptr_t)cfg->erase, (void*)(uintptr_t)cfg->sync,
+-            cfg->read_size, cfg->prog_size, cfg->block_size, cfg->block_count,
+-            cfg->block_cycles, cfg->cache_size, cfg->lookahead_size,
+-            cfg->read_buffer, cfg->prog_buffer, cfg->lookahead_buffer,
+-            cfg->name_max, cfg->file_max, cfg->attr_max);
 +    lfs2_ext_mark_pairs(lfs2, dir.m.pair, meta, meta_size);
-+
+ 
+-    err = lfs2_format_(lfs2, cfg);
+-
+-    LFS2_TRACE("lfs2_format -> %d", err);
+-    LFS2_UNLOCK(cfg);
+-    return err;
 +    struct lfs2_info info;
 +    while ((err = lfs2_dir_read(lfs2, &dir, &info)) > 0) {
 +        if (info.type != LFS2_TYPE_DIR) {
@@ -521,8 +743,10 @@ index 6c3c3ece..63ac398b 100644
 +    }
 +    lfs2_dir_close(lfs2, &dir);
 +    return (err < 0) ? err : 0;
-+}
-+
+ }
+-#endif
+ 
+-int lfs2_mount(lfs2_t *lfs2, const struct lfs2_config *cfg) {
 +int lfs2_ext_block_maps(lfs2_t *lfs2,
 +        uint8_t *used, lfs2_size_t used_size,
 +        uint8_t *meta, lfs2_size_t meta_size) {
@@ -550,6 +774,175 @@ index 6c3c3ece..63ac398b 100644
 +    }
 +    return 0;
 +}
++
++// A block reserved for an extent or a defrag window is not in the tree yet.
++static bool lfs2_ext_block_excluded(const lfs2_t *lfs2, lfs2_block_t block) {
++    return lfs2->ext_bitmap
++            && (lfs2->ext_bitmap[block / 8]
++                & (uint8_t)(1U << (block % 8)));
++}
++
++static int lfs2_ext_dir_pairs_walk(lfs2_t *lfs2, const char *path, int depth,
++        int (*cb)(void*, const lfs2_block_t[2], bool), void *data) {
++    if (depth > 8) {
++        return LFS2_ERR_INVAL;
++    }
++
++    lfs2_dir_t dir;
++    int err = lfs2_dir_open(lfs2, &dir, path);
++    if (err) {
++        return err;
++    }
++
++    // Head pair first, then every pair of the split tail chain.
++    lfs2_block_t pair[2] = {dir.m.pair[0], dir.m.pair[1]};
++    for (int tail = 0; !lfs2_pair_isnull(pair) && tail < 128; tail++) {
++        int res = cb(data, pair, tail > 0);
++        if (res) {
++            lfs2_dir_close(lfs2, &dir);
++            return res;
++        }
++        lfs2_mdir_t m;
++        if (lfs2_dir_fetch(lfs2, &m, pair) || !m.split) {
++            // A soft tail (deorphan pred pointer) is not a tail chain.
++            break;
++        }
++        pair[0] = m.tail[0];
++        pair[1] = m.tail[1];
++    }
++
++    struct lfs2_info info;
++    while ((err = lfs2_dir_read(lfs2, &dir, &info)) > 0) {
++        if (info.type != LFS2_TYPE_DIR) {
++            continue;
++        }
++        if (strcmp(info.name, ".") == 0 || strcmp(info.name, "..") == 0) {
++            continue;
++        }
++        char child[LFS2_NAME_MAX+2];
++        lfs2_size_t plen = strlen(path);
++        lfs2_size_t nlen = strlen(info.name);
++        bool slash = strcmp(path, "/") != 0;
++        if (plen + (slash ? 1 : 0) + nlen + 1 > sizeof(child)) {
++            lfs2_dir_close(lfs2, &dir);
++            return LFS2_ERR_NAMETOOLONG;
++        }
++        memcpy(child, path, plen);
++        lfs2_size_t o = plen;
++        if (slash) {
++            child[o++] = '/';
++        }
++        memcpy(child + o, info.name, nlen);
++        child[o + nlen] = '\0';
++        int r = lfs2_ext_dir_pairs_walk(lfs2, child, depth+1, cb, data);
++        if (r) {
++            lfs2_dir_close(lfs2, &dir);
++            return r;
++        }
++    }
++    lfs2_dir_close(lfs2, &dir);
++    return (err < 0) ? err : 0;
++}
++
++int lfs2_ext_dir_pairs(lfs2_t *lfs2,
++        int (*cb)(void*, const lfs2_block_t[2], bool), void *data) {
++    if (!cb) {
++        return LFS2_ERR_INVAL;
++    }
++    return lfs2_ext_dir_pairs_walk(lfs2, "/", 0, cb, data);
++}
++
++#ifndef LFS2_READONLY
++int lfs2_ext_relocate_dir(lfs2_t *lfs2, lfs2_block_t pair[2]) {
++    if (lfs2_pair_isnull(pair)
++            || lfs2_pair_cmp(pair, (const lfs2_block_t[2]){0, 1}) == 0) {
++        return LFS2_ERR_INVAL;
++    }
++
++    lfs2_mdir_t dir;
++    int err = lfs2_dir_fetch(lfs2, &dir, pair);
++    if (err) {
++        return err;
++    }
++
++    // An inline file whose data exceeds the cache is not RAM backed; littlefs
++    // evicts those before compacting a pair (lfs2_dir_orphaningcommit does the
++    // same for the same reason). The eviction commits may move the pair, and
++    // an open file's mdir is fixed up by them, so take the pair from there.
++    lfs2_block_t cur[2] = {pair[0], pair[1]};
++    lfs2_file_t *evicted = NULL;
++    for (lfs2_file_t *f = (lfs2_file_t*)lfs2->mlist; f; f = f->next) {
++        if (f->type == LFS2_TYPE_REG
++                && lfs2_pair_cmp(f->m.pair, dir.pair) == 0
++                && (f->flags & LFS2_F_INLINE)
++                && f->ctz.size > lfs2->cfg->cache_size) {
++            err = lfs2_file_outline(lfs2, f);
++            if (err) {
++                return err;
++            }
++            err = lfs2_file_flush(lfs2, f);
++            if (err) {
++                return err;
++            }
++            evicted = f;
++        }
++    }
++    if (evicted) {
++        cur[0] = evicted->m.pair[0];
++        cur[1] = evicted->m.pair[1];
++    }
++    err = lfs2_dir_fetch(lfs2, &dir, cur);
++    if (err) {
++        return err;
++    }
++
++    // A compaction moves only one half of the pair ({a,b} becomes {c,a}), so a
++    // pair that still has a block inside the excluded window needs a second
++    // pass. With no exclusion active one pass is always enough.
++    for (int pass = 0; pass < 3; pass++) {
++        lfs2_block_t lpair[2] = {dir.pair[0], dir.pair[1]};
++        lfs2_mdir_t ldir = dir;
++        uint16_t end = ldir.count;
++        int state = lfs2_dir_compact(lfs2, &ldir, NULL, 0, &ldir,
++                0, end, true);
++        if (state < 0) {
++            return state;
++        }
++        if (state != LFS2_OK_RELOCATED) {
++            return 0;
++        }
++
++        lfs2_block_t newpair[2] = {ldir.pair[0], ldir.pair[1]};
++        if ((newpair[0] == lpair[0] || newpair[0] == lpair[1])
++                && (newpair[1] == lpair[0] || newpair[1] == lpair[1])) {
++            // No room for a new metadata block: the compaction happened in
++            // place, which cannot clear the window.
++            return LFS2_ERR_NOSPC;
++        }
++
++        int res = lfs2_dir_propagate_relocation(lfs2, lpair, &ldir, state);
++        if (res < 0) {
++            return res;
++        }
++        if (res == LFS2_OK_ORPHANED) {
++            err = lfs2_fs_deorphan(lfs2, false);
++            if (err) {
++                return err;
++            }
++        }
++
++        if (!lfs2_ext_block_excluded(lfs2, newpair[0])
++                && !lfs2_ext_block_excluded(lfs2, newpair[1])) {
++            return 0;
++        }
++        err = lfs2_dir_fetch(lfs2, &dir, newpair);
++        if (err) {
++            return err;
++        }
++    }
++    return LFS2_ERR_NOSPC;
++}
++#endif
 +
 +lfs2_block_t lfs2_ext_largest_run(lfs2_t *lfs2, lfs2_block_t align) {
 +    if (align == 0) {
@@ -878,15 +1271,847 @@ index 6c3c3ece..63ac398b 100644
 +    return 0;
 +}
 +
++/// littlefs2e defragmenter ///
++#ifndef LFS2_READONLY
++
++// A window can only become an extent if it holds no live block at all, so the
++// directories intersecting it are relocated before the ordinary files are
++// moved out. Split-directory tail pairs cannot be relocated on their own: a
++// child is found through its DIRSTRUCT entry, while a tail is referenced by a
++// TAIL tag in the head pair (lfs2_fs_parent matches DIRSTRUCT only), so a tail
++// pair inside a window pins that window. Lifting that needs either a rewrite
++// of the head's TAIL tag to a fresh tail pair or a rebuild of the whole head
++// and tail chain into new pairs; a directory whose *head* is in the window
++// relocates normally.
++
++#define LFS2_EXT_DEFRAG_ATTEMPTS 8
++#define LFS2_EXT_MAX_PAIRS 32
++// Keep the scan's per-frame and per-window footprint small: a filesystem read
++// reaches the block device through a Python callback, which needs its own VM
++// stack, so a few kilobytes here can overflow the MicroPython task stack.
++#define LFS2_EXT_MAX_OCCUPANTS 8
++#define LFS2_EXT_MAX_PATH 96
++#define LFS2_EXT_MAX_DEPTH 6
++#define LFS2_EXT_COPY_BUF 512
++#define LFS2_EXT_FILE_BUF 1024
++
++struct lfs2_ext_block_check {
++    lfs2_block_t head;
++    lfs2_block_t count;
++    lfs2_block_t blocks;
++    bool hit;
++};
++
++struct lfs2_ext_occupant {
++    char path[LFS2_EXT_MAX_PATH];
++    lfs2_size_t size;
++    lfs2_block_t blocks;
++};
++
++struct lfs2_ext_window {
++    lfs2_block_t head;
++    lfs2_block_t count;
++    lfs2_block_t pairs[LFS2_EXT_MAX_PAIRS][2];
++    int pair_count;
++    struct lfs2_ext_occupant files[LFS2_EXT_MAX_OCCUPANTS];
++    int file_count;
++    lfs2_block_t moved_blocks;
++    lfs2_block_t max_file_blocks;
++    struct lfs2_info info;
++    bool reject;
++};
++
++static bool lfs2_ext_in_window(lfs2_block_t block,
++        lfs2_block_t head, lfs2_block_t count) {
++    return block >= head && block < head + count;
++}
++
++static int lfs2_ext_block_check_cb(void *data, lfs2_block_t block) {
++    struct lfs2_ext_block_check *check = data;
++    check->blocks += 1;
++    if (lfs2_ext_in_window(block, check->head, check->count)) {
++        check->hit = true;
++    }
++    return 0;
++}
++
++static int lfs2_ext_used_into(lfs2_t *lfs2, uint8_t *map) {
++    lfs2_size_t size = lfs2_ext_map_size(lfs2);
++    memset(map, 0, size);
++    struct lfs2_ext_map m = {map, size};
++    return lfs2_fs_traverse_(lfs2, lfs2_ext_map_cb, &m, true);
++}
++
++// Reject a window that an open file still holds data blocks in: the caller's
++// handle would keep reading the old blocks after the copy frees them.
++static bool lfs2_ext_open_hits(lfs2_t *lfs2,
++        lfs2_block_t head, lfs2_block_t count) {
++    for (struct lfs2_mlist *d = lfs2->mlist; d; d = d->next) {
++        lfs2_file_t *file = (lfs2_file_t*)d;
++        if (file->type != LFS2_TYPE_REG || (file->flags & LFS2_F_INLINE)) {
++            continue;
++        }
++        struct lfs2_ext_block_check check = {head, count, 0, false};
++        if (file->ctz.size && lfs2_ctz_traverse(lfs2,
++                &file->cache, &lfs2->rcache,
++                file->ctz.head, file->ctz.size,
++                lfs2_ext_block_check_cb, &check)) {
++            return true;
++        }
++        if ((file->flags & LFS2_F_WRITING) && file->pos && lfs2_ctz_traverse(
++                lfs2, &file->cache, &lfs2->rcache,
++                file->block, file->pos,
++                lfs2_ext_block_check_cb, &check)) {
++            return true;
++        }
++        if (check.hit) {
++            return true;
++        }
++    }
++    return false;
++}
++
++// Record a head pair that must be relocated, or reject the window for a tail
++// pair (which cannot move on its own).
++static int lfs2_ext_scan_pair(const lfs2_block_t pair[2],
++        struct lfs2_ext_window *w) {
++    if (lfs2_ext_in_window(pair[0], w->head, w->count)
++            || lfs2_ext_in_window(pair[1], w->head, w->count)) {
++        if (w->pair_count >= LFS2_EXT_MAX_PAIRS) {
++            w->reject = true;
++            return 0;
++        }
++        w->pairs[w->pair_count][0] = pair[0];
++        w->pairs[w->pair_count][1] = pair[1];
++        w->pair_count += 1;
++    }
++    return 0;
++}
++
++static int lfs2_ext_move_file(lfs2_t *lfs2, const char *path) {
++    char tmp[LFS2_EXT_MAX_PATH+4];
++    lfs2_size_t plen = strlen(path);
++    if (plen + 4 > sizeof(tmp)) {
++        return LFS2_ERR_NAMETOOLONG;
++    }
++    memcpy(tmp, path, plen);
++    memcpy(tmp + plen, ".dfg", 5);
++
++    int err = lfs2_remove(lfs2, tmp);
++    if (err && err != LFS2_ERR_NOENT) {
++        return err;
++    }
++
++    uint8_t inbuf[LFS2_EXT_FILE_BUF];
++    uint8_t outbuf[LFS2_EXT_FILE_BUF];
++    struct lfs2_file_config incfg = {.buffer = inbuf, .attrs = NULL};
++    struct lfs2_file_config outcfg = {.buffer = outbuf, .attrs = NULL};
++    lfs2_file_t in;
++    lfs2_file_t out;
++
++    err = lfs2_file_opencfg(lfs2, &in, path, LFS2_O_RDONLY, &incfg);
++    if (err) {
++        return err;
++    }
++    err = lfs2_file_opencfg(lfs2, &out, tmp,
++            LFS2_O_WRONLY | LFS2_O_CREAT | LFS2_O_TRUNC, &outcfg);
++    if (err) {
++        lfs2_file_close(lfs2, &in);
++        lfs2_remove(lfs2, tmp);
++        return err;
++    }
++
++    uint8_t buf[LFS2_EXT_COPY_BUF];
++    while (true) {
++        lfs2_ssize_t n = lfs2_file_read(lfs2, &in, buf, sizeof(buf));
++        if (n < 0) {
++            err = (int)n;
++            break;
++        }
++        if (n == 0) {
++            err = 0;
++            break;
++        }
++        lfs2_ssize_t written = lfs2_file_write(lfs2, &out, buf, n);
++        if (written != n) {
++            err = (written < 0) ? (int)written : LFS2_ERR_IO;
++            break;
++        }
++    }
++    int cerr = lfs2_file_close(lfs2, &in);
++    if (!err) {
++        err = cerr;
++    }
++    cerr = lfs2_file_close(lfs2, &out);
++    if (!err) {
++        err = cerr;
++    }
++    if (err) {
++        lfs2_remove(lfs2, tmp);
++        return err;
++    }
++
++    err = lfs2_rename(lfs2, tmp, path);
++    if (err) {
++        lfs2_remove(lfs2, tmp);
++    }
++    return err;
++}
++
++// The scan walks directories by pair, from DIRSTRUCT tags, because a path
++// lookup costs a full metadata scan per component and every tag read reaches
++// flash through a Python callback. It is iterative (one frame per open
++// directory) so a step can stop between entries without using the C stack.
++struct lfs2_ext_scan_frame {
++    lfs2_block_t pair[2];
++    char path[LFS2_EXT_MAX_PATH];
++    uint16_t id;        // next entry of this directory
++    uint16_t tails;     // tail pairs followed so far
++    bool fetched;       // `cur` holds this frame's mdir
++};
++
++enum {
++    LFS2_EXT_STATE_RANK,
++    LFS2_EXT_STATE_SCAN,
++    LFS2_EXT_STATE_WORK,
++    LFS2_EXT_STATE_ERASE,
++    LFS2_EXT_STATE_DONE,
++};
++
++// One defragmenter at a time: the OS has one root filesystem and serialises
++// installs, and the state is too large for the task stack.
++struct lfs2_ext_defrag_state {
++    bool active;
++    bool fixed;
++    bool map_built;
++    bool excluded;
++    lfs2_t *lfs2;
++    lfs2_size_t length;
++    lfs2_block_t count;
++    lfs2_block_t align;
++    lfs2_size_t budget;
++    uint8_t state;
++    lfs2_block_t head;
++    lfs2_block_t tried[LFS2_EXT_DEFRAG_ATTEMPTS];
++    int tried_count;
++    lfs2_block_t free_blocks;
++    lfs2_size_t moved;
++    int rounds;
++    struct lfs2_ext_window w;
++    struct lfs2_ext_scan_frame stack[LFS2_EXT_MAX_DEPTH+1];
++    int depth;
++    lfs2_mdir_t cur;
++    int pair_index;
++    int file_index;
++    lfs2_block_t erase_next;
++    lfs2_ext_t out;
++};
++
++static struct lfs2_ext_defrag_state lfs2_ext_defrag_state;
++
++static void lfs2_ext_scan_reset(struct lfs2_ext_defrag_state *s) {
++    memset(&s->w, 0, sizeof(s->w));
++    s->w.head = s->head;
++    s->w.count = s->count;
++    s->depth = 0;
++    s->stack[0].pair[0] = s->lfs2->root[0];
++    s->stack[0].pair[1] = s->lfs2->root[1];
++    strcpy(s->stack[0].path, "/");
++    s->stack[0].id = 0;
++    s->stack[0].tails = 0;
++    s->stack[0].fetched = false;
++    s->pair_index = 0;
++    s->file_index = 0;
++    lfs2_ext_scan_pair(s->lfs2->root, &s->w);
++}
++
++// Process at most one entry (or one directory fetch/pop). Returns 1 while the
++// scan has more to do, 0 when it finished, or a negative error.
++static int lfs2_ext_scan_step(struct lfs2_ext_defrag_state *s) {
++    lfs2_t *lfs2 = s->lfs2;
++
++    if (s->w.reject) {
++        return 0;
++    }
++    if (s->depth < 0) {
++        return 0;
++    }
++
++    struct lfs2_ext_scan_frame *frame = &s->stack[s->depth];
++    if (!frame->fetched) {
++        int err = lfs2_dir_fetch(lfs2, &s->cur, frame->pair);
++        if (err) {
++            return err;
++        }
++        frame->fetched = true;
++        return 1;
++    }
++
++    if (frame->id >= s->cur.count) {
++        if (s->cur.split) {
++            if (++frame->tails > 128) {
++                return LFS2_ERR_CORRUPT;
++            }
++            // A split directory's tail pair belongs to this directory and is
++            // not a relocate target; a window holding one is pinned.
++            if (lfs2_ext_in_window(s->cur.tail[0], s->head, s->count)
++                    || lfs2_ext_in_window(s->cur.tail[1],
++                        s->head, s->count)) {
++                s->w.reject = true;
++                return 0;
++            }
++            int err = lfs2_dir_fetch(lfs2, &s->cur, s->cur.tail);
++            if (err) {
++                return err;
++            }
++            frame->id = 0;
++            return 1;
++        }
++        if (s->depth == 0) {
++            s->depth = -1;
++            return 0;
++        }
++        // The parent's cursor is kept; its mdir has to be fetched again
++        // because `cur` now holds a descendant.
++        s->depth -= 1;
++        s->stack[s->depth].fetched = false;
++        return 1;
++    }
++
++    uint16_t id = frame->id++;
++    // One lookup covers every data tag: the 0x700 mask keeps the type but not
++    // the chunk, so DIRSTRUCT, INLINESTRUCT, CTZSTRUCT and EXTSTRUCT all
++    // match and are told apart by type3. The first 12 bytes are enough for a
++    // ctz (head/size), a DIRSTRUCT pair and an extent's head/count.
++    union {
++        struct lfs2_ctz ctz;
++        lfs2_ext_t ext;
++    } data;
++    lfs2_stag_t tag = lfs2_dir_get(lfs2, &s->cur,
++            LFS2_MKTAG(0x700, 0x3ff, 0),
++            LFS2_MKTAG(LFS2_TYPE_STRUCT, id, sizeof(struct lfs2_ctz)),
++            &data);
++    if (tag == LFS2_ERR_NOENT) {
++        return 1;
++    }
++    if (tag < 0) {
++        return (int)tag;
++    }
++
++    if (lfs2_tag_type3(tag) == LFS2_TYPE_EXTSTRUCT) {
++        // An extent's payload is immutable: reject the window instead of
++        // moving or writing over it.
++        lfs2_block_t ehead = lfs2_fromle32((&data.ctz.head)[0]);
++        lfs2_block_t ecount = lfs2_fromle32((&data.ctz.head)[1]);
++        if (ecount
++                && ehead < s->head + s->count
++                && s->head < ehead + ecount) {
++            s->w.reject = true;
++        }
++        return 1;
++    }
++
++    lfs2_block_t child_pair[2] = {0, 0};
++    bool is_dir = false;
++    bool hit = false;
++    lfs2_block_t file_blocks = 0;
++    if (lfs2_tag_type3(tag) == LFS2_TYPE_DIRSTRUCT) {
++        child_pair[0] = (&data.ctz.head)[0];
++        child_pair[1] = (&data.ctz.head)[1];
++        lfs2_pair_fromle32(child_pair);
++        is_dir = true;
++    } else if (lfs2_tag_type3(tag) == LFS2_TYPE_CTZSTRUCT) {
++        lfs2_ctz_fromle32(&data.ctz);
++        struct lfs2_ext_block_check check = {s->head, s->count, 0, false};
++        int err = lfs2_ctz_traverse(lfs2, NULL, &lfs2->rcache,
++                data.ctz.head, data.ctz.size,
++                lfs2_ext_block_check_cb, &check);
++        if (err) {
++            return err;
++        }
++        hit = check.hit;
++        file_blocks = check.blocks;
++    } else {
++        // Inline data (or no data tag): nothing outside the pair.
++        return 1;
++    }
++
++    if (!is_dir && !hit) {
++        return 1;
++    }
++
++    // The name is only needed for entries the window keeps, and it is another
++    // full metadata scan.
++    lfs2_stag_t ntag = lfs2_dir_get(lfs2, &s->cur,
++            LFS2_MKTAG(0x780, 0x3ff, 0),
++            LFS2_MKTAG(LFS2_TYPE_NAME, id, LFS2_NAME_MAX+1),
++            s->w.info.name);
++    if (ntag == LFS2_ERR_NOENT) {
++        return 1;
++    }
++    if (ntag < 0) {
++        return (int)ntag;
++    }
++    s->w.info.name[lfs2_tag_size(ntag)] = '\0';
++
++    lfs2_size_t plen = strlen(frame->path);
++    lfs2_size_t nlen = strlen(s->w.info.name);
++    bool slash = strcmp(frame->path, "/") != 0;
++    if (plen + (slash ? 1 : 0) + nlen + 1 > LFS2_EXT_MAX_PATH) {
++        // Cannot address the entry; the final used-map check refuses a window
++        // it occupies.
++        return 1;
++    }
++    char child[LFS2_EXT_MAX_PATH];
++    memcpy(child, frame->path, plen);
++    lfs2_size_t o = plen;
++    if (slash) {
++        child[o++] = '/';
++    }
++    memcpy(child + o, s->w.info.name, nlen);
++    child[o + nlen] = '\0';
++
++    if (is_dir) {
++        int err = lfs2_ext_scan_pair(child_pair, &s->w);
++        if (err || s->w.reject) {
++            return err;
++        }
++        if (s->depth < LFS2_EXT_MAX_DEPTH) {
++            s->depth += 1;
++            struct lfs2_ext_scan_frame *child_frame = &s->stack[s->depth];
++            child_frame->pair[0] = child_pair[0];
++            child_frame->pair[1] = child_pair[1];
++            memcpy(child_frame->path, child, o + nlen + 1);
++            child_frame->id = 0;
++            child_frame->tails = 0;
++            child_frame->fetched = false;
++        }
++        return 1;
++    }
++
++    if (s->w.file_count >= LFS2_EXT_MAX_OCCUPANTS) {
++        // More than one round can carry; the next round picks these up.
++        return 1;
++    }
++    struct lfs2_ext_occupant *occ = &s->w.files[s->w.file_count];
++    memcpy(occ->path, child, o + nlen + 1);
++    occ->size = data.ctz.size;
++    occ->blocks = file_blocks;
++    s->w.file_count += 1;
++    s->w.moved_blocks += file_blocks + 1;
++    if (file_blocks > s->w.max_file_blocks) {
++        s->w.max_file_blocks = file_blocks;
++    }
++    return 1;
++}
++
++static int lfs2_ext_defrag_begin_common(lfs2_t *lfs2, lfs2_size_t length,
++        lfs2_block_t align, lfs2_size_t budget_blocks, bool fixed,
++        lfs2_block_t head, lfs2_block_t count) {
++    if (lfs2_ext_defrag_state.active || lfs2->ext_bitmap) {
++        return LFS2_ERR_INVAL;
++    }
++    if (align == 0) {
++        align = 1;
++    }
++    lfs2_size_t bs = lfs2->cfg->block_size;
++    if (count == 0) {
++        count = (length + bs - 1) / bs;
++    }
++    if (count == 0 || count > lfs2->block_count
++            || (fixed && head >= lfs2->block_count)
++            || (fixed && count > lfs2->block_count - head)) {
++        return LFS2_ERR_NOSPC;
++    }
++    if (lfs2_ext_map_size(lfs2) > LFS2_EXT_MAP_MAX
++            || lfs2->cfg->cache_size > LFS2_EXT_FILE_BUF) {
++        return LFS2_ERR_NOMEM;
++    }
++
++    memset(&lfs2_ext_defrag_state, 0, sizeof(lfs2_ext_defrag_state));
++    struct lfs2_ext_defrag_state *s = &lfs2_ext_defrag_state;
++    s->active = true;
++    s->fixed = fixed;
++    s->lfs2 = lfs2;
++    s->length = length;
++    s->count = count;
++    s->align = align;
++    s->budget = budget_blocks;
++    s->head = head;
++    s->state = LFS2_EXT_STATE_RANK;
++    return 0;
++}
++
++int lfs2_ext_defrag_begin(lfs2_t *lfs2, lfs2_size_t length,
++        lfs2_block_t align, lfs2_size_t budget_blocks) {
++    if (length == 0) {
++        return LFS2_ERR_INVAL;
++    }
++    return lfs2_ext_defrag_begin_common(lfs2, length, align, budget_blocks,
++            false, LFS2_BLOCK_NULL, 0);
++}
++
++void lfs2_ext_defrag_abort(lfs2_t *lfs2) {
++    struct lfs2_ext_defrag_state *s = &lfs2_ext_defrag_state;
++    if (!s->active) {
++        return;
++    }
++    if (s->excluded) {
++        lfs2_ext_clear_exclude(lfs2);
++    }
++    s->active = false;
++}
++
++int lfs2_ext_defrag_result(lfs2_t *lfs2, lfs2_ext_t *out) {
++    (void)lfs2;
++    if (!out || lfs2_ext_defrag_state.state != LFS2_EXT_STATE_DONE) {
++        return LFS2_ERR_INVAL;
++    }
++    *out = lfs2_ext_defrag_state.out;
++    return 0;
++}
++
++// Run one bounded unit of work. Returns 1 while there is more to do, 0 when the
++// window is cleared (and, for a reservation, the run is reserved), or a
++// negative error. `phase`/`percent` may be NULL.
++static int lfs2_ext_reserve_mark(lfs2_t *lfs2, lfs2_block_t head,
++        lfs2_block_t count, lfs2_size_t length, lfs2_ext_t *out);
++
++int lfs2_ext_defrag_step(lfs2_t *lfs2, uint8_t *phase, uint8_t *percent) {
++    struct lfs2_ext_defrag_state *s = &lfs2_ext_defrag_state;
++    if (!s->active || s->lfs2 != lfs2) {
++        return LFS2_ERR_INVAL;
++    }
++
++    int err = 0;
++    switch (s->state) {
++    case LFS2_EXT_STATE_RANK: {
++        if (!s->map_built) {
++            err = lfs2_ext_used_into(lfs2, lfs2->ext_map);
++            if (err) {
++                break;
++            }
++            lfs2_block_t used_blocks = 0;
++            for (lfs2_block_t b = 0; b < lfs2->block_count; b++) {
++                used_blocks += lfs2_ext_map_get(lfs2->ext_map, b);
++            }
++            // Moving a file frees its old blocks inside the window and takes
++            // its copy from outside it, so this is a lower bound.
++            s->free_blocks = lfs2->block_count - used_blocks;
++            s->map_built = true;
++        }
++
++        if (s->fixed) {
++            if (lfs2_ext_in_window(0, s->head, s->count)
++                    || lfs2_ext_in_window(1, s->head, s->count)) {
++                err = LFS2_ERR_NOSPC;
++                break;
++            }
++            s->state = LFS2_EXT_STATE_SCAN;
++            lfs2_ext_scan_reset(s);
++            break;
++        }
++
++        // Rank the aligned windows by how many used blocks they hold and take
++        // the best one not tried yet.
++        lfs2_block_t best = LFS2_BLOCK_NULL;
++        lfs2_block_t best_used = 0;
++        for (lfs2_block_t h = 0; h + s->count <= lfs2->block_count;
++                h += s->align) {
++            bool skip = false;
++            for (int i = 0; i < s->tried_count; i++) {
++                if (s->tried[i] == h) {
++                    skip = true;
++                    break;
++                }
++            }
++            if (skip) {
++                continue;
++            }
++            lfs2_block_t in_window = 0;
++            for (lfs2_block_t b = h; b < h+s->count; b++) {
++                in_window += lfs2_ext_map_get(lfs2->ext_map, b);
++            }
++            if (best == LFS2_BLOCK_NULL || in_window < best_used) {
++                best = h;
++                best_used = in_window;
++            }
++        }
++        if (best == LFS2_BLOCK_NULL || s->tried_count >= LFS2_EXT_DEFRAG_ATTEMPTS) {
++            err = LFS2_ERR_NOSPC;
++            break;
++        }
++        s->tried[s->tried_count++] = best;
++        s->head = best;
++        s->state = LFS2_EXT_STATE_SCAN;
++        lfs2_ext_scan_reset(s);
++        break;
++    }
++
++    case LFS2_EXT_STATE_SCAN: {
++        int res = lfs2_ext_scan_step(s);
++        if (res < 0) {
++            err = res;
++            break;
++        }
++        if (res > 0) {
++            break;
++        }
++        if (s->w.reject) {
++            // Unusable window: drop it and look for another.
++            if (s->fixed) {
++                err = LFS2_ERR_NOSPC;
++            } else {
++                s->state = LFS2_EXT_STATE_RANK;
++                s->map_built = false;
++            }
++            break;
++        }
++        if (s->w.pair_count == 0 && s->w.file_count == 0) {
++            // Nothing live is left in the window.
++            if (s->fixed) {
++                s->state = LFS2_EXT_STATE_DONE;
++            } else {
++                s->state = LFS2_EXT_STATE_ERASE;
++                s->erase_next = s->head;
++            }
++            break;
++        }
++        if (s->budget && s->moved + s->w.moved_blocks > s->budget) {
++            err = LFS2_ERR_NOSPC;
++            break;
++        }
++        if (lfs2_ext_open_hits(lfs2, s->head, s->count)) {
++            err = LFS2_ERR_NOSPC;
++            break;
++        }
++        if (s->free_blocks < s->w.max_file_blocks + 2 + 2*s->w.pair_count) {
++            err = LFS2_ERR_NOSPC;
++            break;
++        }
++
++        err = lfs2_ext_exclude(lfs2, s->head, s->count);
++        if (err) {
++            break;
++        }
++        s->excluded = true;
++        s->state = LFS2_EXT_STATE_WORK;
++        break;
++    }
++
++    case LFS2_EXT_STATE_WORK: {
++        if (s->pair_index < s->w.pair_count) {
++            lfs2_block_t pair[2] = {
++                s->w.pairs[s->pair_index][0],
++                s->w.pairs[s->pair_index][1],
++            };
++            s->pair_index += 1;
++            int res = lfs2_ext_relocate_dir(lfs2, pair);
++            if (res && res != LFS2_ERR_NOSPC) {
++                err = res;
++            }
++            break;
++        }
++        if (s->file_index < s->w.file_count) {
++            int res = lfs2_ext_move_file(lfs2,
++                    s->w.files[s->file_index].path);
++            s->file_index += 1;
++            if (res) {
++                err = res;
++            }
++            break;
++        }
++
++        // This round's occupants are out; scan again for the next round.
++        s->moved += s->w.moved_blocks;
++        lfs2_ext_clear_exclude(lfs2);
++        s->excluded = false;
++        s->rounds += 1;
++        // An occupant holds at least one block, so this bounds the rounds.
++        if (s->rounds > (int)(s->count / LFS2_EXT_MAX_OCCUPANTS) + 2) {
++            err = LFS2_ERR_NOSPC;
++            break;
++        }
++        s->state = LFS2_EXT_STATE_SCAN;
++        lfs2_ext_scan_reset(s);
++        break;
++    }
++
++    case LFS2_EXT_STATE_ERASE: {
++        bool corrupt = false;
++        for (int i = 0; i < 8 && s->erase_next < s->head + s->count; i++) {
++            int res = lfs2_bd_erase(lfs2, s->erase_next);
++            s->erase_next += 1;
++            if (res) {
++                if (res == LFS2_ERR_CORRUPT) {
++                    corrupt = true;
++                    break;
++                }
++                err = res;
++                break;
++            }
++        }
++        if (err) {
++            break;
++        }
++        if (corrupt) {
++            // A bad block disqualifies this window; try the next one.
++            s->map_built = false;
++            s->state = LFS2_EXT_STATE_RANK;
++            break;
++        }
++        if (s->erase_next < s->head + s->count) {
++            break;
++        }
++        err = lfs2_ext_reserve_mark(lfs2, s->head, s->count, s->length,
++                &s->out);
++        if (err) {
++            break;
++        }
++        s->excluded = false;    // the reservation owns the map now
++        s->state = LFS2_EXT_STATE_DONE;
++        break;
++    }
++
++    case LFS2_EXT_STATE_DONE:
++        break;
++    }
++
++    if (err) {
++        lfs2_ext_defrag_abort(lfs2);
++        return err;
++    }
++
++    if (phase) {
++        if (s->state == LFS2_EXT_STATE_RANK
++                || s->state == LFS2_EXT_STATE_SCAN) {
++            *phase = LFS2_EXT_PHASE_SPACE;
++        } else if (s->state == LFS2_EXT_STATE_WORK) {
++            *phase = LFS2_EXT_PHASE_MOVE;
++        } else {
++            *phase = LFS2_EXT_PHASE_ERASE;
++        }
++    }
++    if (percent) {
++        if (s->state == LFS2_EXT_STATE_WORK) {
++            int total = s->w.pair_count + s->w.file_count;
++            int done = s->pair_index + s->file_index;
++            *percent = total ? (uint8_t)((done * 100) / total) : 100;
++        } else if (s->state == LFS2_EXT_STATE_ERASE) {
++            *percent = s->count
++                    ? (uint8_t)(((s->erase_next - s->head) * 100) / s->count)
++                    : 100;
++        } else if (s->state == LFS2_EXT_STATE_DONE) {
++            *percent = 100;
++        } else {
++            *percent = 0;
++        }
++    }
++
++    return (s->state == LFS2_EXT_STATE_DONE) ? 0 : 1;
++}
++
++// Turn a cleared window into a reservation, as lfs2_ext_reserve() does after
++// its search.
++static int lfs2_ext_reserve_mark(lfs2_t *lfs2, lfs2_block_t head,
++        lfs2_block_t count, lfs2_size_t length, lfs2_ext_t *out) {
++    lfs2_size_t size = lfs2_ext_map_size(lfs2);
++    memset(lfs2->ext_map, 0, size);
++    lfs2->ext_bitmap = lfs2->ext_map;
++    lfs2->ext_head = head;
++    lfs2->ext_count = count;
++    lfs2->ext_length = length;
++    for (lfs2_block_t b = head; b < head+count; b++) {
++        lfs2_ext_map_set(lfs2->ext_bitmap, b);
++    }
++    out->head = head;
++    out->count = count;
++    out->length = length;
++    out->crc = 0;
++    out->flags = 0;
++    return 0;
++}
++
++int lfs2_ext_clear_window(lfs2_t *lfs2, lfs2_block_t head, lfs2_block_t count,
++        lfs2_size_t budget_blocks) {
++    int err = lfs2_ext_defrag_begin_common(lfs2, 0, 1, budget_blocks,
++            true, head, count);
++    if (err) {
++        return err;
++    }
++    while ((err = lfs2_ext_defrag_step(lfs2, NULL, NULL)) > 0) {
++    }
++    if (err < 0) {
++        return err;
++    }
++    return 0;
++}
++
++int lfs2_ext_defrag(lfs2_t *lfs2, lfs2_size_t length, lfs2_block_t align,
++        lfs2_size_t budget_blocks, lfs2_ext_t *out) {
++    int err = lfs2_ext_defrag_begin(lfs2, length, align, budget_blocks);
++    if (err) {
++        return err;
++    }
++    while ((err = lfs2_ext_defrag_step(lfs2, NULL, NULL)) > 0) {
++    }
++    if (err < 0) {
++        return err;
++    }
++    err = lfs2_ext_defrag_result(lfs2, out);
++    lfs2_ext_defrag_abort(lfs2);
++    return err;
++}
++
++#endif
++
 +lfs2_size_t lfs2_fs_block_count(lfs2_t *lfs2) {
 +    return lfs2->block_count;
 +}
 +
- int lfs2_format(lfs2_t *lfs2, const struct lfs2_config *cfg) {
++int lfs2_format(lfs2_t *lfs2, const struct lfs2_config *cfg) {
++    int err = LFS2_LOCK(cfg);
++    if (err) {
++        return err;
++    }
++    LFS2_TRACE("lfs2_format(%p, %p {.context=%p, "
++                ".read=%p, .prog=%p, .erase=%p, .sync=%p, "
++                ".read_size=%"PRIu32", .prog_size=%"PRIu32", "
++                ".block_size=%"PRIu32", .block_count=%"PRIu32", "
++                ".block_cycles=%"PRId32", .cache_size=%"PRIu32", "
++                ".lookahead_size=%"PRIu32", .read_buffer=%p, "
++                ".prog_buffer=%p, .lookahead_buffer=%p, "
++                ".name_max=%"PRIu32", .file_max=%"PRIu32", "
++                ".attr_max=%"PRIu32"})",
++            (void*)lfs2, (void*)cfg, cfg->context,
++            (void*)(uintptr_t)cfg->read, (void*)(uintptr_t)cfg->prog,
++            (void*)(uintptr_t)cfg->erase, (void*)(uintptr_t)cfg->sync,
++            cfg->read_size, cfg->prog_size, cfg->block_size, cfg->block_count,
++            cfg->block_cycles, cfg->cache_size, cfg->lookahead_size,
++            cfg->read_buffer, cfg->prog_buffer, cfg->lookahead_buffer,
++            cfg->name_max, cfg->file_max, cfg->attr_max);
++
++    err = lfs2_format_(lfs2, cfg);
++
++    LFS2_TRACE("lfs2_format -> %d", err);
++    LFS2_UNLOCK(cfg);
++    return err;
++}
++#endif
++
++int lfs2_mount(lfs2_t *lfs2, const struct lfs2_config *cfg) {
++    // A mount invalidates a defragmenter that was in flight: it can only be
++    // left behind by a non-local exit (a power-loss injection, an aborted
++    // bytecode), and its window no longer describes the filesystem.
++    if (lfs2_ext_defrag_state.active) {
++        memset(&lfs2_ext_defrag_state, 0, sizeof(lfs2_ext_defrag_state));
++    }
++
      int err = LFS2_LOCK(cfg);
      if (err) {
+         return err;
 diff --git a/lib/littlefs/lfs2.h b/lib/littlefs/lfs2.h
-index 77477aaf..3f5f725c 100644
+index 77477aaf..f00aeba6 100644
 --- a/lib/littlefs/lfs2.h
 +++ b/lib/littlefs/lfs2.h
 @@ -21,14 +21,27 @@ extern "C"
@@ -1000,7 +2225,7 @@ index 77477aaf..3f5f725c 100644
  
  #ifdef LFS2_MIGRATE
      struct lfs21 *lfs21;
-@@ -794,6 +834,67 @@ int lfs2_migrate(lfs2_t *lfs2, const struct lfs2_config *cfg);
+@@ -794,6 +834,122 @@ int lfs2_migrate(lfs2_t *lfs2, const struct lfs2_config *cfg);
  #endif
  
  
@@ -1049,6 +2274,61 @@ index 77477aaf..3f5f725c 100644
 +// nothing. Extent files yield their whole run.
 +int lfs2_ext_file_blocks(lfs2_t *lfs2, const char *path,
 +        int (*cb)(void*, lfs2_block_t), void *data);
++
++// Enumerate every directory metadata pair, calling cb(data, pair, tail): once
++// for the directory's head pair and once per pair of a split-directory tail
++// chain (`tail` is true for those).
++int lfs2_ext_dir_pairs(lfs2_t *lfs2,
++        int (*cb)(void*, const lfs2_block_t[2], bool), void *data);
++
++#ifndef LFS2_READONLY
++// Relocate the directory whose metadata pair is `pair`: commit a compacted
++// copy to a fresh pair, repoint the parent, then unlink the old pair. Refuses
++// the root pair with LFS2_ERR_INVAL. One call moves one half of the pair;
++// while an allocation exclusion is active it repeats until both blocks are
++// outside it (LFS2_ERR_NOSPC when that is not possible). The root pair's tail
++// can move, but a split directory's tail pair cannot be targeted directly.
++int lfs2_ext_relocate_dir(lfs2_t *lfs2, lfs2_block_t pair[2]);
++
++// Move every movable occupant out of [head, head+count): first relocate the
++// directories whose pairs intersect it, then copy ordinary files to a
++// temporary name and rename them back, with the window excluded from
++// allocation. `budget_blocks` caps the blocks moved (0 = no cap).
++//
++// Extent blocks, open files and split-directory tail pairs pin a window, so
++// it returns LFS2_ERR_NOSPC for those rather than risk the payload or a live
++// handle. A failure part way through leaves a consistent filesystem and a
++// partially cleared window.
++int lfs2_ext_clear_window(lfs2_t *lfs2, lfs2_block_t head,
++        lfs2_block_t count, lfs2_size_t budget_blocks);
++
++// Defragment until a run of `length` bytes starting on an `align`-block
++// boundary is free, and reserve it exactly as lfs2_ext_reserve() would.
++// Candidate windows are tried best-first. Returns LFS2_ERR_NOSPC when no
++// window can be cleared.
++int lfs2_ext_defrag(lfs2_t *lfs2, lfs2_size_t length, lfs2_block_t align,
++        lfs2_size_t budget_blocks, lfs2_ext_t *out);
++
++// The same operation in steps, so a caller that must keep a UI alive can
++// yield between them. One step is a directory fetch, a single entry of the
++// scan, one relocated pair, one moved file or eight erased blocks.
++//
++// Only one defragmenter may run at a time; a second begin returns
++// LFS2_ERR_INVAL, as does a begin while a reservation is in flight.
++enum {
++    LFS2_EXT_PHASE_SPACE = 0,
++    LFS2_EXT_PHASE_MOVE  = 1,
++    LFS2_EXT_PHASE_ERASE = 2,
++};
++
++int lfs2_ext_defrag_begin(lfs2_t *lfs2, lfs2_size_t length,
++        lfs2_block_t align, lfs2_size_t budget_blocks);
++// 1 = more to do, 0 = the run is reserved, negative = error (which also ends
++// the operation). phase/percent are best-effort progress and may be NULL.
++int lfs2_ext_defrag_step(lfs2_t *lfs2, uint8_t *phase, uint8_t *percent);
++int lfs2_ext_defrag_result(lfs2_t *lfs2, lfs2_ext_t *out);
++void lfs2_ext_defrag_abort(lfs2_t *lfs2);
++#endif
 +
 +#ifndef LFS2_READONLY
 +// Exclude [head, head+count) from allocation while defrag moves files.

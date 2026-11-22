@@ -50,15 +50,65 @@ immutable runs ("extents").
 
 ## Defrag
 
-`mpos.extent.defrag(need, align)` (and the C helpers) plans a window:
-`lfs2_ext_block_maps()` gives used and metadata-pair bitmaps,
-`lfs2_ext_file_blocks()` gives per-file ownership. It picks the aligned
-window with the smallest total file size, excludes it with
-`lfs2_ext_exclude()`, moves the occupying normal files with copy+rename
-(atomic per file), clears the exclusion and checks `lfs2_ext_largest_run()`.
-Metadata pairs and existing extents are never moved. The budget is derived
-from the extent size, filesystem size and free space; if no window fits, the
-caller gets `LFS_ERR_NOCONTIG`.
+`lfs2_ext_defrag_begin()` / `step()` / `result()` / `abort()` plan and perform
+the whole operation in C, one bounded unit per step (a directory fetch, one
+entry, one relocated pair, one moved file or eight erased blocks).
+`lfs2_ext_defrag()` is the synchronous wrapper. A step reports a phase
+(`SPACE`, `MOVE`, `ERASE`) and a best-effort percent, so a caller that owns a UI
+can await between steps and show "Defragmenting storage... 60%" instead of
+freezing for the whole operation. Only one run is active at a time; a mount
+discards a stale one (a non-local exit, such as a power-loss injection, would
+otherwise leave it behind).
+
+1. A used map ranks aligned windows by how many used blocks they hold.
+2. A window holding an extent, the root pair or a split directory's **tail**
+   pair is rejected; a window holding an open file's blocks is rejected too.
+3. `lfs2_ext_clear_window()` excludes the window from the allocator, relocates
+   every directory whose pair intersects it (`lfs2_ext_relocate_dir()`), then
+   copies each occupying ordinary file to `<name>.dfg` and renames it back.
+   Occupants are processed in rounds, so a window with many files needs no
+   large table.
+4. The cleared window is erased and reserved exactly as `lfs2_ext_reserve()`
+   does, so `lfs2e.commit()` can turn it into an extent. Rounds are capped by
+   the window size (`count / occupants + 2`), not a fixed number: an 80-block
+   window full of one-block files needs ten rounds.
+
+`lfs2_ext_relocate_dir()` compacts the directory into a fresh metadata block,
+repoints the parent (following the chain when the parent relocates too) and
+unlinks the old pair: copy, switch, orphan, never move in place. A compaction
+moves only one half of the pair (`{a,b}` becomes `{c,a}`), so the call repeats
+while either block is inside an active exclusion.
+
+The window scan walks directories **by pair**, from `DIRSTRUCT` tags, not by
+path. On the badge every tag read reaches flash through a Python block-device
+callback, and a path lookup costs a full metadata scan per component: the
+path-based version took 43 s to clear one 48-block window on a MaTouch, while
+the pair walk on the same fixture is 18 s. One `lfs2_dir_get` per entry covers
+every data tag (the 0x700 mask matches DIRSTRUCT, INLINE, CTZ and EXTSTRUCT;
+`type3` tells them apart), and the name of an entry is read only when the
+window keeps it, because each of those reads is another full metadata scan.
+
+The cost is the device, not the algorithm: a metadata block scan is ~11 ms
+here, so the scan of a ~140-file tree is ~5 s and an install-time defrag takes
+18 s on a 7 MiB filesystem with 192 KiB to clear (5 s per scan, one extra
+round, the rest moving 48 blocks and erasing the window). If that needs to be
+faster, raise the VFS `cache_size` to the block size: a metadata scan would be
+one block read instead of four, which is 4x on every tag access at the cost of
+8 KiB of RAM for the two filesystem caches.
+
+A split directory's tail pair cannot be relocated this way: `lfs2_fs_parent()`
+finds a child through its `DIRSTRUCT` entry, while a tail is referenced by a
+`TAIL` tag in the head pair. A window holding one is skipped, which is the one
+remaining ceiling on the largest run. Lifting it means either rewriting the
+head's `TAIL` tag to point at a freshly allocated tail pair, or rebuilding the
+head and its whole tail chain into new pairs.
+
+`mpos.extent` is policy only (alignment, CRC, streaming). `Writer` calls
+`lfs2e.defrag()` when `reserve()` reports `LFS_ERR_NOCONTIG`;
+`open_writer()` runs the steps with `await asyncio.sleep(0)` between them, and
+the installer awaits it with a progress callback. Doom's launch screen, which
+has no event loop to yield to, uses `ensure(progress=...)`: the hook calls
+`lv.refr_now()` between steps, the same way its other launch messages work.
 
 ## MicroPython glue
 
@@ -72,6 +122,18 @@ caller gets `LFS_ERR_NOCONTIG`.
 ## Tests
 
 `tests/littlefs_run.sh` downloads the v2.11.3 test runner, reverse-prefixes
-the patched `lfs2_*` sources and runs `tests/littlefs_test_extent.toml`. The
-rest of the upstream suite (including `test_compat`, now that the format is
-2.1) passes as well.
+the patched `lfs2_*` sources and runs two case files:
+
+- `tests/littlefs_test_extent.toml` — extent create/read/stat/rename/remove,
+  alignment, disk version, `LFS_ERR_NOCONTIG`;
+- `tests/littlefs_test_relocate.toml` — metadata relocation (contents, root
+  refusal, the two-pass window clear, the parent chain through injected bad
+  blocks, a split directory's tail pinning a window) and the defragmenter
+  (fragmented image, budget and extent pinning, and a 7 MiB badge-sized image).
+  Two cases are `reentrant`, so the runner replays them under power loss.
+
+Helpers live in `tests/relocate_test_helpers.h` and are injected with
+`--include`. The script runs `-P none,linear` plus a few fixed two-cut
+sequences. **Do not use `-Pexhaustive`**: it forks a full copy of the block
+device at every cut point and keeps the branch tree, which needs gigabytes for
+a case with a few dozen writes (it has OOM-killed a 7.7 GB machine).

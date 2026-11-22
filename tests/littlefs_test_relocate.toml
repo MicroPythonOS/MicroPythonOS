@@ -1,0 +1,670 @@
+# Metadata-pair relocation and the extent defragmenter.
+#
+# Run with tests/littlefs_run.sh. The helpers live in
+# tests/relocate_test_helpers.h, injected with --include.
+
+# ---------------------------------------------------------------------------
+# Mechanism: relocate one directory.
+# ---------------------------------------------------------------------------
+
+[cases.test_relocate_dir_preserves_contents]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [64]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_mkdir(&lfs, "apps") => 0;
+    lfs_mkdir(&lfs, "apps/app") => 0;
+    rel_write(&lfs, "apps/app/f0", 5000, 1) => 0;
+    rel_write(&lfs, "apps/app/f1", 100, 2) => 0;
+    rel_write(&lfs, "apps/other", 300, 3) => 0;
+
+    lfs_block_t pair[2];
+    rel_pair_of(&lfs, "apps/app", pair) => 0;
+    lfs_block_t before[2] = {pair[0], pair[1]};
+    lfs_ssize_t size_before = lfs_fs_size(&lfs);
+
+    lfs_ext_relocate_dir(&lfs, pair) => 0;
+
+    rel_pair_of(&lfs, "apps/app", pair) => 0;
+    assert(rel_new_block(before, pair));
+    rel_check(&lfs, "apps/app/f0", 5000, 1) => 0;
+    rel_check(&lfs, "apps/app/f1", 100, 2) => 0;
+    rel_check(&lfs, "apps/other", 300, 3) => 0;
+    // one metadata block rewritten, the old one freed: no leak, no growth
+    lfs_fs_size(&lfs) => size_before;
+
+    // the new pair is the live one after a remount
+    lfs_unmount(&lfs) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    rel_check(&lfs, "apps/app/f0", 5000, 1) => 0;
+    lfs_block_t after[2];
+    rel_pair_of(&lfs, "apps/app", after) => 0;
+    assert(rel_same_pair(after, pair));
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_relocate_dir_refuses_root]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [32]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_mkdir(&lfs, "a") => 0;
+
+    lfs_block_t root[2] = {0, 1};
+    lfs_ext_relocate_dir(&lfs, root) => LFS_ERR_INVAL;
+
+    // a pair that contains a root block is refused too
+    lfs_block_t mixed[2] = {1, 2};
+    lfs_ext_relocate_dir(&lfs, mixed) => LFS_ERR_INVAL;
+
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_relocate_dir_clears_window]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [64]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_mkdir(&lfs, "apps") => 0;
+    lfs_mkdir(&lfs, "apps/app") => 0;
+    rel_write(&lfs, "apps/app/f0", 4000, 11) => 0;
+    rel_write(&lfs, "apps/app/f1", 100, 12) => 0;
+
+    lfs_block_t pair[2];
+    rel_pair_of(&lfs, "apps/app", pair) => 0;
+    lfs_block_t target[2] = {pair[0], pair[1]};
+
+    // A compaction moves one half of the pair, so clearing a window that
+    // holds the current block needs a second pass inside one call.
+    lfs_ext_exclude(&lfs, pair[0], 2) => 0;
+    lfs_ext_relocate_dir(&lfs, target) => 0;
+    lfs_ext_clear_exclude(&lfs);
+
+    lfs_block_t moved[2];
+    rel_pair_of(&lfs, "apps/app", moved) => 0;
+    assert(!(moved[0] >= pair[0] && moved[0] < pair[0]+2));
+    assert(!(moved[1] >= pair[0] && moved[1] < pair[0]+2));
+    assert(rel_new_block(target, moved));
+
+    rel_check(&lfs, "apps/app/f0", 4000, 11) => 0;
+    rel_check(&lfs, "apps/app/f1", 100, 12) => 0;
+    lfs_unmount(&lfs) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    rel_check(&lfs, "apps/app/f0", 4000, 11) => 0;
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_relocate_dir_parent_chain]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [64]
+code = '''
+    lfs_t lfs;
+    rel_install_bad_blocks(cfg);
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+
+    lfs_mkdir(&lfs, "parent") => 0;
+    lfs_mkdir(&lfs, "parent/child") => 0;
+    rel_write(&lfs, "parent/child/f0", 4000, 21) => 0;
+    for (int i = 0; i < 6; i++) {
+        char path[32];
+        sprintf(path, "parent/keep%d", i);
+        rel_write(&lfs, path, 10, 30+i) => 0;
+    }
+
+    lfs_block_t cpair[2], ppair[2];
+    rel_pair_of(&lfs, "parent/child", cpair) => 0;
+    rel_pair_of(&lfs, "parent", ppair) => 0;
+    lfs_block_t parent_before[2] = {ppair[0], ppair[1]};
+
+    // Make the parent's current block reject programming (so its commit must
+    // compact) and its stale block reject erasing (so the compaction must
+    // relocate): the bad-block path that exercises the parent chain.
+    rel_bad_prog = ppair[0];
+    rel_bad_erase = ppair[1];
+
+    lfs_ext_relocate_dir(&lfs, cpair) => 0;
+
+    lfs_block_t cpair2[2], ppair2[2];
+    rel_pair_of(&lfs, "parent/child", cpair2) => 0;
+    rel_pair_of(&lfs, "parent", ppair2) => 0;
+    assert(!rel_same_pair(cpair, cpair2));
+    assert(rel_new_block(parent_before, ppair2));
+
+    rel_check(&lfs, "parent/child/f0", 4000, 21) => 0;
+    for (int i = 0; i < 6; i++) {
+        char path[32];
+        sprintf(path, "parent/keep%d", i);
+        rel_check(&lfs, path, 10, 30+i) => 0;
+    }
+
+    lfs_unmount(&lfs) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    rel_check(&lfs, "parent/child/f0", 4000, 21) => 0;
+    rel_check(&lfs, "parent/keep3", 10, 33) => 0;
+    rel_write(&lfs, "parent/after", 10, 99) => 0;
+    rel_check(&lfs, "parent/after", 10, 99) => 0;
+    lfs_unmount(&lfs) => 0;
+    rel_remove_bad_blocks(cfg);
+'''
+
+[cases.test_relocate_split_dir_tail_pins_window]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [64]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_mkdir(&lfs, "big") => 0;
+
+    // Long names so the metadata block splits into a tail chain.
+    for (int i = 0; i < 80; i++) {
+        char name[160];
+        snprintf(name, sizeof(name), "big/f%03d_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                i);
+        rel_write(&lfs, name, 5, i) => 0;
+    }
+
+    lfs_dir_t dir;
+    lfs_dir_open(&lfs, &dir, "big") => 0;
+    bool split = dir.m.split;
+    lfs_block_t head[2] = {dir.m.pair[0], dir.m.pair[1]};
+    lfs_dir_close(&lfs, &dir) => 0;
+    assert(split);
+
+    struct rel_pair_list list = {0};
+    lfs_ext_dir_pairs(&lfs, rel_pairs_cb, &list) => 0;
+    int tails = 0;
+    lfs_block_t tail[2] = {0, 0};
+    for (int i = 0; i < list.count; i++) {
+        if (list.is_tail[i]) {
+            tails++;
+            tail[0] = list.pair[i][0];
+            tail[1] = list.pair[i][1];
+        }
+    }
+    assert(tails > 0);
+
+    // The head of a split directory relocates normally...
+    lfs_ext_relocate_dir(&lfs, head) => 0;
+    // ...but a tail pair cannot be targeted, so a window holding it is pinned.
+    lfs_ext_clear_window(&lfs, tail[0], 1, 0) => LFS_ERR_NOSPC;
+    lfs_ext_clear_window(&lfs, tail[0], 2, 0) => LFS_ERR_NOSPC;
+    lfs_unmount(&lfs) => 0;
+'''
+
+# ---------------------------------------------------------------------------
+# The defragmenter.
+# ---------------------------------------------------------------------------
+
+[cases.test_defrag_clears_fragmented_window]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [256]
+defines.NEED = [24]
+defines.ALIGN = [8]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_mkdir(&lfs, "apps") => 0;
+
+    for (int d = 0; d < 8; d++) {
+        char path[48];
+        sprintf(path, "apps/app%d", d);
+        lfs_mkdir(&lfs, path) => 0;
+        sprintf(path, "apps/app%d/f0", d);
+        rel_write(&lfs, path, 3000 + 500*d, d) => 0;
+        sprintf(path, "apps/app%d/f1", d);
+        rel_write(&lfs, path, 200, 20+d) => 0;
+    }
+
+    // Fill with one-block files, then punch scattered holes: plenty of free
+    // space, no large run.
+    int fills = 0;
+    for (int i = 0; i < 2000; i++) {
+        if (i % 8 == 0
+                && BLOCK_COUNT - lfs_fs_size(&lfs) < 16) {
+            break;
+        }
+        char path[48];
+        sprintf(path, "apps/app%d/g%04d", i % 8, i);
+        rel_write(&lfs, path, 2048, 100+i) => 0;
+        fills++;
+    }
+    for (int i = 0; i < fills; i += 3) {
+        char path[48];
+        sprintf(path, "apps/app%d/g%04d", i % 8, i);
+        lfs_remove(&lfs, path) => 0;
+    }
+
+    uint8_t used[(BLOCK_COUNT+7)/8];
+    uint8_t meta[(BLOCK_COUNT+7)/8];
+    lfs_ext_block_maps(&lfs, used, sizeof(used), meta, sizeof(meta)) => 0;
+    assert(rel_largest(used, BLOCK_COUNT, ALIGN) < NEED);
+    assert(BLOCK_COUNT - lfs_fs_size(&lfs) >= NEED + 8);
+
+    lfs_ext_t ext;
+    lfs_ext_defrag(&lfs, NEED*cfg->block_size, ALIGN, 0, &ext) => 0;
+    assert(ext.count == NEED);
+    assert(ext.head % ALIGN == 0);
+
+    lfs_ext_block_maps(&lfs, used, sizeof(used), meta, sizeof(meta)) => 0;
+    for (lfs_block_t b = ext.head; b < ext.head+ext.count; b++) {
+        assert(!rel_bit(used, b));
+        assert(!rel_bit(meta, b));
+    }
+
+    int dirs = 0, dups = 0;
+    uint8_t seen[BLOCK_COUNT];
+    memset(seen, 0, sizeof(seen));
+    rel_walk(&lfs, "/", 0, seen, BLOCK_COUNT, &dirs, &dups) => 0;
+    assert(dirs == 10);
+    assert(dups == 0);
+
+    for (int d = 0; d < 8; d++) {
+        char path[48];
+        sprintf(path, "apps/app%d/f0", d);
+        rel_check(&lfs, path, 3000 + 500*d, d) => 0;
+        sprintf(path, "apps/app%d/f1", d);
+        rel_check(&lfs, path, 200, 20+d) => 0;
+    }
+
+    // the run is reserved: write an extent into it and read it back
+    uint8_t blob[NEED*4096];
+    rel_fill(blob, sizeof(blob), 77);
+    lfs_ext_write(&lfs, 0, blob, sizeof(blob)) => 0;
+    lfs_ext_commit(&lfs, "core.bin", 0x12345678) => 0;
+    lfs_ext_t got;
+    lfs_ext_info(&lfs, "core.bin", &got) => 0;
+    assert(got.head == ext.head && got.count == ext.count);
+    rel_check(&lfs, "core.bin", sizeof(blob), 77) => 0;
+
+    lfs_unmount(&lfs) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_ext_info(&lfs, "core.bin", &got) => 0;
+    assert(got.head == ext.head);
+    rel_check(&lfs, "core.bin", sizeof(blob), 77) => 0;
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_defrag_refuses_when_pinned]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [128]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+
+    // An extent pins its blocks: a window that holds any of them is refused,
+    // whatever budget is offered.
+    lfs_ext_t ext;
+    lfs_ext_reserve(&lfs, cfg->block_size, 8, &ext) => 0;
+    lfs_ext_write(&lfs, 0, "x", 1) => 0;
+    lfs_ext_commit(&lfs, "core.bin", 0) => 0;
+    lfs_ext_clear_exclude(&lfs);
+    lfs_ext_clear_window(&lfs, ext.head, 1, 0) => LFS_ERR_NOSPC;
+
+    // A reservation in flight is refused rather than clobbered.
+    lfs_ext_t other;
+    lfs_ext_reserve(&lfs, cfg->block_size, 1, &other) => 0;
+    lfs_ext_t tmp;
+    lfs_ext_defrag(&lfs, cfg->block_size, 1, 0, &tmp) => LFS_ERR_INVAL;
+    lfs_ext_abort(&lfs);
+
+    // Fill until there is no free 12-block window left, so clearing one
+    // always needs moves and the budget check is what decides.
+    for (int i = 0; i < 4000; i++) {
+        if (i % 4 == 0 && BLOCK_COUNT - lfs_fs_size(&lfs) < 12) {
+            break;
+        }
+        char path[32];
+        sprintf(path, "f%03d", i);
+        rel_write(&lfs, path, 2048, i) => 0;
+    }
+    assert(BLOCK_COUNT - lfs_fs_size(&lfs) < 12);
+
+    lfs_ssize_t size_before = lfs_fs_size(&lfs);
+    lfs_ext_t refused;
+    lfs_ext_defrag(&lfs, 12*cfg->block_size, 1, 1, &refused) => LFS_ERR_NOSPC;
+    lfs_fs_size(&lfs) => size_before;
+
+    // A length larger than the filesystem cannot succeed.
+    lfs_ext_defrag(&lfs, BLOCK_COUNT*cfg->block_size, 1, 0, &refused)
+            => LFS_ERR_NOSPC;
+
+    lfs_ext_info(&lfs, "core.bin", &ext) => 0;
+    lfs_unmount(&lfs) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_ext_info(&lfs, "core.bin", &ext) => 0;
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_defrag_big_image]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [1792]   # 7 MiB, the badge vfs partition
+defines.NEED = [96]
+defines.ALIGN = [16]           # 64 KiB, one ESP32 MMU page
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_mkdir(&lfs, "apps") => 0;
+
+    for (int d = 0; d < 20; d++) {
+        char path[48];
+        sprintf(path, "apps/app%d", d);
+        lfs_mkdir(&lfs, path) => 0;
+        sprintf(path, "apps/app%d/f0", d);
+        rel_write(&lfs, path, 12000 + 1000*d, d) => 0;
+        sprintf(path, "apps/app%d/f1", d);
+        rel_write(&lfs, path, 200, 40+d) => 0;
+    }
+
+    int fills = 0;
+    for (int i = 0; i < 4000; i++) {
+        if (i % 16 == 0 && BLOCK_COUNT - lfs_fs_size(&lfs) < 32) {
+            break;
+        }
+        char path[48];
+        sprintf(path, "apps/app%d/g%04d", i % 20, i);
+        rel_write(&lfs, path, 2048, 200+i) => 0;
+        fills++;
+    }
+    for (int i = 0; i < fills; i += 4) {
+        char path[48];
+        sprintf(path, "apps/app%d/g%04d", i % 20, i);
+        lfs_remove(&lfs, path) => 0;
+    }
+
+    uint8_t used[(BLOCK_COUNT+7)/8];
+    lfs_ext_block_maps(&lfs, used, sizeof(used), NULL, 0) => 0;
+    assert(rel_largest(used, BLOCK_COUNT, ALIGN) < NEED);
+
+    lfs_ext_t ext;
+    lfs_ext_defrag(&lfs, NEED*cfg->block_size, ALIGN, 0, &ext) => 0;
+    assert(ext.count == NEED);
+    assert(ext.head % ALIGN == 0);
+
+    uint8_t meta[(BLOCK_COUNT+7)/8];
+    lfs_ext_block_maps(&lfs, used, sizeof(used), meta, sizeof(meta)) => 0;
+    for (lfs_block_t b = ext.head; b < ext.head+ext.count; b++) {
+        assert(!rel_bit(used, b));
+        assert(!rel_bit(meta, b));
+    }
+
+    int dirs = 0, dups = 0;
+    uint8_t seen[BLOCK_COUNT];
+    memset(seen, 0, sizeof(seen));
+    rel_walk(&lfs, "/", 0, seen, BLOCK_COUNT, &dirs, &dups) => 0;
+    assert(dirs == 22);
+    assert(dups == 0);
+
+    for (int d = 0; d < 20; d++) {
+        char path[48];
+        sprintf(path, "apps/app%d/f0", d);
+        rel_check(&lfs, path, 12000 + 1000*d, d) => 0;
+    }
+    lfs_unmount(&lfs) => 0;
+'''
+
+# ---------------------------------------------------------------------------
+# Power loss. The body is replayed against the same device, so it only
+# formats when block 0 is still erased; a mount failure after that is a bug.
+# ---------------------------------------------------------------------------
+
+[cases.test_relocate_reentrant]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [32]
+reentrant = true
+code = '''
+    lfs_t lfs;
+    uint8_t head[256];
+    cfg->read(cfg, 0, 0, head, cfg->read_size) => 0;
+    if (head[0] == 0xff) {
+        lfs_format(&lfs, cfg) => 0;
+    }
+    lfs_mount(&lfs, cfg) => 0;
+
+    int err = lfs_mkdir(&lfs, "p");
+    assert(err == 0 || err == LFS_ERR_EXIST);
+    err = lfs_mkdir(&lfs, "p/c");
+    assert(err == 0 || err == LFS_ERR_EXIST);
+    rel_write(&lfs, "p/c/f", 20, 7) => 0;
+
+    lfs_block_t pair[2];
+    rel_pair_of(&lfs, "p/c", pair) => 0;
+    lfs_ext_relocate_dir(&lfs, pair) => 0;
+
+    rel_check(&lfs, "p/c/f", 20, 7) => 0;
+
+    int dirs = 0, dups = 0;
+    uint8_t seen[BLOCK_COUNT];
+    memset(seen, 0, sizeof(seen));
+    rel_walk(&lfs, "/", 0, seen, BLOCK_COUNT, &dirs, &dups) => 0;
+    assert(dirs == 3);
+    assert(dups == 0);
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_defrag_reentrant]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [48]
+defines.NEED = [6]
+defines.ALIGN = [4]
+reentrant = true
+code = '''
+    lfs_t lfs;
+    uint8_t head[256];
+    cfg->read(cfg, 0, 0, head, cfg->read_size) => 0;
+    if (head[0] == 0xff) {
+        lfs_format(&lfs, cfg) => 0;
+    }
+    lfs_mount(&lfs, cfg) => 0;
+
+    for (int d = 0; d < 3; d++) {
+        char path[32];
+        sprintf(path, "d%d", d);
+        int err = lfs_mkdir(&lfs, path);
+        assert(err == 0 || err == LFS_ERR_EXIST);
+        sprintf(path, "d%d/f", d);
+        rel_write(&lfs, path, 3000, d) => 0;
+    }
+    for (int i = 0; i < 6; i++) {
+        char path[32];
+        sprintf(path, "g%d", i);
+        rel_write(&lfs, path, 2048, 10+i) => 0;
+    }
+
+    lfs_ext_t ext;
+    int err = lfs_ext_defrag(&lfs, NEED*cfg->block_size, ALIGN, 0, &ext);
+    // Either the run was reserved, or this image has no window that can be
+    // cleared; both must leave a readable tree.
+    assert(err == 0 || err == LFS_ERR_NOSPC);
+    if (err == 0) {
+        lfs_ext_abort(&lfs);
+    }
+
+    for (int d = 0; d < 3; d++) {
+        char path[32];
+        sprintf(path, "d%d/f", d);
+        rel_check(&lfs, path, 3000, d) => 0;
+    }
+
+    int dirs = 0, dups = 0;
+    uint8_t seen[BLOCK_COUNT];
+    memset(seen, 0, sizeof(seen));
+    rel_walk(&lfs, "/", 0, seen, BLOCK_COUNT, &dirs, &dups) => 0;
+    assert(dirs == 4);
+    assert(dups == 0);
+    lfs_unmount(&lfs) => 0;
+'''
+
+# ---------------------------------------------------------------------------
+# The resumable driver and the round budget.
+# ---------------------------------------------------------------------------
+
+[cases.test_defrag_steps]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [256]
+defines.NEED = [24]
+defines.ALIGN = [8]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_mkdir(&lfs, "apps") => 0;
+
+    // Fragment: fill with one-block files, then punch scattered holes.
+    for (int d = 0; d < 6; d++) {
+        char path[48];
+        sprintf(path, "apps/app%d", d);
+        lfs_mkdir(&lfs, path) => 0;
+        sprintf(path, "apps/app%d/f0", d);
+        rel_write(&lfs, path, 3000, d) => 0;
+    }
+    int fills = 0;
+    for (int i = 0; i < 2000; i++) {
+        if (i % 8 == 0 && BLOCK_COUNT - lfs_fs_size(&lfs) < 16) {
+            break;
+        }
+        char path[48];
+        sprintf(path, "apps/app%d/g%04d", i % 6, i);
+        rel_write(&lfs, path, 2048, 100+i) => 0;
+        fills++;
+    }
+    for (int i = 0; i < fills; i += 3) {
+        char path[48];
+        sprintf(path, "apps/app%d/g%04d", i % 6, i);
+        lfs_remove(&lfs, path) => 0;
+    }
+
+    lfs_ext_defrag_begin(&lfs, NEED*cfg->block_size, ALIGN, 0) => 0;
+    // A second defragmenter is refused while one runs.
+    lfs_ext_defrag_begin(&lfs, NEED*cfg->block_size, ALIGN, 0)
+            => LFS_ERR_INVAL;
+
+    uint8_t phase = 0;
+    uint8_t percent = 0;
+    int steps = 0;
+    bool saw_space = false;
+    bool saw_move = false;
+    bool saw_erase = false;
+    int res;
+    while ((res = lfs_ext_defrag_step(&lfs, &phase, &percent)) > 0) {
+        assert(steps < 200000);
+        steps++;
+        assert(percent <= 100);
+        if (phase == LFS_EXT_PHASE_SPACE) saw_space = true;
+        if (phase == LFS_EXT_PHASE_MOVE) saw_move = true;
+        if (phase == LFS_EXT_PHASE_ERASE) saw_erase = true;
+    }
+    res => 0;
+    // One step is one entry/pair/file/erase batch, so a real defrag needs many.
+    assert(steps > 5);
+    assert(saw_space);
+    assert(saw_erase);
+
+    lfs_ext_t ext;
+    lfs_ext_defrag_result(&lfs, &ext) => 0;
+    assert(ext.count == NEED);
+    assert(ext.head % ALIGN == 0);
+    lfs_ext_defrag_abort(&lfs);
+    lfs_ext_abort(&lfs);
+
+    // The window really is clear, and the tree still reads.
+    uint8_t used[(BLOCK_COUNT+7)/8];
+    uint8_t meta[(BLOCK_COUNT+7)/8];
+    lfs_ext_block_maps(&lfs, used, sizeof(used), meta, sizeof(meta)) => 0;
+    for (lfs_block_t b = ext.head; b < ext.head+ext.count; b++) {
+        assert(!rel_bit(used, b));
+        assert(!rel_bit(meta, b));
+    }
+    for (int d = 0; d < 6; d++) {
+        char path[48];
+        sprintf(path, "apps/app%d/f0", d);
+        rel_check(&lfs, path, 3000, d) => 0;
+    }
+    lfs_unmount(&lfs) => 0;
+'''
+
+[cases.test_defrag_many_small_files_in_a_big_window]
+defines.READ_SIZE = [256]
+defines.PROG_SIZE = [256]
+defines.ERASE_SIZE = [4096]
+defines.ERASE_COUNT = [256]
+defines.NEED = [80]
+defines.ALIGN = [8]
+code = '''
+    lfs_t lfs;
+    lfs_format(&lfs, cfg) => 0;
+    lfs_mount(&lfs, cfg) => 0;
+    lfs_mkdir(&lfs, "apps") => 0;
+
+    // Every filler is one block, so an 80-block window holds ~80 occupants:
+    // more files than one round can carry.
+    int fills = 0;
+    for (int i = 0; i < 4000; i++) {
+        if (i % 8 == 0 && BLOCK_COUNT - lfs_fs_size(&lfs) < 16) {
+            break;
+        }
+        char path[48];
+        sprintf(path, "apps/f%04d", i);
+        rel_write(&lfs, path, 2048, i) => 0;
+        fills++;
+    }
+    for (int i = 0; i < fills; i += 3) {
+        char path[48];
+        sprintf(path, "apps/f%04d", i);
+        lfs_remove(&lfs, path) => 0;
+    }
+
+    lfs_ext_t ext;
+    lfs_ext_defrag(&lfs, NEED*cfg->block_size, ALIGN, 0, &ext) => 0;
+    assert(ext.count == NEED);
+    assert(ext.head % ALIGN == 0);
+    lfs_ext_abort(&lfs);
+
+    uint8_t used[(BLOCK_COUNT+7)/8];
+    uint8_t meta[(BLOCK_COUNT+7)/8];
+    lfs_ext_block_maps(&lfs, used, sizeof(used), meta, sizeof(meta)) => 0;
+    for (lfs_block_t b = ext.head; b < ext.head+ext.count; b++) {
+        assert(!rel_bit(used, b));
+        assert(!rel_bit(meta, b));
+    }
+    int dirs = 0, dups = 0;
+    uint8_t seen[BLOCK_COUNT];
+    memset(seen, 0, sizeof(seen));
+    rel_walk(&lfs, "/", 0, seen, BLOCK_COUNT, &dirs, &dups) => 0;
+    assert(dirs == 2);
+    assert(dups == 0);
+    lfs_unmount(&lfs) => 0;
+'''
