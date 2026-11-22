@@ -275,6 +275,10 @@ jobs:
         run: |
           ./tests/syntax.sh
 
+      - name: Run littlefs2e extent and defragmentation tests
+        run: |
+          ./tests/littlefs_run.sh --full
+
       - name: Run unit tests on unix
         run: |
           ./scripts/test_runner.py

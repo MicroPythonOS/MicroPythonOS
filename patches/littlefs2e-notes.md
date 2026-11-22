@@ -1,8 +1,17 @@
 # littlefs2e extent files
 
-`patches/littlefs2e.patch` turns the vendored littlefs into **littlefs2e**:
-littlefs v2.11.3 plus a third file-data representation for contiguous,
-immutable runs ("extents").
+littlefs2e is a fork of littlefs v2.11.3 with a third file-data representation
+for contiguous, immutable runs ("extents"), consumed as the
+`third_party/littlefs2e` submodule
+(https://github.com/MicroPythonOS/littlefs_with_extents_and_defrag, branch
+`extents`, tag `v2.11.3-mpos.1`). The fork carries the library, its case files
+and `EXTENTS.md`; this repo carries the MicroPython side and the policy.
+
+`scripts/sync_littlefs2e.sh` prefixes the fork (`lfs_*` -> `lfs2_*`) into
+`lvgl_micropython/lib/micropython/lib/littlefs` before every build;
+`--check` reports drift. The submodule pointer is the version: taking a new
+littlefs release means rebasing the fork's `extents` branch, running
+`tests/littlefs_run.sh --full` there, tagging, and moving the pointer.
 
 ## On disk
 
@@ -133,27 +142,22 @@ has no event loop to yield to, uses `ensure(progress=...)`: the hook calls
 ## MicroPython glue
 
 - `extmod/vfs_lfs.c/h`: `mp_vfs_lfs2_root_lfs2()`, because the mounted
-  `VfsLfs2` instance is not reachable from Python.
+  `VfsLfs2` instance is not reachable from Python. Kept as
+  `patches/lfs2e_micropython.patch` (the only part that cannot live in a
+  littlefs fork).
 - `c_mpos/src/lfs2e.c`: the `lfs2e` built-in module used by
   `internal_filesystem/lib/mpos/extent.py`.
-- `scripts/build_mpos.sh` applies the patch to the nested MicroPython tree
-  before every target build.
+- `scripts/build_mpos.sh` applies that patch and then runs
+  `scripts/sync_littlefs2e.sh` on the nested MicroPython tree before every
+  target build.
 
 ## Tests
 
-`tests/littlefs_run.sh` downloads the v2.11.3 test runner, reverse-prefixes
-the patched `lfs2_*` sources and runs two case files:
-
-- `tests/littlefs_test_extent.toml` — extent create/read/stat/rename/remove,
-  alignment, disk version, `LFS_ERR_NOCONTIG`;
-- `tests/littlefs_test_relocate.toml` — metadata relocation (contents, root
-  refusal, the two-pass window clear, the parent chain through injected bad
-  blocks, a split directory's tail pinning a window) and the defragmenter
-  (fragmented image, budget and extent pinning, and a 7 MiB badge-sized image).
-  Two cases are `reentrant`, so the runner replays them under power loss.
-
-Helpers live in `tests/relocate_test_helpers.h` and are injected with
-`--include`. The script runs `-P none,linear` plus a few fixed two-cut
-sequences. **Do not use `-Pexhaustive`**: it forks a full copy of the block
-device at every cut point and keeps the branch tree, which needs gigabytes for
-a case with a few dozen writes (it has OOM-killed a 7.7 GB machine).
+The case files live in the fork (`tests/test_extent.toml`,
+`tests/test_extent_defrag.toml`, with `relocate_test_helpers.h` injected via
+`--include`). `tests/littlefs_run.sh` runs them in the submodule; `--full` also
+runs the whole upstream suite there. Power loss is `-P none,linear` plus a few
+fixed two-cut sequences: **do not use `-Pexhaustive`**, which forks a full copy
+of the block device at every cut point and keeps the branch tree (it has
+OOM-killed a 7.7 GB machine). `tests/littlefs_stock_mount.sh` proves the
+compatibility claim above against stock v2.11.3.

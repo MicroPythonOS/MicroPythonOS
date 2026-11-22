@@ -18,3 +18,6 @@
 [submodule "esp32-component-rvswd"]
 	path = esp32-component-rvswd
 	url = https://github.com/Fri3dCamp/esp32-component-rvswd.git
+[submodule "third_party/littlefs2e"]
+	path = third_party/littlefs2e
+	url = https://github.com/MicroPythonOS/littlefs_with_extents_and_defrag

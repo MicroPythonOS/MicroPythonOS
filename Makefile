@@ -28,6 +28,14 @@ unittest-tests: ## Run unit tests (Needs to build MicroPythonOS for unix first)
 tests: syntax-tests unittest-tests ## Run all tests (Needs to build MicroPythonOS for unix first)
 	@echo "All tests passed!"
 
+.PHONY: littlefs-check
+littlefs-check: ## Verify the littlefs2e tree matches the third_party/littlefs2e pin
+	./scripts/sync_littlefs2e.sh --check
+
+.PHONY: littlefs-tests
+littlefs-tests: ## Run the littlefs2e extent/defrag cases (add ARGS='--full' for the upstream suite)
+	./tests/littlefs_run.sh $(ARGS)
+
 .PHONY: build-mpos-unix
 build-mpos-unix: ## Build MicroPythonOS for unix
 	./scripts/build_mpos.sh unix

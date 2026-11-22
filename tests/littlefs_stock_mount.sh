@@ -18,14 +18,15 @@
 set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-work="$root/tmp/littlefs-tests"
+work="$root/third_party/littlefs2e"
 stock="$root/tmp/littlefs-stock"
 out="$root/tmp/littlefs-stock-mount"
 image="$out/test.img"
 
-if [ ! -f "$work/lfs.c" ] || [ ! -f "$work/bd/lfs_filebd.c" ]; then
-    echo "Preparing the fork sources (this also runs the extent cases)..."
-    "$root/tests/littlefs_run.sh" >/dev/null
+if [ ! -f "$work/lfs.c" ]; then
+    echo "FATAL: third_party/littlefs2e is missing; fetch the submodule with:" >&2
+    echo "         git submodule update --init third_party/littlefs2e" >&2
+    exit 1
 fi
 if [ ! -f "$stock/lfs.c" ]; then
     mkdir -p "$stock"

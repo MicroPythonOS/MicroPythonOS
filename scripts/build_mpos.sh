@@ -259,8 +259,11 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_
 echo "Applying lvgl_micropython mpremote disable auto-soft-reset patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/mpremote_no_auto_soft_reset.patch
 
-echo "Applying littlefs2e extent-files patch (includes the littlefs v2.11.3 sync)..."
-apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/littlefs2e.patch
+echo "Applying littlefs2e MicroPython glue patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/lfs2e_micropython.patch
+
+echo "Copying littlefs2e sources from third_party/littlefs2e..."
+"$mydir"/sync_littlefs2e.sh
 
 echo "Applying littlefs2 block-sized cache patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/lfs2_cache_size.patch

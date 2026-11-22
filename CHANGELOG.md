@@ -61,6 +61,11 @@ Frameworks:
   while the hardware back key keeps working. `NativeActivity` gained
   `game_to_panel()`/`game_rect_to_panel()`, the inverse of `to_game()`, so an app can
   draw a hint or HUD over the rotated picture in its own coordinates.
+- littlefs2e lives in its own fork (MicroPythonOS/littlefs_with_extents_and_defrag),
+  consumed as the `third_party/littlefs2e` submodule and prefixed into the
+  MicroPython tree by `scripts/sync_littlefs2e.sh` at build time. The fork carries
+  the library, its test-runner cases and `EXTENTS.md`, so `tests/littlefs_run.sh`
+  runs the pinned source directly and `--full` runs the whole upstream suite.
 
 Builtin Apps:
 - OSUpdate: an update check tries the remaining mirror when the first one is unreachable. A single failed request used to abort the whole check, so a device that picked a down mirror never saw the available update.
