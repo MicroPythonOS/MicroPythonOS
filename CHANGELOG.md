@@ -92,7 +92,7 @@ Frameworks:
 ======
 
 Board Support:
-- Fri3d 2026: B/Y buttons are also delivered to apps as ord("B")/ord("Y") KEY events, while still doing NEXT/PREV focus navigation (like the fri3d 2024 badge and desktop SDL).
+- Fri3d 2026: B/Y buttons are also delivered to apps as ord('B')/ord('Y') KEY events, while still doing NEXT/PREV focus navigation (like the fri3d 2024 badge and desktop SDL).
 
 Frameworks:
 - localPTZtime: time zones with half-hour offsets east of UTC (India, Sri Lanka, Iran, Afghanistan, Nepal, central Australia) were an hour or more behind; explicit DST offsets are now read as POSIX defines them, so Dublin is no longer an hour ahead in winter.
@@ -117,7 +117,7 @@ OS:
 - Displays (ESP32): flush-ready is signalled from C in the DMA-done ISR (lcd_bus.FlushReadyCallback), with safer stack handling for Python callbacks that still run there.
 - ESP32: skip LVGL passes when less than 9 KB of stack is left, fixing hard resets when an app starts from the REPL, mpremote or boot (render_guard).
 - binascii/base64: stop shadowing the C base64 functions with the O(n^2) Python copies (3000-byte round-trip 13.6 ms -> 0.026 ms on desktop); binascii.Error/ValueError and non-ASCII input now match CPython, and urlsafe_b64decode() is implemented.
-- Build: web builds leave desktop-run files out, run_web.sh passes "web" explicitly, deploy_web_pages.sh builds through build_mpos.sh, apply_patch no longer prompts, and the tinyusb ISR patch is applied after the component fetch.
+- Build: web builds leave desktop-run files out, run_web.sh passes 'web' explicitly, deploy_web_pages.sh builds through build_mpos.sh, apply_patch no longer prompts, and the tinyusb ISR patch is applied after the component fetch.
 
 0.20.0
 ======
