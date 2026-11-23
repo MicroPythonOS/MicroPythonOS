@@ -14,8 +14,14 @@ import lvgl as lv
 
 BORDER_OPA = lv.OPA._50
 LABEL_OPA = lv.OPA._80
-LABEL_FONT = lv.font_montserrat_18
 RECT_RADIUS = 4
+
+# Every size the firmware ships, largest first. The overlay takes the largest
+# one that still fits every zone, so a small panel or a scaled picture gets a
+# smaller font instead of a label that runs over the neighbouring zone.
+FONT_SIZES = (28, 24, 20, 18, 16, 14, 12, 10, 8)
+# How much of its zone a label may use; the rest is the gap to the outline.
+FONT_FILL_PERCENT = 85
 
 # The stick is anchored under the thumb, so it has no arrows to aim at: the
 # label says what the area does, and a touch anywhere in it starts the drag
@@ -43,24 +49,74 @@ class TouchOverlay:
         stick = self.zones.stick_width
         menu = self.zones.menu_bottom
         use = self.zones.use_bottom
-        self._outline(0, 0, stick, self.height)
-        self._outline(stick, 0, self.width - stick, menu)
-        self._outline(stick, menu, self.width - stick, use - menu)
-        self._outline(stick, use, self.width - stick, self.height - use)
+        regions = (
+            (0, 0, stick, self.height),
+            (stick, 0, self.width - stick, menu),
+            (stick, menu, self.width - stick, use - menu),
+            (stick, use, self.width - stick, self.height - use),
+        )
+        panels = []
+        for region in regions:
+            panel = self.activity.game_rect_to_panel(*region)
+            self._outline(*panel)
+            panels.append(panel)
 
-        self._label(STICK_HINT, stick // 2, self.height // 2)
+        labels = (
+            self._label(STICK_HINT),
+            self._label(MENU_TEXT),
+            self._label(USE_TEXT),
+            self._label(FIRE_TEXT),
+        )
+        self._fit_font(labels, panels)
+        for label, panel in zip(labels, panels):
+            self._centre(label, panel)
 
-        column = stick + (self.width - stick) // 2
-        self._label(MENU_TEXT, column, menu // 2)
-        self._label(USE_TEXT, column, (menu + use) // 2)
-        self._label(FIRE_TEXT, column, (use + self.height) // 2)
+    def _fit_font(self, labels, panels):
+        """The largest shipped font whose labels all fit their zones."""
+        smallest = None
+        # Keep a gap to the outline when the zone allows one; on a tiny panel
+        # edge-to-edge text is still better than a size that does not fit.
+        for fill in (FONT_FILL_PERCENT, 100):
+            for size in FONT_SIZES:
+                font = getattr(lv, "font_montserrat_%d" % size, None)
+                if font is None:
+                    continue
+                smallest = font
+                if self._all_fit(labels, panels, font, fill):
+                    return font
+        for label in labels:
+            if smallest is not None:
+                label.set_style_text_font(smallest, lv.PART.MAIN)
+            label.update_layout()
+        return smallest
+
+    def _all_fit(self, labels, panels, font, fill):
+        for label, panel in zip(labels, panels):
+            label.set_style_text_font(font, lv.PART.MAIN)
+            label.update_layout()
+            if not self._fits(label, panel, fill):
+                return False
+        return True
+
+    def _fits(self, label, panel, fill):
+        width, height = panel[2], panel[3]
+        if self._rotated:
+            # A turned label's own width is the panel's height.
+            width, height = height, width
+        return (label.get_width() * 100 <= width * fill
+                and label.get_height() * 100 <= height * fill)
+
+    def _centre(self, label, panel):
+        label.update_layout()
+        panel_x = panel[0] + panel[2] // 2
+        panel_y = panel[1] + panel[3] // 2
+        label.set_pos(panel_x - label.get_width() // 2,
+                      panel_y - label.get_height() // 2)
 
     def _outline(self, x, y, width, height):
-        panel_x, panel_y, panel_width, panel_height = (
-            self.activity.game_rect_to_panel(x, y, width, height))
         rect = lv.obj(self.activity.screen)
-        rect.set_pos(panel_x, panel_y)
-        rect.set_size(panel_width, panel_height)
+        rect.set_pos(x, y)
+        rect.set_size(width, height)
         rect.remove_flag(lv.obj.FLAG.CLICKABLE)
         rect.remove_flag(lv.obj.FLAG.SCROLLABLE)
         rect.set_style_pad_all(0, lv.PART.MAIN)
@@ -71,24 +127,22 @@ class TouchOverlay:
         rect.set_style_radius(RECT_RADIUS, lv.PART.MAIN)
         self._objects.append(rect)
 
-    def _label(self, text, x, y):
+    def _label(self, text):
         label = lv.label(self.activity.screen)
         label.set_text(text)
         label.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         label.set_style_text_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
         label.set_style_text_opa(LABEL_OPA, lv.PART.MAIN)
-        label.set_style_text_font(LABEL_FONT, lv.PART.MAIN)
         if self._rotated:
             label.set_style_transform_rotation(900, lv.PART.MAIN)
+        # The default pivot is the label's top-left corner, so a turned label
+        # swings half its own size (tens of pixels) away from its position.
+        # Turning it about its centre keeps the centre where it is put.
+        label.set_style_transform_pivot_x(lv.pct(50), lv.PART.MAIN)
+        label.set_style_transform_pivot_y(lv.pct(50), lv.PART.MAIN)
         label.remove_flag(lv.obj.FLAG.CLICKABLE)
-        # Measure the text, then centre it on the point. align() only stores an
-        # offset that LVGL resolves at layout time, which would depend on the
-        # parent's size rather than on the point we want.
-        label.update_layout()
-        panel_x, panel_y = self.activity.game_to_panel(x, y)
-        label.set_pos(panel_x - label.get_width() // 2,
-                      panel_y - label.get_height() // 2)
         self._objects.append(label)
+        return label
 
     def set_visible(self, visible):
         visible = bool(visible)
