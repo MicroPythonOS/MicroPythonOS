@@ -291,6 +291,9 @@ class NostrManager:
     _instance = None
     EVENTS_TO_SHOW = 50
     NWC_POLL_SECONDS = 120
+    # A wallet answers an NWC request within seconds; a request older than
+    # this when an info event triggers a new poll is not waited for.
+    NWC_REPLY_WINDOW_SECONDS = 60
     RELAY_SILENT_RECONNECT_THRESHOLD = 3
 
     @classmethod
@@ -350,6 +353,9 @@ class NostrManager:
         # Number of the current scheduled NWC poll. The immediate poll after
         # an encryption switch keeps the number of the poll that caused it.
         self._nwc_poll_number = 0
+        self._nwc_poll_sent_at = 0
+        # False, or why an immediate poll is due: "reply" (a refusal) or
+        # "info" (the wallet's info event).
         self._nwc_repoll = False
         # wallet pubkey -> (created_at, schemes) of the newest info event
         # applied for that wallet. The relay pool drops a replayed event it has
@@ -1308,10 +1314,7 @@ class NostrManager:
             # --- Periodic NWC polling ---
             if self._nwc_configured and now - self._last_nwc_poll >= self.NWC_POLL_SECONDS:
                 self._last_nwc_poll = now
-                if self._nwc_repoll:
-                    self._nwc_repoll = False
-                else:
-                    self._nwc_poll_number += 1
+                self._start_nwc_poll(now)
 
                 if self._polls_since_last_event >= self.RELAY_SILENT_RECONNECT_THRESHOLD:
                     await self._reconnect_relay()
@@ -1722,9 +1725,24 @@ class NostrManager:
         wanted = self._choose_nwc_encryption(schemes)
         if wanted != self._nwc_encryption:
             logger.info("NostrManager: NWC wallet supports %s, using %s", schemes or ["nip04"], wanted)
-            self._set_nwc_encryption(wanted)
+            self._set_nwc_encryption(wanted, reason="info")
 
-    def _set_nwc_encryption(self, mode, poll_now=True):
+    def _start_nwc_poll(self, now):
+        """Number the poll about to go out (see _nwc_take_request_scheme).
+
+        A re-poll after a refusal keeps the poll's number: the other request
+        of that poll may still be answered late. One after an info event does
+        too, unless that poll went out longer ago than a wallet takes to
+        answer.
+        """
+        if not self._nwc_repoll or (
+                self._nwc_repoll == "info"
+                and now - self._nwc_poll_sent_at > self.NWC_REPLY_WINDOW_SECONDS):
+            self._nwc_poll_number += 1
+            self._nwc_poll_sent_at = now
+        self._nwc_repoll = False
+
+    def _set_nwc_encryption(self, mode, poll_now=True, reason="reply"):
         """Switch NWC encryption, resubscribe for the matching notification
         kind and, by default, poll again straight away in the new mode."""
         self._nwc_encryption = mode
@@ -1733,7 +1751,7 @@ class NostrManager:
             self._publish_nwc_subscription()
         if poll_now:
             self._last_nwc_poll = time.time() - self.NWC_POLL_SECONDS
-            self._nwc_repoll = True
+            self._nwc_repoll = reason
 
     def _build_nwc_filters(self):
         """NWC subscription: replies and notifications for this connection,

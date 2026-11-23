@@ -66,6 +66,7 @@ def _manager(client_key, wallet_key):
     mgr._nwc_nip04_refused = False
     mgr._nwc_request_schemes = []
     mgr._nwc_poll_number = 1
+    mgr._nwc_poll_sent_at = time.time()
     mgr._nwc_repoll = False
     mgr._nwc_list_limit = 21
     mgr._nwc_info = {}
@@ -501,6 +502,54 @@ class TestNwcReplies(_FastNip44Case):
         # Matched to the nip44_v2 request, not to the stale nip04 ones.
         self.assertEqual(self.mgr._nwc_encryption, "nip04")
         self.assertTrue(self.mgr._nwc_nip44_refused)
+
+    def _poll(self, now):
+        self.mgr._start_nwc_poll(now)
+        return self._send_poll()
+
+    def test_poll_numbers(self):
+        t = 1000
+        self._poll(t)
+        n = self.mgr._nwc_poll_number
+        self.mgr._set_nwc_encryption("nip44_v2")  # after a refusal, late
+        self._poll(t + 70)
+        self.assertEqual(self.mgr._nwc_poll_number, n)
+        self.mgr._set_nwc_encryption("nip04", reason="info")  # info, 20 s in
+        self._poll(t + 20)
+        self.assertEqual(self.mgr._nwc_poll_number, n)
+        self.mgr._set_nwc_encryption("nip44_v2", reason="info")  # info, 90 s in
+        self._poll(t + 90)
+        self.assertEqual(self.mgr._nwc_poll_number, n + 1)
+        self._poll(t + 210)  # scheduled
+        self.assertEqual(self.mgr._nwc_poll_number, n + 2)
+
+    def test_info_switch_after_an_unanswered_poll_starts_afresh(self):
+        # The wallet service was offline for a poll, then publishes its info
+        # event: its nip44_v2 refusal must not wait behind the dead requests.
+        t = 1000
+        self._poll(t)
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2 nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self._poll(t + 90)
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertTrue(self.mgr._nwc_nip44_refused)
+
+    def test_info_switch_right_after_a_poll_waits_for_its_replies(self):
+        # Boot: the first poll goes out as nip04, the info event follows in
+        # seconds. A nip44-only wallet's untagged refusals of that poll must
+        # not be read as refusing the nip44_v2 re-poll.
+        t = 1000
+        self._poll(t)
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2"))
+        self._poll(t + 2)
+        for result_type in ("get_balance", "list_transactions"):
+            self.mgr._process_event(_reply_event(
+                self.wallet, self.client, _unsupported(result_type), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertFalse(self.mgr._nwc_nip44_refused)
+        self.assertEqual(self.errors, [])
 
     def test_request_scheme_memory_is_bounded(self):
         for _ in range(12):
