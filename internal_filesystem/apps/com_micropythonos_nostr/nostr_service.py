@@ -343,11 +343,9 @@ class NostrManager:
         # Set when the wallet answered UNSUPPORTED_ENCRYPTION to a nip04
         # request: then nip44_v2 is used even with the slow ChaCha20 core.
         self._nwc_nip04_refused = False
-        # Error replies without an "e" tag still expected for the scheme in
-        # use before the last switch (see _set_nwc_encryption).
-        self._nwc_stale_replies = 0
-        # [request event id, encryption] of the latest NWC requests, so an
-        # error reply can be matched to the scheme of the request it answers.
+        # [request event id, encryption] of the NWC requests not answered yet,
+        # oldest first, so an error reply can be matched to the scheme of the
+        # request it answers.
         self._nwc_request_schemes = []
         # wallet pubkey -> (created_at, schemes) of the newest info event
         # applied for that wallet. The relay pool drops a replayed event it has
@@ -1079,7 +1077,6 @@ class NostrManager:
         self._nwc_encryption = "nip04"
         self._nwc_nip44_refused = False
         self._nwc_nip04_refused = False
-        self._nwc_stale_replies = 0
         self._nwc_filters = None
         self._nwc_request_schemes = []
         self._nwc_conversation_key = None
@@ -1495,6 +1492,10 @@ class NostrManager:
             if __debug__:
                 logger.debug("NostrManager: decrypted NWC: %s", decrypted)
             response = json.loads(decrypted)
+            if event.kind == KIND_NWC_RESPONSE:
+                answered = self._nwc_take_request_scheme(event)
+            else:
+                answered = None
 
             error = response.get("error")
             if error:
@@ -1508,7 +1509,7 @@ class NostrManager:
                 # answering only masks the real problem.
                 self._polls_since_last_event = 0
                 if (error.get("code") == "UNSUPPORTED_ENCRYPTION"
-                        and self._handle_nwc_unsupported_encryption(event)):
+                        and self._handle_nwc_unsupported_encryption(answered)):
                     return
                 msg = "NWC {}: {} ({})".format(
                     response.get("result_type") or "request",
@@ -1571,26 +1572,20 @@ class NostrManager:
             return nip44_decrypt(content, ck)
         return self._nwc_private_key.decrypt_message(content, event.public_key)
 
-    def _handle_nwc_unsupported_encryption(self, event):
+    def _handle_nwc_unsupported_encryption(self, scheme):
         """Deal with an UNSUPPORTED_ENCRYPTION error reply.
 
-        Returns True when the error is handled here and must not reach the
-        error callback. The scheme that counts is the one of the request the
-        reply answers (its "e" tag), not the current mode: the first poll of a
-        connection goes out as nip04 before the info event arrives, and every
-        poll sends two requests, so replies to an older scheme still arrive
-        after a switch.
+        `scheme` is the encryption of the request the reply answers, or None
+        if unknown. Returns True when the error is handled here and must not
+        reach the error callback. The scheme that counts is that of the
+        request, not the current mode: the first poll of a connection goes
+        out as nip04 before the info event arrives, and every poll sends two
+        requests, so replies to an older scheme still arrive after a switch.
         """
         current = getattr(self, "_nwc_encryption", "nip04")
-        scheme = self._nwc_request_scheme(event)
+        if scheme == "stale":
+            return True
         if scheme is None:
-            # No "e" tag (NIP-47 only says SHOULD). Right after a switch the
-            # other request of the same poll was sent in the old scheme, so
-            # the first replies after it are taken as stale.
-            stale = getattr(self, "_nwc_stale_replies", 0)
-            if stale > 0:
-                self._nwc_stale_replies = stale - 1
-                return True
             scheme = current
         if scheme == "nip44_v2":
             if current == "nip44_v2":
@@ -1624,16 +1619,25 @@ class NostrManager:
                 and nip44_encrypt is not None
                 and not getattr(self, "_nwc_nip44_refused", False))
 
-    def _nwc_request_scheme(self, event):
-        """Encryption of the request an NWC reply answers, or None."""
-        sent = getattr(self, "_nwc_request_schemes", None)
-        if not sent:
-            return None
+    def _nwc_take_request_scheme(self, event):
+        """Encryption of the request an NWC reply answers.
+
+        The request is matched by the reply's "e" tag. NIP-47 only says a
+        reply SHOULD carry it; without one the reply is taken to answer the
+        oldest request still open, as wallets answer in order. Either way
+        the request is then no longer open. Returns "stale" for a reply whose
+        "e" tag names no open request of ours (a relay replaying an earlier
+        session's reply), and None when nothing is known.
+        """
+        sent = getattr(self, "_nwc_request_schemes", None) or []
         for tag in getattr(event, "tags", None) or []:
             if len(tag) >= 2 and tag[0] == "e":
-                for request_id, scheme in sent:
-                    if request_id == tag[1]:
-                        return scheme
+                for i in range(len(sent)):
+                    if sent[i][0] == tag[1]:
+                        return sent.pop(i)[1]
+                return "stale"
+        if sent:
+            return sent.pop(0)[1]
         return None
 
     def _remember_nwc_request(self, request_id, scheme):
@@ -1683,9 +1687,6 @@ class NostrManager:
         """Switch NWC encryption, resubscribe for the matching notification
         kind and, by default, poll again straight away in the new mode."""
         self._nwc_encryption = mode
-        # Replies without an "e" tag to the requests already sent in the old
-        # scheme (one poll) are not judged against the new one.
-        self._nwc_stale_replies = 2
         self._nwc_filters = None
         if self.relay_manager is not None and self._nwc_sub_id:
             self._publish_nwc_subscription()

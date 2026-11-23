@@ -64,7 +64,6 @@ def _manager(client_key, wallet_key):
     mgr._nwc_encryption = "nip04"
     mgr._nwc_nip44_refused = False
     mgr._nwc_nip04_refused = False
-    mgr._nwc_stale_replies = 0
     mgr._nwc_request_schemes = []
     mgr._nwc_list_limit = 21
     mgr._nwc_info = {}
@@ -392,6 +391,44 @@ class TestNwcReplies(_FastNip44Case):
             self.wallet, self.client, _unsupported("get_balance"), "nip04"))
         self.assertEqual(self.mgr._nwc_encryption, "nip04")
         self.assertEqual(self.errors, [])
+
+    def test_untagged_refusals_of_a_nip44_poll_fall_back_at_once(self):
+        # Info first (configure on a running manager does not poll), then a
+        # wallet that refuses nip44 without "e" tags: fall back on the first
+        # refusal, keep the second quiet.
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2 nip04"))
+        self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("list_transactions"), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertEqual(self.errors, [])
+        self.assertEqual(self.mgr._nwc_request_schemes, [])
+
+    def test_untagged_successes_close_their_requests(self):
+        self._send_poll()
+        for _ in range(2):
+            self.mgr._process_event(_reply_event(
+                self.wallet, self.client, {"result_type": "get_balance", "result": {"balance": 1000}}, "nip04"))
+        self.assertEqual(self.mgr._nwc_request_schemes, [])
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2 nip04"))
+        self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertTrue(self.mgr._nwc_nip44_refused)
+
+    def test_replayed_refusal_from_an_earlier_session_is_ignored(self):
+        self.mgr._nwc_encryption = "nip44_v2"
+        self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04", request_id="ab" * 32))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertFalse(self.mgr._nwc_nip44_refused)
+        self.assertEqual(self.errors, [])
+        self.assertEqual(len(self.mgr._nwc_request_schemes), 2)
 
     def test_request_scheme_memory_is_bounded(self):
         for _ in range(12):
