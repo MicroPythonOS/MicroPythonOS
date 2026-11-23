@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+0.23.0
+======
+
 Frameworks:
 - AppManager: a `native` map in `MANIFEST.JSON` selects the files per platform; a `.xip` core installs straight into a littlefs2e extent
 - AudioManager: `get()` rebuilds a singleton whose initialisation never finished
