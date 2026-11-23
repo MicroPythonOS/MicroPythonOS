@@ -291,6 +291,9 @@ class NostrManager:
     _instance = None
     EVENTS_TO_SHOW = 50
     NWC_POLL_SECONDS = 120
+    # How long an NWC request waits for its reply before replies without an
+    # "e" tag stop being matched to it. Under NWC_POLL_SECONDS on purpose.
+    NWC_REPLY_WINDOW_SECONDS = 60
     RELAY_SILENT_RECONNECT_THRESHOLD = 3
 
     @classmethod
@@ -343,9 +346,9 @@ class NostrManager:
         # Set when the wallet answered UNSUPPORTED_ENCRYPTION to a nip04
         # request: then nip44_v2 is used even with the slow ChaCha20 core.
         self._nwc_nip04_refused = False
-        # [request event id, encryption] of the NWC requests not answered yet,
-        # oldest first, so an error reply can be matched to the scheme of the
-        # request it answers.
+        # [request event id, encryption, sent at, wallet relay connected] of
+        # the NWC requests not answered yet, oldest first, so an error reply
+        # can be matched to the scheme of the request it answers.
         self._nwc_request_schemes = []
         # wallet pubkey -> (created_at, schemes) of the newest info event
         # applied for that wallet. The relay pool drops a replayed event it has
@@ -1248,6 +1251,9 @@ class NostrManager:
         # Set up NWC subscription
         if self._nwc_configured:
             self._nwc_sub_id = _make_subscription_id("micropython_nwc_")
+            # A new relay session: replies to the previous one's requests are
+            # matched by "e" tag only (and then ignored as stale).
+            self._nwc_request_schemes = []
             self._nwc_filters = self._build_nwc_filters()
             self.relay_manager.add_subscription(self._nwc_sub_id, self._nwc_filters)
             req = [ClientMessageType.REQUEST, self._nwc_sub_id]
@@ -1487,15 +1493,17 @@ class NostrManager:
             if __debug__:
                 logger.debug("NostrManager: NWC watchdog counter reset (event kind=%s)", getattr(event, "kind", "?"))
         self._polls_since_last_event = 0
+        # Close the request this reply answers before decrypting, so a reply
+        # that fails to decrypt or parse does not leave it open.
+        if getattr(event, "kind", None) == KIND_NWC_RESPONSE:
+            answered = self._nwc_take_request_scheme(event)
+        else:
+            answered = None
         try:
             decrypted = self._nwc_decrypt(event)
             if __debug__:
                 logger.debug("NostrManager: decrypted NWC: %s", decrypted)
             response = json.loads(decrypted)
-            if event.kind == KIND_NWC_RESPONSE:
-                answered = self._nwc_take_request_scheme(event)
-            else:
-                answered = None
 
             error = response.get("error")
             if error:
@@ -1636,14 +1644,41 @@ class NostrManager:
                     if sent[i][0] == tag[1]:
                         return sent.pop(i)[1]
                 return "stale"
+        # A request that is never answered (its relay was down, or dropped
+        # it) must not shift the order for good: skip requests the wallet's
+        # relay did not get, and give up on any older than the reply window.
+        # Polls are NWC_POLL_SECONDS apart and wallets answer in seconds, so
+        # a reply never belongs to an earlier poll.
+        cutoff = time.time() - self.NWC_REPLY_WINDOW_SECONDS
+        while sent and (not sent[0][3] or sent[0][2] < cutoff):
+            sent.pop(0)
         if sent:
             return sent.pop(0)[1]
         return None
 
     def _remember_nwc_request(self, request_id, scheme):
-        self._nwc_request_schemes.append((request_id, scheme))
+        # Whether the wallet's relay was connected decides only the matching
+        # of untagged replies: a reply tagged with this id still finds it
+        # (another spelling of the same relay may have carried it).
+        self._nwc_request_schemes.append(
+            (request_id, scheme, time.time(), self._nwc_relay_connected()))
         if len(self._nwc_request_schemes) > 16:
             self._nwc_request_schemes.pop(0)
+
+    def _nwc_relay_connected(self):
+        """False only when the relay pool holds the NWC relays and none of
+        them is connected (publish_message skips disconnected relays)."""
+        relays = getattr(self.relay_manager, "relays", None)
+        if not relays:
+            return True
+        known = False
+        for url in self._nwc_relays or []:
+            relay = relays.get(url)
+            if relay is not None:
+                known = True
+                if relay.connected:
+                    return True
+        return not known
 
     def _choose_nwc_encryption(self, schemes):
         # With the slow pure-Python ChaCha20 (older firmware) a transaction

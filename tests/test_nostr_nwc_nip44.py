@@ -430,6 +430,79 @@ class TestNwcReplies(_FastNip44Case):
         self.assertEqual(self.errors, [])
         self.assertEqual(len(self.mgr._nwc_request_schemes), 2)
 
+    def test_requests_the_wallet_relay_never_got_are_not_awaited(self):
+        # Boot: a default relay is up but the wallet's relay is still
+        # reconnecting, so publish_message skips it and the first poll is
+        # lost. Later untagged refusals must still match the right requests.
+        class _Relay:
+            connected = False
+
+        relay = _Relay()
+        self.mgr.relay_manager.relays = {"wss://wallet.example": relay}
+        self.mgr._nwc_relays = ["wss://wallet.example"]
+        self._send_poll()
+        self.assertEqual([e[3] for e in self.mgr._nwc_request_schemes], [False, False])
+        relay.connected = True
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2 nip04"))
+        self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertTrue(self.mgr._nwc_nip44_refused)
+
+    def test_reply_that_fails_to_decrypt_still_closes_its_request(self):
+        self._send_poll()
+        broken = Event(
+            content="not-a-ciphertext",
+            public_key=self.wallet.public_key.hex(),
+            kind=23195,
+            tags=[["p", self.client.public_key.hex()]],
+        )
+        self.wallet.sign_event(broken)
+        self.mgr._process_event(broken)
+        self.assertEqual(len(self.mgr._nwc_request_schemes), 1)
+
+    def test_tagged_reply_still_matches_a_request_sent_while_the_relay_looked_down(self):
+        # The same relay can sit in the pool under another spelling and
+        # carry the request anyway.
+        class _Relay:
+            connected = False
+
+        self.mgr.relay_manager.relays = {"wss://wallet.example": _Relay()}
+        self.mgr._nwc_relays = ["wss://wallet.example"]
+        self.mgr._nwc_encryption = "nip44_v2"
+        balance_id, _ = self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04", request_id=balance_id))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertTrue(self.mgr._nwc_nip44_refused)
+
+    def test_one_lost_poll_does_not_shift_later_matching(self):
+        # Poll 1 is lost although the relay looked connected; poll 2 goes
+        # out NWC_POLL_SECONDS later and its untagged replies must match it.
+        self._send_poll()
+        sent_earlier = time.time() - NostrManager.NWC_POLL_SECONDS
+        self.mgr._nwc_request_schemes = [
+            (i, sch, sent_earlier, up) for i, sch, _, up in self.mgr._nwc_request_schemes]
+        self.mgr._nwc_encryption = "nip44_v2"
+        self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertTrue(self.mgr._nwc_nip44_refused)
+
+    def test_requests_older_than_the_reply_window_are_given_up(self):
+        self._send_poll()
+        old = time.time() - NostrManager.NWC_REPLY_WINDOW_SECONDS - 30
+        self.mgr._nwc_request_schemes = [(i, sch, old, up) for i, sch, _, up in self.mgr._nwc_request_schemes]
+        self.mgr._nwc_encryption = "nip44_v2"
+        self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04"))
+        # Matched to the nip44_v2 request, not to the stale nip04 ones.
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertTrue(self.mgr._nwc_nip44_refused)
+
     def test_request_scheme_memory_is_bounded(self):
         for _ in range(12):
             self._send_poll()
