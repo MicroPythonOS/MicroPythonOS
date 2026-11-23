@@ -32,6 +32,7 @@ Builtin Apps:
 - OSUpdate: an update check tries the remaining mirror when the first one is unreachable
 
 Testing:
+- test runner: desktop tests run headless by default (SDL's dummy video driver), so the test binaries no longer take the keyboard focus; `--show-window` or `MPOS_TEST_SHOW_WINDOW=1` brings the window back
 - connectivity: mocks are installed per test instead of at module import, so they no longer leak into later tests in a one-interpreter device run
 - test runner: stages `lib/unittest` first on a device run (frozen -O3 strips `assert`) and installs its asyncio wrappers once instead of per test
 - screen camera: `cell_ncc_min` skips single-colour cells, so a mostly blank screen no longer fails webcam verification

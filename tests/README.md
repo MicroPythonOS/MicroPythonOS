@@ -17,8 +17,18 @@ python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice
 # Run on device with custom port
 python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice --port /dev/pts/5
 
+# Show the SDL window while desktop tests run (they are headless by default)
+python3 scripts/test_runner.py tests/test_graphical_about_app.py --show-window
+
 # MPOS_TEST_PORT env var sets default serial port
 ```
+
+Desktop tests run headless: `test_runner.py` sets SDL's dummy video driver
+(`SDL_VIDEO_DRIVER=dummy`, `SDL_VIDEODRIVER=dummy`, `SDL_MAC_BACKGROUND_APP=1`)
+for the test binaries, so no window opens and takes the keyboard focus while
+you type elsewhere. LVGL still renders and simulated input still works.
+`--show-window` or `MPOS_TEST_SHOW_WINDOW=1` brings the window back. SDL
+variables you set yourself are kept.
 
 ## Test Architecture
 
