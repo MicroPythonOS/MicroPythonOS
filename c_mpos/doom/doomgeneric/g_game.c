@@ -155,7 +155,9 @@ byte		consistancy[MAXPLAYERS][BACKUPTICS];
 
 fixed_t         forwardmove[2] = {0x19, 0x32}; 
 fixed_t         sidemove[2] = {0x18, 0x28}; 
-fixed_t         angleturn[3] = {640, 1280, 320};    // + slow turn 
+// 25% slower than upstream: the touch stick turned the view too fast for
+// a badge held in two hands.
+fixed_t         angleturn[3] = {480, 960, 240};    // + slow turn 
 
 static int *weapon_keys[] = {
     &key_weapon1,
