@@ -1029,10 +1029,11 @@ class ProcessBackend:
         with open(path, "rb") as f:
             return f.read()
 
-    def write_remote_file(self, path, data):
+    def write_remote_file(self, path, data, progress=None):
         import base64
-        chunk_size = 192
-        b64 = base64.b64encode(data).decode("ascii")
+        chunk_size = 1024
+        payload = bytes(data)
+        b64 = base64.b64encode(payload).decode("ascii")
         self.exec("_wf = open('{}', 'wb')".format(path))
         try:
             for i in range(0, len(b64), chunk_size):
@@ -1042,8 +1043,11 @@ class ProcessBackend:
                         part
                     )
                 )
+                if progress is not None:
+                    progress(min(i + chunk_size, len(b64)), len(b64))
         finally:
             self.exec("_wf.close()")
+        return len(payload)
 
     # -- input ---------------------------------------------------------
 
@@ -1441,17 +1445,164 @@ class SerialBackend:
         _os.unlink(tmppath)
         return data
 
-    def write_remote_file(self, path, data):
-        import subprocess, tempfile, os as _os
-        with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp:
-            tmppath = tmp.name
-        with open(tmppath, "wb") as f:
-            f.write(data)
-        subprocess.run(
-            _mpremote_cmd(self.port, "cp", tmppath, ":{}".format(path)),
-            capture_output=True, timeout=120 + len(data) // 1024
-        )
-        _os.unlink(tmppath)
+    def _write_b64_chunks(self, encoded, path, progress):
+        """Put the base64 text on the device and check that all of it arrived.
+
+        One `mpremote fs cp` for the whole file, not an exec per chunk: a
+        pasted payload of 1.5 KB or more is regularly cut short by the
+        device's input buffer (the REPL then reports a syntax error and the
+        caller waits out the exec timeout), while mpremote's own raw-REPL
+        writer has carried a megabyte of base64 over this link. A short copy
+        is retried once; the size check is what catches it.
+        """
+        import re
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".b64", delete=False) as tmp:
+            tmp.write(encoded.encode("ascii"))
+            tmp_path = tmp.name
+        try:
+            for attempt in (0, 1):
+                if progress is not None:
+                    progress(0, len(encoded))
+                subprocess.run(
+                    _mpremote_cmd(self.port, "cp", tmp_path,
+                                  ":{}".format(path)),
+                    capture_output=True, timeout=900)
+                out = self.exec(
+                    "import os; print('BSIZE', os.stat({!r})[6])".format(path))
+                match = re.search(rb"BSIZE (\d+)", out)
+                if match is not None and int(match.group(1)) == len(encoded):
+                    if progress is not None:
+                        progress(len(encoded), len(encoded))
+                    return True
+        finally:
+            os.unlink(tmp_path)
+        return False
+
+    def write_remote_file(self, path, data, progress=None):
+        """Write *data* to *path* on the device, whatever its size.
+
+        `mpremote fs cp` cannot carry a binary file (raw paste dies on the
+        first control byte), and one mpremote process per chunk costs about a
+        second of connection setup each. So: gzip when that helps, base64,
+        1 KB chunks through paste mode on one connection, then decode on the
+        device and compare the CRC before the temporary file is removed.
+
+        Chunk size is a reliability limit, not a speed one: a longer pasted
+        payload (1.5 KB measured) is occasionally truncated by the device's
+        aiorepl, which then waits out the exec timeout - 1 KB chunks have not
+        lost one. The floor is about 1 KB/s of payload on the badge.
+
+        The frame loop is frozen for the copy (the REPL drops pasted bytes
+        while it runs) and restored afterwards, so the UI does not repaint
+        until the file is complete.
+        """
+        import base64
+        import binascii
+        import gzip
+        import re
+
+        raw = bytes(data)
+        payload = raw
+        packed = False
+        if len(raw) > 4096:
+            candidate = gzip.compress(raw, 6)
+            if len(candidate) < len(raw):
+                payload = candidate
+                packed = True
+
+        crc = binascii.crc32(raw) & 0xFFFFFFFF
+        encoded = base64.b64encode(payload).decode("ascii")
+        b64_path = "/_mpos_push.b64"
+        gz_path = "/_mpos_push.gz"
+
+        out = b""
+        freeze = len(raw) > 65536
+        if freeze:
+            try:
+                self.exec("import mpos.ui; mpos.ui.task_handler.disable()")
+            except Exception:
+                freeze = False
+        try:
+            for _attempt in (0, 1):
+                if self._write_b64_chunks(encoded, b64_path, progress):
+                    break
+            else:
+                raise OSError(
+                    "the device did not accept all {} bytes of {}".format(
+                        len(encoded), path))
+
+            steps = [
+                "import os, ubinascii, binascii, deflate",
+                "_raw = open({!r}, 'rb')".format(b64_path),
+            ]
+            if packed:
+                steps.append("_gz = open({!r}, 'wb')".format(gz_path))
+                steps.append(
+                    "while True:\n"
+                    "    _c = _raw.read(4096)\n"
+                    "    if not _c:\n"
+                    "        break\n"
+                    "    _gz.write(ubinascii.a2b_base64(_c))")
+                steps.append("_raw.close(); _gz.close()")
+                steps.append(
+                    "_src = open({!r}, 'rb')\n"
+                    "_stream = deflate.DeflateIO(_src, deflate.GZIP)".format(
+                        gz_path))
+                steps.append(
+                    "try: os.remove({!r})\n"
+                    "except OSError: pass".format(path))
+                steps.append("_out = open({!r}, 'wb')".format(path))
+                steps.append(
+                    "while True:\n"
+                    "    _c = _stream.read(8192)\n"
+                    "    if not _c:\n"
+                    "        break\n"
+                    "    _out.write(_c)")
+                steps.append("_stream.close(); _src.close(); _out.close()")
+                steps.append(
+                    "try: os.remove({!r})\n"
+                    "except OSError: pass".format(gz_path))
+            else:
+                steps.append(
+                    "try: os.remove({!r})\n"
+                    "except OSError: pass".format(path))
+                steps.append("_out = open({!r}, 'wb')".format(path))
+                steps.append(
+                    "while True:\n"
+                    "    _c = _raw.read(4096)\n"
+                    "    if not _c:\n"
+                    "        break\n"
+                    "    _out.write(ubinascii.a2b_base64(_c))")
+                steps.append("_raw.close(); _out.close()")
+            steps.append(
+                "try: os.remove({!r})\n"
+                "except OSError: pass".format(b64_path))
+            steps.append(
+                "_d = open({!r}, 'rb').read()\n"
+                "_n = len(_d)\n"
+                "_crc = binascii.crc32(_d) & 0xffffffff\n"
+                "del _d\n"
+                "print('WROTE', _n, '%08x' % _crc)".format(path))
+            out = self.exec("\n".join(steps), timeout=120)
+        finally:
+            if freeze:
+                try:
+                    self.exec("import mpos.ui; mpos.ui.task_handler.enable()")
+                except Exception:
+                    pass
+
+        match = re.search(rb"WROTE (\d+) ([0-9a-f]{8})", out)
+        if match is None:
+            raise OSError("the device did not confirm the write of {}".format(path))
+        size, written_crc = int(match.group(1)), int(match.group(2), 16)
+        if size != len(raw) or written_crc != crc:
+            raise OSError(
+                "{} came back as {} bytes, crc {:08x} (wanted {} bytes, {:08x})"
+                .format(path, size, written_crc, len(raw), crc))
+        return size
+
 
     def press(self, x, y):
         self.exec(
@@ -1929,8 +2080,9 @@ class MPOSController:
     def read_file(self, path):
         return self._backend._read_remote_file(path)
 
-    def write_file(self, path, data):
-        self._backend.write_remote_file(path, data)
+    def write_file(self, path, data, progress=None):
+        """Write a file on the device, verified where the transport allows it."""
+        return self._backend.write_remote_file(path, data, progress=progress)
 
     def get_widget_tree(self):
         return self._backend.get_widget_tree()
@@ -1968,7 +2120,7 @@ def main():
     parser = argparse.ArgumentParser(description="MicroPythonOS Controller")
     parser.add_argument(
         "action", nargs="?", default="exec",
-        help="Action: exec, eval, screenshot, startapp, freespace, backscreen, installapp, listapps, deleteapp, click, longpress, drag (default: exec)",
+        help="Action: exec, eval, screenshot, startapp, freespace, backscreen, installapp, listapps, deleteapp, push, click, longpress, drag (default: exec)",
     )
     parser.add_argument("args", nargs="*", help="Arguments")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
@@ -2028,6 +2180,30 @@ def main():
             out = ctrl.exec("from mpos import AppManager ; AppManager.start_app({!r})".format(appname))
             sys.stdout.buffer.write(out)
             sys.stdout.buffer.write(b"\n")
+    elif args.action == "push":
+        # The only way a file of any size gets onto a badge: mpremote fs cp
+        # cannot carry binary, and the serial link is ~2-3 KB/s. gzip, base64
+        # and 3 KB chunks happen inside write_file; the device checks the CRC.
+        if len(args.args) < 2:
+            print("error: push needs <local> <remote>", file=sys.stderr)
+            return 1
+        local, remote = args.args[0], args.args[1]
+        if remote.startswith(":"):
+            remote = remote[1:]
+        with open(local, "rb") as f:
+            data = f.read()
+        last = [-1]
+
+        def progress(done, total):
+            percent = done * 100 // total
+            if percent >= last[0] + 10 or done == total:
+                last[0] = percent
+                print("  {}% ({} bytes)".format(percent, done), flush=True)
+
+        with ctrl:
+            size = ctrl.write_file(remote, data, progress=progress)
+        print("Wrote {} ({} bytes)".format(remote, size))
+        return 0
     elif args.action == "freespace":
         with ctrl:
             free = ctrl.check_free_space()

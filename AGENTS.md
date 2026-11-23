@@ -60,7 +60,7 @@ MicroPython's `unittest` has no `setUpModule`.
 
 ### Deploying lib/ changes to device
 
-Frozen modules in the firmware shadow filesystem `.py` files even though `sys.path = ['lib', '', '.frozen']`. To test a modified framework file at `internal_filesystem/lib/mpos/ui/*.py` on device:
+Frozen modules in the firmware shadow filesystem `.py` files even though `sys.path = ['lib', '', '.frozen']`. **Check for a shadow first** (`os.path.isdir('/lib/mpos')`): a badge that has never had `install.sh` run on it has none, so a framework edit there needs a **firmware rebuild** (`./scripts/build_mpos.sh esp32s3 --no-preload-fs`) and a flash instead of a file copy. To test a modified framework file at `internal_filesystem/lib/mpos/ui/*.py` on device once a shadow does exist:
 
 - **`./scripts/install.sh`** — copies the entire `lib/` directory to device flash (`lib/mpos/` → `:/lib/mpos/`), overriding frozen modules. Slow but comprehensive; run once to populate the tree.
 - **`python3 lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py connect /dev/ttyACM0 cp internal_filesystem/<path> :<path>`** — copies a single file. Fast but only works after `install.sh` has already created the target directory structure on flash.
@@ -129,6 +129,7 @@ Check here before writing a new measurement script; these exist and are maintain
 
 | Tool | What it does |
 |------|--------------|
+| `scripts/mpos_controller.py push <local> <remote>` | Puts a file of any size on a badge and verifies it: gzip + base64 + one `mpremote fs cp`, decoded on-device, device-side CRC checked. The only transfer path that carries binary and megabytes. |
 | `scripts/mpos_dac_acoustic.py` | Plays a tone sequence (or `--file <wav>`) through an i2s output and scores a recording from a host capture input. Also the way to prove the badge actually makes sound. Needs no cable: the tools default to a USB microphone and pick the channel count from the device, so the webcam mic records both the DAC speaker and the buzzer. |
 | `scripts/mpos_buzzer_acoustic.py` | Records the PWM buzzer with a host mic and folds each peak to the expected harmonic, so low notes work despite the piezo resonance. |
 | `scripts/mpos_screen_camera.py` | Aligns a webcam view to the device framebuffer (SIFT+RANSAC) and reports NCC, sharpness and per-icon-cell metrics. |
@@ -149,9 +150,13 @@ Hardware facts that cost time to rediscover:
 - **Screen checks with the C925e:** use `scripts/mpos_screen_camera.py` (`config`, `capture`, `measure`/`verify`), not raw ffmpeg stills. Auto exposure/high gain clips the white MicroPythonOS UI: `config --no-auto-exposure --exposure 100 --gain 0 --apply` gives a readable frame, and lowering the panel backlight (`mpos.ui.main_display.set_backlight(35)`, restore 100 afterwards) helps on white screens. The screen is only ~300x230 px in 1920x1080; SIFT still aligns it (86 matches/81 inliers measured on the Waveshare), but `cell_ncc_min` can fall below the default threshold from focus/resolution — inspect `compare.jpg`/`aligned.png` alongside the numbers. On the zbox1 rig `focus_absolute=40` was 4.5x sharper than the default `20` (Laplacian variance 229 vs 51 over the screen area). For the OTA gate a rig config with `min_inliers: 20`, `min_ncc_gray`/`min_ncc_gradient: 0.55`, `min_eff_px_per_screen_px: 0.70` and no `min_cell_ncc_min` passes: inliers ranged 21-56 per screen (text-only screens have the fewest features) and per-cell scores are meaningless on text at this resolution.
 - The I2S DMA ring starts full of silence that plays out in real time, so the first write after opening only lands as the ring drains (~22 ms per KB). Wait `ibuf` before priming.
 - Firmware `machine.I2S.write()` does not release the GIL, so an audio thread buys nothing; feed the sink from the same loop that presents frames.
-- **Copying files to the badge's SD card over USB-CDC runs at about 2 KB/s** (`mpremote cp` is the fastest serial path; chunked base64 through the REPL is no better): 500 KB takes ~5 minutes, so do not move media that way. The card itself writes at ~345 KB/s, so the link is the limit.
+- **Copying files to the badge's SD card over USB-CDC is slow** (~2-4.5 KB/s with the `push` action above): 500 KB takes minutes, so do not move media that way. The card itself writes at ~345 KB/s, so the link is the limit.
 - **To put megabytes on the card, pull them over WiFi instead.** Serve the directory on the host (`cd dir && python3 -m http.server 8765`) and fetch it on the device with a raw socket GET (~200 KB/s: a 2.6 MB clip in 12.5 s). `DownloadManager` needs the async stack and failed with `ENOENT` when called from the REPL; a plain `socket` + `GET ... HTTP/1.0` writing to `/sdcard/...` works. Mount the card first (`SDCardManager.mount()`), or the path does not resolve.
-- **A megabyte into the internal filesystem over a 115200 UART: gzip, base64, `mpremote fs cp` the text, decode on the device.** `fs cp` cannot carry a binary file at all (raw paste dies on the first control byte: `could not complete raw paste`), and a hand-written raw-REPL writer has to pace like mpremote does (256 bytes every 10 ms) or the ESP32 UART input buffer overruns and the command silently truncates. The WAD (1,805,391 bytes) becomes an 820,778-byte gzip and 1,094,372 bytes of base64; the copy took 4m24s. On the device decode with `ubinascii.a2b_base64` in 4 KiB chunks (the file must be one line, `base64 -w 0`), then decompress with `deflate.DeflateIO(src, deflate.GZIP)` - `zlib` is not in the firmware, only `deflate` (`AUTO`/`GZIP`/`ZLIB`/`RAW`). Freeze the UI for the whole copy (`mpos.ui.task_handler.disable()`); the paste drops bytes while the frame loop runs. **A soft reset does not restart the LVGL task handler** - a disabled handler stays disabled across `mpremote` calls, so re-enable it or hard-reset before believing `frames=0`.
+- **Pushing a file to the badge: `python3 scripts/mpos_controller.py push <local> <remote> --serial-port /dev/ttyUSB1 --no-reset`.** Do not write another ad-hoc copier. It gzips, base64s, copies with **one** `mpremote fs cp`, decodes on the device (4 KiB chunks of `ubinascii.a2b_base64` into `deflate.DeflateIO(src, deflate.GZIP)`; `zlib` is not in the firmware), and checks the device-side CRC. Measured: 357,692 bytes in **79 s** (~4.5 KB/s), 4 KB in 8 s.
+  - `mpremote fs cp` cannot carry **binary** (raw paste dies on the first control byte: `could not complete raw paste`), so the base64 text form is not optional.
+  - One fs cp for the whole file, not one per chunk: a process per 3 KB chunk costs a second of setup and *does* fail mid-copy ("could not enter raw repl").
+  - A **paste-mode** payload of 1.5 KB or more is regularly cut short by the device's input buffer - the REPL prints a SyntaxError and the caller waits out its whole exec timeout. 1 KB chunks still lost about one in six, which is why the tool does not send data through `exec` at all.
+  - Freeze the UI for the whole copy (`mpos.ui.task_handler.disable()`; the tool does it above 64 KB): the REPL drops bytes while the frame loop runs. **A soft reset does not restart the LVGL task handler** - a disabled handler stays disabled across `mpremote` calls, so re-enable it or hard-reset before believing `frames=0`.
 
 ## Development rules
 
@@ -318,6 +323,13 @@ Critical gotchas:
 - Event callbacks: 3 args, `def method(self, event=None)` for dual use.
 - Use `remove_flag()`/`remove_state()` not `clear_flag()`/`clear_state()`.
 - `lv.OPA` values at steps of 10 only. No `_5` — use nearest step or raw int.
+- `transform_rotation`/`scale`/`skew` act about `transform_pivot_x/y`, and **both
+  default to 0 — the widget's top-left corner**, not its centre. A label turned
+  90° for a portrait panel therefore swings half its (swapped) size away from
+  where it is placed: `get_x()`/`get_width()` report the right box and every
+  coordinate assertion passes while the drawn text is tens of pixels off. Set
+  `transform_pivot_x/y` to `lv.pct(50)` to turn about the centre, and check the
+  result in pixels, not coordinates.
 - Never take a snapshot from inside a draw callback: an imgfont/style callback runs while LVGL draws, and `lv.snapshot_take_to_buf` waits for that draw forever (silent whole-system hang). Defer it with `lv.async_call` (see `FontManager._defer_scale`).
 - Make UI uniform: buttons in same flex row = same height.
 
@@ -376,7 +388,7 @@ Critical gotchas:
 ### Debugging
 - Bug at commit Y, worked at X: `git diff X..Y --name-only`, then trace every changed line. Don't assume the bug is in the most recent file.
 - PTY I/O error (`OSError 5`) = binary crash. 139=SIGSEGV, 134=SIGABRT. Run binary directly with `-c` to reproduce.
-- Trust visual reality over code intent with UI bugs. Use `mpos.get_widget_tree()` to inspect actual coordinates.
+- Trust visual reality over code intent with UI bugs. Use `mpos.get_widget_tree()` to inspect actual coordinates — but the tree reports layout boxes, not draw-time transforms (rotation, scale, skew): for those, snapshot the parent with `lv.snapshot_take_to_buf` and check where the pixels actually are.
 - A crash is ALWAYS a bug: fix the crash site first, work around it second — never avoidance alone. "Upstream code" is not immunity: this repo already patches IDF (`patches/*.patch` via `build_mpos.sh`), and a decodeable PC (`xtensa-*-elf-addr2line -e <elf>`) turns a mystery abort into a patchable line. Avoidance is only acceptable together with a fix attempt, or when the crash is in upstream code AND the workaround is genuinely easy (no permanent UX tax).
 
 ### Performance
