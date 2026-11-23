@@ -6,6 +6,7 @@ Frameworks:
 - `NativeDisplay`: `add_buffer()` / `select_buffer()` show whichever of a device's buffers is finished
 - `mpos.ui.native_input.KeyHolds.tap_held()`: a key that an engine samples once a tic stays down for one tic; `tap()` only suits engines that act on the key event itself
 - native modules on x64: the loader maps the module's BSS/rodata below 4 GB (falling back to the heap), so an engine that keeps addresses in 32-bit words (Duke3D's Build renderer) works as a desktop module
+- InputActivity: a text setting's optional `scan_check(text)` runs after a QR code is scanned into the field and shows a warning below it when the data doesn't have the expected format, so a scan of the wrong QR code gets noticed before Save
 
 0.23.0
 ======
