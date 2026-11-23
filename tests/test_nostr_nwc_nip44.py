@@ -63,6 +63,8 @@ def _manager(client_key, wallet_key):
     mgr._nwc_filters = None
     mgr._nwc_encryption = "nip04"
     mgr._nwc_nip44_refused = False
+    mgr._nwc_nip04_refused = False
+    mgr._nwc_stale_replies = 0
     mgr._nwc_request_schemes = []
     mgr._nwc_list_limit = 21
     mgr._nwc_info = {}
@@ -348,12 +350,41 @@ class TestNwcReplies(_FastNip44Case):
         self.assertFalse(self.mgr._nwc_nip44_refused)
         self.assertEqual(self.errors, [])
 
-    def test_unsupported_encryption_on_a_nip04_connection_is_reported(self):
+    def test_unsupported_encryption_on_a_nip04_only_connection_is_reported(self):
+        self.mgr._process_event(_info_event(self.wallet))
         balance_id, _ = self._send_poll()
         self.mgr._process_event(_reply_event(
             self.wallet, self.client, _unsupported("get_balance"), "nip04", request_id=balance_id))
         self.assertEqual(len(self.errors), 1)
         self.assertTrue("UNSUPPORTED_ENCRYPTION" in self.errors[0])
+
+    def test_nip04_refusal_before_the_info_event_tries_nip44(self):
+        balance_id, payments_id = self._send_poll()
+        for request_id, result_type in ((balance_id, "get_balance"), (payments_id, "list_transactions")):
+            self.mgr._process_event(_reply_event(
+                self.wallet, self.client, _unsupported(result_type), "nip04", request_id=request_id))
+        self.assertEqual(self.errors, [])
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+
+    def test_wallet_refusing_both_without_an_info_event_is_reported(self):
+        # The info event never arrives; the wallet refuses nip04, then nip44.
+        for _ in range(3):
+            ids = self._send_poll()
+            for request_id, result_type in zip(ids, ("get_balance", "list_transactions")):
+                self.mgr._process_event(_reply_event(
+                    self.wallet, self.client, _unsupported(result_type), "nip04", request_id=request_id))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertTrue(self.mgr._nwc_nip44_refused)
+        self.assertEqual(len(self.errors), 1)
+
+    def test_nip04_refusal_without_nip44_available_is_reported(self):
+        self.mgr._nwc_conversation_key = None
+        balance_id, _ = self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04", request_id=balance_id))
+        self.assertEqual(len(self.errors), 1)
 
     def test_unsupported_encryption_without_e_tag_in_nip44_mode_falls_back(self):
         self.mgr._nwc_encryption = "nip44_v2"
@@ -469,7 +500,10 @@ class TestNwcOnTheSlowChaCha20Core(unittest.TestCase):
         self._fast = nostr_service.NIP44_FAST
         nostr_service.NIP44_FAST = False
         self.wallet = PrivateKey()
-        self.mgr = _manager(PrivateKey(), self.wallet)
+        self.client = PrivateKey()
+        self.mgr = _manager(self.client, self.wallet)
+        self.errors = []
+        self.mgr._error_cb = self.errors.append
 
     def tearDown(self):
         nostr_service.NIP44_FAST = self._fast
@@ -478,9 +512,56 @@ class TestNwcOnTheSlowChaCha20Core(unittest.TestCase):
         self.mgr._process_event(_info_event(self.wallet, "nip44_v2 nip04"))
         self.assertEqual(self.mgr._nwc_encryption, "nip04")
 
-    def test_nip44_only_wallet_still_gets_nip44(self):
+    def test_wallet_listing_only_nip44_stays_on_nip04_while_it_answers(self):
+        # Rizful listed only nip44_v2 in November 2026 but still answered
+        # nip04, which decrypts in C instead of seconds of Python.
         self.mgr._process_event(_info_event(self.wallet, "nip44_v2"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertEqual(self.mgr.relay_manager.messages, [])
+
+    def _poll_refused(self):
+        self.mgr.nwc_fetch_balance()
+        self.mgr.nwc_fetch_payments()
+        ids = [e.id for e in self.mgr.relay_manager.published[-2:]]
+        for request_id, result_type in zip(ids, ("get_balance", "list_transactions")):
+            self.mgr._process_event(_reply_event(
+                self.wallet, self.client, _unsupported(result_type), "nip04", request_id=request_id))
+
+    def test_nip04_refusal_switches_a_nip44_wallet_to_nip44(self):
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2"))
+        self._poll_refused()
         self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertEqual(self.errors, [])
+        self.assertTrue(time.time() - self.mgr._last_nwc_poll >= NostrManager.NWC_POLL_SECONDS)
+        self.mgr.nwc_fetch_balance()
+        self.assertTrue(["encryption", "nip44_v2"] in self.mgr.relay_manager.published[-1].tags)
+
+    def test_nip04_refusal_without_nip44_on_offer_is_reported(self):
+        self.mgr._process_event(_info_event(self.wallet, "nip04"))
+        self._poll_refused()
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertEqual(len(self.errors), 1)
+
+    def test_refusals_without_e_tags_switch_once_and_stay_quiet(self):
+        # NIP-47 only says replies SHOULD carry the "e" tag.
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2"))
+        self.mgr.nwc_fetch_balance()
+        self.mgr.nwc_fetch_payments()
+        for result_type in ("get_balance", "list_transactions"):
+            self.mgr._process_event(_reply_event(
+                self.wallet, self.client, _unsupported(result_type), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertFalse(self.mgr._nwc_nip44_refused)
+        self.assertEqual(self.errors, [])
+
+    def test_configure_forgets_the_nip04_refusal(self):
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2"))
+        self._poll_refused()
+        self.mgr._nwc_nwc_url = None
+        self.mgr.configure_nwc("nostr+walletconnect://{}?relay=wss://relay.example&secret={}".format(
+            self.wallet.public_key.hex(), PrivateKey().raw_secret.hex()))
+        self.assertFalse(self.mgr._nwc_nip04_refused)
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
 
 
 if __name__ == "__main__":

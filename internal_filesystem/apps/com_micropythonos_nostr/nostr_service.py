@@ -340,6 +340,12 @@ class NostrManager:
         # Set when the wallet answered UNSUPPORTED_ENCRYPTION to a nip44_v2
         # request, so a replayed info event does not switch back to it.
         self._nwc_nip44_refused = False
+        # Set when the wallet answered UNSUPPORTED_ENCRYPTION to a nip04
+        # request: then nip44_v2 is used even with the slow ChaCha20 core.
+        self._nwc_nip04_refused = False
+        # Error replies without an "e" tag still expected for the scheme in
+        # use before the last switch (see _set_nwc_encryption).
+        self._nwc_stale_replies = 0
         # [request event id, encryption] of the latest NWC requests, so an
         # error reply can be matched to the scheme of the request it answers.
         self._nwc_request_schemes = []
@@ -1072,6 +1078,8 @@ class NostrManager:
         # A new connection starts on nip04 until its wallet says otherwise.
         self._nwc_encryption = "nip04"
         self._nwc_nip44_refused = False
+        self._nwc_nip04_refused = False
+        self._nwc_stale_replies = 0
         self._nwc_filters = None
         self._nwc_request_schemes = []
         self._nwc_conversation_key = None
@@ -1574,10 +1582,16 @@ class NostrManager:
         after a switch.
         """
         current = getattr(self, "_nwc_encryption", "nip04")
-        refused = getattr(self, "_nwc_nip44_refused", False)
         scheme = self._nwc_request_scheme(event)
         if scheme is None:
-            scheme = "nip44_v2" if (current == "nip44_v2" or refused) else "nip04"
+            # No "e" tag (NIP-47 only says SHOULD). Right after a switch the
+            # other request of the same poll was sent in the old scheme, so
+            # the first replies after it are taken as stale.
+            stale = getattr(self, "_nwc_stale_replies", 0)
+            if stale > 0:
+                self._nwc_stale_replies = stale - 1
+                return True
+            scheme = current
         if scheme == "nip44_v2":
             if current == "nip44_v2":
                 # The wallet advertised nip44_v2 but refused it: go back to
@@ -1590,7 +1604,25 @@ class NostrManager:
             # A nip04 request sent before the switch to nip44_v2; the same
             # request has already gone out again in nip44_v2.
             return True
+        # The wallet refused nip04 while this connection was on it (the
+        # slow-core case in _choose_nwc_encryption, or before its info event
+        # arrived). Try nip44_v2 unless the info event rules it out; with
+        # nothing left to try, report the error.
+        if not getattr(self, "_nwc_nip04_refused", False):
+            logger.warning("NostrManager: wallet refused NIP-04")
+            self._nwc_nip04_refused = True
+        info = getattr(self, "_nwc_info", {}).get(self._nwc_wallet_pubkey)
+        if info is not None and "nip44_v2" not in info[1]:
+            return False
+        if self._nwc_nip44_usable():
+            self._set_nwc_encryption("nip44_v2")
+            return True
         return False
+
+    def _nwc_nip44_usable(self):
+        return (getattr(self, "_nwc_conversation_key", None) is not None
+                and nip44_encrypt is not None
+                and not getattr(self, "_nwc_nip44_refused", False))
 
     def _nwc_request_scheme(self, event):
         """Encryption of the request an NWC reply answers, or None."""
@@ -1611,11 +1643,11 @@ class NostrManager:
 
     def _choose_nwc_encryption(self, schemes):
         # With the slow pure-Python ChaCha20 (older firmware) a transaction
-        # list takes seconds to decrypt and blocks the UI, so use nip44_v2
-        # there only when the wallet does not offer nip04 at all.
-        if ("nip44_v2" in schemes and self._nwc_conversation_key is not None
-                and nip44_encrypt is not None and not self._nwc_nip44_refused
-                and (NIP44_FAST or "nip04" not in schemes)):
+        # list takes seconds to decrypt and blocks the UI, so stay on nip04
+        # there until the wallet actually refuses it. Wallets that list only
+        # nip44_v2 may still answer nip04 (Rizful did in November 2026).
+        if ("nip44_v2" in schemes and self._nwc_nip44_usable()
+                and (NIP44_FAST or getattr(self, "_nwc_nip04_refused", False))):
             return "nip44_v2"
         return "nip04"
 
@@ -1651,6 +1683,9 @@ class NostrManager:
         """Switch NWC encryption, resubscribe for the matching notification
         kind and, by default, poll again straight away in the new mode."""
         self._nwc_encryption = mode
+        # Replies without an "e" tag to the requests already sent in the old
+        # scheme (one poll) are not judged against the new one.
+        self._nwc_stale_replies = 2
         self._nwc_filters = None
         if self.relay_manager is not None and self._nwc_sub_id:
             self._publish_nwc_subscription()
