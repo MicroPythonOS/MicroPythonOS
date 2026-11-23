@@ -22,7 +22,8 @@ ENGINE = \
 	gen/r_main.c gen/r_plane.c gen/r_segs.c gen/r_sky.c gen/r_things.c \
 	gen/sha1.c gen/sounds.c gen/statdump.c gen/st_lib.c gen/st_stuff.c \
 	gen/s_sound.c gen/tables.c gen/v_video.c gen/wi_stuff.c gen/w_checksum.c \
-	gen/w_file.c gen/w_file_stdc.c gen/w_main.c gen/w_wad.c gen/z_zone.c \
+	gen/w_file.c gen/w_file_stdc.c gen/w_file_memory.c gen/w_main.c \
+	gen/w_wad.c gen/z_zone.c \
 	gen/doomgeneric.c gen/doom_data_init.c
 
 ENGINE_STEMS = $(patsubst gen/%.c,%,$(ENGINE))

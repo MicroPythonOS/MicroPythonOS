@@ -17,9 +17,10 @@ flag), so everything above them is shared: ``mpos.ui.native_activity`` owns the
 surface, the pacing, the labels and the frame loop, and this file is the game's
 own business - which engine, which WAD, which controls.
 
-The WAD ships deflated (``doom1.wad.zip``) and is unpacked into a RAM buffer at
-launch: the core reads it through the host's file callbacks, so the engine
-touches PSRAM instead of littlefs.
+The WAD ships deflated (``doom1.wad.zip``) and is inflated into a host buffer at
+launch - never written to storage. The core reads it through the host's file
+callbacks, the native module reads it from memory, and the buffer is freed
+when the session ends so the core's zone gets that heap back.
 
 Controls - touch (any touch panel). Hold the device sideways while playing:
 the left thumb gets a joystick and the right thumb three bands.
@@ -107,9 +108,6 @@ WAD_ZIP_NAME = "doom1.wad.zip"
 # The engine writes .default.cfg and .savegame/ relative to the working
 # directory, so it runs inside the app's prefs.
 PREFS_DIR = "prefs/com.micropythonos.doom"
-# The desktop module reads the WAD with stdio (no host callbacks), so its
-# deflated WAD has to exist as a file.
-CACHE_DIR = "cache/com.micropythonos.doom"
 
 
 def _app_directory():
@@ -252,25 +250,97 @@ def _wad_zip():
     return path
 
 
+# The core's engine asks for a 3 MiB zone (`c_mpos/doom/core/doom_core.c`), and
+# its libc's exit() only records the request instead of unwinding, so a failed
+# allocation makes I_Error recurse until the stack dies and the badge resets.
+# Refuse the launch here instead. Below the preferred size the engine can still
+# fall back, but a block this small means something else is holding PSRAM.
+ZONE_BYTES = 3 * 1024 * 1024
+
+
+def _largest_free_block():
+    """The biggest free block on the C heap (``None`` when unknown)."""
+    try:
+        import esp32
+    except ImportError:
+        return None
+    try:
+        largest = 0
+        for entry in esp32.idf_heap_info(esp32.HEAP_DATA):
+            # (total, free, largest_free, ...); small entries are internal RAM.
+            if entry[0] > 1024 * 1024 and entry[2] > largest:
+                largest = entry[2]
+        return largest or None
+    except Exception:
+        return None
+
+
 def _require_ram(size):
-    """Refuse an unpack that cannot fit, before the allocator fails mid-way."""
+    """Refuse a launch that cannot fit, before the allocator fails mid-way."""
+    needed = size + ZONE_BYTES
+    largest = _largest_free_block()
+    if largest is not None:
+        if largest < needed:
+            raise RuntimeError(
+                "not enough free RAM for Doom's %d KB of engine memory; close "
+                "another app or restart the badge (%d KB is free in one block, "
+                "%d KB needed)" % (ZONE_BYTES // 1024, largest // 1024,
+                                   needed // 1024))
+        return
     try:
         import gc
         free = gc.mem_free()
     except Exception:
         return
-    if free and free < size + 1024 * 1024:
+    if free and free < needed:
         raise RuntimeError(
             "not enough free RAM for the WAD (%d KB free, %d KB needed plus "
             "the engine's zone)" % (free // 1024, size // 1024))
 
 
-def prepare_wad(intent, engine_name, loading):
+def _asset_buffer(size):
+    """RAM for the inflated WAD, outside MicroPython's garbage collector.
+
+    A bytearray that large makes the split GC heap add an area, and once any
+    other object lives in that area it can never go back to the IDF heap -
+    while the core's zone needs one contiguous 3 MiB block after the WAD is in
+    RAM. A host without mpos_core (the desktop) has no such pressure, so a
+    plain bytearray is fine there.
+    """
+    try:
+        import mpos_core
+    except ImportError:
+        return bytearray(size)
+    alloc = getattr(mpos_core, "buffer", None)
+    if alloc is None:
+        return bytearray(size)
+    return alloc(size)
+
+
+def _free_asset_buffer(buffer):
+    """Give back a buffer from :func:`_asset_buffer`; a bytearray needs nothing."""
+    if buffer is None:
+        return
+    try:
+        import mpos_core
+    except ImportError:
+        return
+    free = getattr(mpos_core, "buffer_free", None)
+    if free is None:
+        return
+    try:
+        free(buffer)
+    except Exception as error:
+        print("doom: cannot free the WAD buffer: %s" % (error,))
+
+
+def prepare_wad(intent, loading):
     """The WAD source for this launch, or None when there is no WAD at all.
 
     A plain ``doom1.wad`` next to the app or on the SD card wins (it needs no
-    unpack). Otherwise the bundled ``doom1.wad.zip`` is inflated into a buffer
-    for the core, and extracted to a cache file for the desktop module.
+    extraction). Otherwise the bundled ``doom1.wad.zip`` is inflated into a
+    buffer for this session and never written to storage: the core reads it
+    through the host's file callbacks, the native module straight from memory.
     """
     path = find_wad(intent)
     if path is not None:
@@ -283,22 +353,22 @@ def prepare_wad(intent, engine_name, loading):
         raise RuntimeError(
             "Doom needs a newer MicroPythonOS (no zipasset support)")
 
+    size = zipasset.entry_size(archive)
+    # The WAD and the zone have to fit at once, so refuse before the
+    # three-second inflate rather than after it.
+    _require_ram(size)
+
     def progress(done, total):
         loading("Unpacking WAD", done, total)
 
-    if engine_name == "core":
-        _require_ram(zipasset.entry_size(archive))
-        buffer, size = zipasset.load(archive, progress=progress)
-        return _WadSource(WAD_ZIP_NAME[:-4], size, buffer=buffer)
-
-    # A native module reads the WAD with stdio, so it needs a real file.
-    cache_dir = _absolute(CACHE_DIR)
-    target = cache_dir + "/" + WAD_ZIP_NAME[:-4]
-    buffer, size = zipasset.load(archive, progress=progress)
-    _makedirs(cache_dir)
-    with open(target, "wb") as out:
-        out.write(buffer)
-    return _WadSource(target, size, path=target)
+    progress(0, size)
+    buffer = _asset_buffer(size)
+    try:
+        buffer, size = zipasset.load(archive, progress=progress, buffer=buffer)
+    except Exception:
+        _free_asset_buffer(buffer)
+        raise
+    return _WadSource(WAD_ZIP_NAME[:-4], size, buffer=buffer)
 
 
 def prefs_dir():
@@ -368,6 +438,10 @@ class _CoreEngine:
         if extent is None or not extent.available():
             raise RuntimeError(
                 "Doom needs a newer MicroPythonOS (no littlefs2e extent support)")
+        # The WAD (if it was inflated) is in RAM by now, so this is the last
+        # point at which a hopeless zone allocation can be turned into a
+        # message instead of the engine's error path resetting the board.
+        _require_ram(0)
         path, name = find_engine()
         if not name.endswith(".xip"):
             raise RuntimeError("Doom has no XIP core for this SoC")
@@ -518,10 +592,16 @@ class _NatmodEngine:
 
     def start(self, wad, surface):
         self._surface = surface
-        if wad.path is None:
-            raise RuntimeError("the native Doom engine needs the WAD on disk")
         self._config_dir = prefs_dir()
-        self._doom.create(wad.path, ZONE_MB, self._config_dir)
+        if wad.buffer is not None:
+            # The WAD was inflated for this session; the module keeps the
+            # bytes in memory instead of opening a file.
+            self._doom.create_from_memory(wad.buffer, ZONE_MB, self._config_dir)
+        elif wad.path is not None:
+            self._doom.create(wad.path, ZONE_MB, self._config_dir)
+        else:
+            raise RuntimeError(
+                "the native Doom engine needs the WAD in memory or on disk")
         self._present = self._present_band
         self._doom.surface(surface.buffer, surface.width, surface.height,
                            surface.rows_per_band, self._present)
@@ -548,6 +628,11 @@ class _NatmodEngine:
     def stop(self):
         try:
             self._doom.surface(None, 0, 0, 0, None)
+        except Exception:
+            pass
+        try:
+            # Drop the engine's pointer before the app frees the buffer.
+            self._doom.clear_wad()
         except Exception:
             pass
         self._present = None
@@ -618,9 +703,13 @@ class Doom(NativeActivity):
             text = "%s %d%%" % (text, (done * 100) // total)
         self.set_message(text)
         try:
-            lv.refr_now()
-        except Exception:
-            pass
+            # The binding takes the display explicitly; a no-argument call
+            # raises TypeError, and swallowing that silently is what made the
+            # whole start-up look frozen (nothing repainted until the engine's
+            # first frame).
+            lv.refr_now(None)
+        except Exception as error:
+            print("doom: cannot repaint the launch message: %s" % (error,))
 
     def _extent_progress(self, phase, percent):
         """Repaint the launch message while an extent is defragmented."""
@@ -633,7 +722,7 @@ class Doom(NativeActivity):
         self._loading("Checking the Doom engine")
         try:
             wad = prepare_wad(
-                getattr(self, "intent", None), self.engine.name, self._loading)
+                getattr(self, "intent", None), self._loading)
         except Exception as error:
             self.show_message("Doom cannot start:\n%s" % (error,))
             return False
@@ -645,7 +734,18 @@ class Doom(NativeActivity):
         self._wad = wad
         self._loading("Starting the engine")
         self.engine.progress = self._extent_progress
-        self.engine.start(wad, surface)
+        try:
+            self.engine.start(wad, surface)
+        except Exception:
+            # Nothing will read the WAD again, and the message the base class
+            # puts up can stay: give the RAM back before the player reads it.
+            self._wad = None
+            try:
+                self.engine.stop()
+            except Exception:
+                pass
+            _free_asset_buffer(wad.buffer)
+            raise
         if self.hint is not None:
             self._clear_hint()
             self.show_hint(self.hint_text)
@@ -658,6 +758,15 @@ class Doom(NativeActivity):
     # -- input ------------------------------------------------------------
 
     def on_screen(self, screen):
+        # A firmware before the framework owns a black native screen still
+        # hands the activity the theme's white, scrollable one: paint it here
+        # so the letterbox is black and a drag the game ignores cannot scroll
+        # the picture out of place. (Harmless where NativeActivity already
+        # did the same thing.)
+        screen.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
+        screen.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
+        screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.zones = ThumbZones({
             "left": KEY_LEFT, "right": KEY_RIGHT,
             "up": KEY_UP, "down": KEY_DOWN,
@@ -677,6 +786,14 @@ class Doom(NativeActivity):
         # No frame loop runs while paused, so no finger is down when the game
         # comes back: a hold that straddles the pause must not continue.
         self.zones.reset()
+
+    def onStop(self, screen):
+        # The engine drops its own WAD reference first, then the buffer goes
+        # back to the heap the core's zone has to come from.
+        super().onStop(screen)
+        if self._wad is not None:
+            _free_asset_buffer(self._wad.buffer)
+            self._wad = None
 
     def on_frame(self, now):
         # A letter and the NEXT/PREV it rides on arrive in one input read, so

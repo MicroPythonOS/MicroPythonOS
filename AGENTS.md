@@ -179,6 +179,45 @@ The AppStore and AppManager share App objects by reference — `self.apps`, `_by
 3. **Prefer filesystem reads over cache reads for installed state.** The cache can go stale or be corrupted by shared-object writes. For installed-app data (version, installed status), reading MANIFEST.JSON directly from `apps/` or `builtin/apps/` is more reliable than `_by_fullname`.
 4. **Don't overwrite fields on shared objects.** If an App object lives in both the AppManager cache and the store list, use a separate attribute (e.g., `_remote_version`) for store-specific data instead of mutating shared fields like `version`.
 
+### Debugging memory and allocator problems
+
+A native engine's failure ("not enough RAM", "no partition", a launch that only
+works the first time) is usually an ownership question, not a size question.
+The expensive mistakes here all came from skipping these measurements.
+
+1. **Falsify the theory with a three-line experiment before changing
+   architecture.** On the target: allocate the size in question, free it, and
+   print `gc.mem_free()` *and* `esp32.idf_heap_info(esp32.HEAP_DATA)` (free and
+   **largest**) at each step. The two report different heaps: the split GC heap
+   owns areas taken from IDF, so `gc.mem_free()` can look healthy while
+   `heap_caps_malloc()` cannot find the block a core needs. A hypothesis that
+   has not survived one direct test is not a diagnosis.
+2. **Find the ownership chain first**: who allocates, from which heap, who
+   frees, and when. "The memory never comes back" is nearly always an ownership
+   bug; moving the same bytes elsewhere (storage, a permanent reservation, a
+   cache) hides it instead of fixing it.
+3. **Large assets do not belong in the GC heap** when something else needs one
+   big contiguous block. A multi-megabyte `bytearray` makes the collector add an
+   area; once any other object lives in that area it can never be returned to
+   the IDF heap, and the engine's zone/arena/framebuffer allocation fails on the
+   next launch. Use C-heap memory with an explicit lifetime
+   (`mpos_core.buffer` / `buffer_free`) and free it when the session ends.
+4. **Question the engine's request.** "3 MiB contiguous" is a line in a port
+   (`-mb 3`) or an arena design, not a hardware law: read the call site, and
+   treat "ask for less" and "assemble the range from pages" as part of the
+   design space before calling it immovable.
+5. **The user's constraints are the specification.** "Never on storage", "no
+   permanent reservation", "must fit 7 MB" are requirements: a fix that breaks
+   one is not a candidate even when it removes the symptom. If nothing satisfies
+   them, say so rather than shipping the least-bad violation.
+6. **Reproduce in the normal user flow.** A failure first seen while poking a
+   live system with `exec` can be an artefact of the poking (a leaked activity,
+   a half-stopped engine). Fresh boot -> launch -> leave is the baseline;
+   instrument that, then fix.
+7. **Look at where the work and the memory actually are, not at the API's
+   language.** The inflate here was already C (`deflate`); the cost was the
+   destination buffer and who freed it, not Python.
+
 ### Logging
 
 ```python

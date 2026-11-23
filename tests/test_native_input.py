@@ -348,6 +348,31 @@ class ThumbZonesTest(unittest.TestCase):
         self.assertEqual(self.zones.released(240, 180, 1), "fire")
         self.assertEqual(self.hold.held(), {})
 
+    def test_the_stick_is_anchored_where_the_thumb_lands(self):
+        # "Touch anywhere on the left half and drag from there": a small drag
+        # in the top-left corner turns right, where a fixed centre would have
+        # called it up-and-left.
+        self.assertEqual(self.zones.pressed(10, 10, 0), "stick")
+        self.zones.moving(30, 10, 0)
+        self.assertTrue(self.hold.is_held(KEYS["right"]))
+        self.assertFalse(self.hold.is_held(KEYS["left"]))
+        self.assertFalse(self.hold.is_held(KEYS["up"]))
+        self.assertFalse(self.hold.is_held(KEYS["down"]))
+
+    def test_a_touch_inside_the_deadzone_does_not_move(self):
+        # The centre is the touch point, not the zone's middle: a thumb at the
+        # far corner that hardly moves stays still instead of walking down.
+        self.zones.pressed(150, 190, 0)
+        self.zones.moving(155, 185, 0)
+        self.assertEqual(self.hold.held(), {})
+
+    def test_a_small_drag_turns(self):
+        # Big enough to be deliberate, small enough that a thumb does not have
+        # to swipe: the stick answers a few pixels.
+        self.zones.pressed(80, 100, 0)
+        self.zones.moving(89, 100, 0)
+        self.assertTrue(self.hold.is_held(KEYS["right"]))
+
     def test_both_directions_of_one_finger_can_be_down(self):
         self.zones.pressed(80, 100, 0)
         self.zones.moving(60, 60, 0)

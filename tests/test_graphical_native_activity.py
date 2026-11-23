@@ -206,6 +206,8 @@ class TestNativeActivity(unittest.TestCase):
         self.game._rotated = True
         self.game._started = True
         self.game._paused = False
+        # The harness stands in for a session whose engine already started.
+        self.game._ready = True
 
     def tearDown(self):
         mpos.ui.task_handler.remove_event_cb(self.game._drawframe)
@@ -328,6 +330,16 @@ class TestNativeActivity(unittest.TestCase):
         self.assertTrue(self.game._surface._active,
                         "the surface is still valid for the app's own message")
 
+    def test_an_engine_that_did_not_start_is_never_ticked(self):
+        # The app has shown why it cannot run (a missing WAD, not enough RAM);
+        # ticking the engine anyway raises on every frame.
+        self.game.start_engine = lambda surface: False
+        self.game._started = False
+        self.game.onResume(None)
+        self._frame()
+        self.assertEqual(self.engine.ticks, 0)
+        self.assertEqual(self.game._frames, 0)
+
     def test_the_engine_decides_the_surface_shape(self):
         self.game.engine = _FakeEngine(size=(200, 320))
         self.game._started = False
@@ -379,6 +391,7 @@ class TestNativeActivity(unittest.TestCase):
         game.engine = self.engine
         game._surface = _FakeSurface()
         game._paused = False
+        game._ready = True
         panel = _FakePanel(list(touches))
         game.touch = TouchMonitor(panel)
         self.addCleanup(mpos.ui.task_handler.remove_event_cb, game._drawframe)

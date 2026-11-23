@@ -37,6 +37,24 @@ class TestZipAsset(unittest.TestCase):
         self.assertEqual(seen[-1][0], len(PAYLOAD))
         self.assertEqual(seen[-1][1], len(PAYLOAD))
 
+    def test_loads_into_a_caller_supplied_buffer(self):
+        # A host that keeps the asset in C-heap memory (mpos_core.buffer)
+        # hands the buffer over; it must be filled in place, not replaced.
+        supplied = bytearray(len(PAYLOAD))
+        buffer, size = load(FIXTURES + "/asset_deflated.zip",
+                            buffer=supplied)
+        self.assertIs(buffer, supplied)
+        self.assertEqual(size, len(PAYLOAD))
+        self.assertEqual(bytes(buffer), PAYLOAD)
+
+    def test_a_wrong_sized_buffer_is_refused(self):
+        with self.assertRaises(ZipAssetError):
+            load(FIXTURES + "/asset_deflated.zip",
+                 buffer=bytearray(len(PAYLOAD) - 1))
+        with self.assertRaises(ZipAssetError):
+            load(FIXTURES + "/asset_deflated.zip",
+                 buffer=bytearray(len(PAYLOAD) + 1))
+
     def test_missing_entry_raises(self):
         with self.assertRaises(ZipAssetError):
             load(FIXTURES + "/asset_deflated.zip", "nope.wad")

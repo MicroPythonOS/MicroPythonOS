@@ -97,8 +97,16 @@ class NativeActivity(Activity):
     error = None
     hint = None
     _surface = None
+    # A game paints its own start-up (a black surface, then "Unpacking WAD
+    # 42%"), so its screen must be active as soon as it is created: with the
+    # usual slide-in the new screen sits off to the side while a blocking
+    # start-up runs, and every repaint of the progress lands on the old screen.
+    screen_transition_ms = 0
     _paused = True
     _started = False
+    # False when start_engine() returned False: the app is showing why it
+    # cannot run, and there is no engine to tick.
+    _ready = False
     _leaving = False
     _next_frame_ms = 0
     _frame_interval_ms = 1000 // DEFAULT_FPS
@@ -126,6 +134,14 @@ class NativeActivity(Activity):
 
     def onCreate(self):
         self.screen = lv.obj()
+        # The engine's surface covers the picture, but the letterbox bars and
+        # the launch messages are drawn on this screen: the OS theme's white
+        # would flash around them, and a drag that the game ignores would
+        # otherwise scroll the picture out of place.
+        self.screen.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
+        self.screen.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
+        self.screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        self.screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.screen.add_flag(lv.obj.FLAG.CLICKABLE)
         self.screen.add_event_cb(self._on_touch, lv.EVENT.ALL, None)
         self.screen.add_event_cb(self._on_key, lv.EVENT.KEY, None)
@@ -156,8 +172,11 @@ class NativeActivity(Activity):
         self._next_frame_ms = time.ticks_ms()
         self._fps_since = self._next_frame_ms
         self._fps_frames = 0
-        mpos.ui.task_handler.add_event_cb(
-            self._drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
+        if self._ready:
+            # Nothing to tick when start_engine() said there is nothing to run;
+            # the surface is still shown so the app's message is readable.
+            mpos.ui.task_handler.add_event_cb(
+                self._drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
         self.on_resumed()
 
     def onPause(self, screen):
@@ -196,6 +215,7 @@ class NativeActivity(Activity):
         # A resumed activity starts a fresh engine; see _begin_session().
         self.engine = None
         self._started = False
+        self._ready = False
 
     def _keypad_state(self, active):
         """Turn the keypads' typing repeats off (or back on) for this activity.
@@ -223,6 +243,7 @@ class NativeActivity(Activity):
 
     def _begin_session(self):
         self._frame_interval_ms = 1000 // self.target_fps
+        self._ready = False
         try:
             display = mpos.ui.main_display
             engine = self.make_engine()
@@ -255,6 +276,7 @@ class NativeActivity(Activity):
             return
         if started is False:
             return
+        self._ready = True
         if self.hint_text:
             self.show_hint(self.hint_text)
 
@@ -299,7 +321,7 @@ class NativeActivity(Activity):
     # -- frame loop -------------------------------------------------------
 
     def _drawframe(self, arg1=None, arg2=None):
-        if self._paused or self.error is not None:
+        if self._paused or self.error is not None or not self._ready:
             return
 
         now = time.ticks_ms()

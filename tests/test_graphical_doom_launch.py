@@ -2,7 +2,7 @@
 
 The engine itself is C and is covered by the core and native-module builds; this
 checks the Python side of the package that users get: which engine file this host
-picks, and that the bundled WAD zip inflates to the expected bytes.
+picks, and that the bundled WAD zip is inflated into RAM, not storage.
 """
 
 import os
@@ -65,22 +65,23 @@ class TestDoomPackage(unittest.TestCase):
         self.assertTrue(all(part.isdigit()
                             for part in manifest["version"].split(".")))
 
-    def test_wad_zip_unpacks_to_the_shareware_wad(self):
+    def test_the_wad_zip_inflates_into_ram_not_storage(self):
         # The desktop package also has a plain WAD for the native module, so
         # pretend there is none and make the launch take the zip path.
         real_find_wad = doom.find_wad
         doom.find_wad = lambda intent=None: None
         updates = []
         try:
-            wad = doom.prepare_wad(None, "core",
-                                   lambda text, done=0, total=0:
-                                   updates.append((text, done, total)))
+            wad = doom.prepare_wad(
+                None, lambda text, done=0, total=0:
+                updates.append((text, done, total)))
         finally:
             doom.find_wad = real_find_wad
+        self.assertIsNone(wad.path, "the WAD was written to a file")
+        self.assertIsNotNone(wad.buffer)
         self.assertEqual(wad.name, "doom1.wad")
         self.assertEqual(wad.size, 1805391)
         self.assertEqual(bytes(wad.buffer[:4]), b"IWAD")
-        self.assertTrue(wad.size > 1800000)
         self.assertTrue(updates)
         self.assertEqual(updates[-1][1], updates[-1][2])
 

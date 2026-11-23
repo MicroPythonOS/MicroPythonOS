@@ -29,6 +29,7 @@
 #include "m_argv.h"
 #include "m_config.h"
 #include "m_misc.h"
+#include "w_file.h"
 #include "w_wad.h"
 #include "z_zone.h"
 
@@ -630,9 +631,9 @@ char *D_FindWADByName(char *name)
     char *path;
     int i;
     
-    // Absolute path?
+    // Absolute path, or a WAD the host put in memory (no file behind it).
 
-    if (M_FileExists(name))
+    if (M_FileExists(name) || W_HasMemoryFile(name))
     {
         return name;
     }

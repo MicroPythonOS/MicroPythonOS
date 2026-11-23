@@ -23,6 +23,17 @@
 #include <stdio.h>
 #include "doomtype.h"
 
+// The name a WAD handed over with W_SetMemoryFile() is opened by. It never
+// exists as a file; the WAD loader matches it before trying stdio.
+#define W_MEMORY_WAD_NAME "doom1.wad"
+
+// Put a WAD in the host's memory. The bytes must stay valid until the engine
+// stops reading them (W_ClearMemoryFile() drops the reference first).
+void W_SetMemoryFile(const void *data, size_t length);
+void W_ClearMemoryFile(void);
+// True when a memory WAD is installed under that name.
+int W_HasMemoryFile(const char *path);
+
 typedef struct _wad_file_s wad_file_t;
 
 typedef struct

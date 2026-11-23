@@ -64,12 +64,16 @@ def entry_size(path, entry=None):
     return found["uncompressed_size"] if found is not None else 0
 
 
-def load(path, entry=None, progress=None):
+def load(path, entry=None, progress=None, buffer=None):
     """Inflate ``entry`` (default: the first file) and return its buffer.
 
     Returns ``(buffer, size)``. ``progress(done, total)`` is called as bytes
     land in the buffer. Raises :class:`ZipAssetError` when the entry is
     missing, unknown-sized, uses an unsupported method, or fails its CRC.
+
+    ``buffer`` is an optional destination with the exact uncompressed size (for
+    a caller that keeps the asset in C-heap memory, see ``mpos_core.buffer``);
+    it is filled in place. Without it a ``bytearray`` is allocated here.
     """
     try:
         with open(path, "rb") as archive:
@@ -80,7 +84,12 @@ def load(path, entry=None, progress=None):
             if size <= 0:
                 raise ZipAssetError("%s: entry %s has no declared size"
                                     % (path, wanted["name"]))
-            buffer = bytearray(size)
+            if buffer is None:
+                buffer = bytearray(size)
+            elif len(buffer) != size:
+                raise ZipAssetError(
+                    "%s: buffer holds %d bytes, the entry needs %d"
+                    % (path, len(buffer), size))
             if wanted["method"] == ZIP_STORED:
                 _read_stored(archive, buffer, progress)
             elif wanted["method"] == ZIP_DEFLATED:

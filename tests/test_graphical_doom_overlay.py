@@ -81,7 +81,7 @@ class TestTouchOverlay(unittest.TestCase):
             (stick, menu, doom.GAME_WIDTH - stick, use - menu),
             (stick, use, doom.GAME_WIDTH - stick, doom.GAME_HEIGHT - use),
         )
-        self.assertEqual(len(overlay._objects), 11)
+        self.assertEqual(len(overlay._objects), 8)
         for index, region in enumerate(expected):
             rect = self._rect_at(overlay, index)
             panel = self.activity.game_rect_to_panel(*region)
@@ -90,27 +90,23 @@ class TestTouchOverlay(unittest.TestCase):
                  rect.get_width(), rect.get_height()),
                 panel, "outline %d does not match its zone" % index)
 
-    def test_every_symbol_sits_at_its_zone_point(self):
+    def test_every_label_sits_at_its_zone_point(self):
         overlay = self._overlay(200, 320, True)
-        symbols = overlay._objects[4:]
+        labels = overlay._objects[4:]
         self.assertEqual(
-            [label.get_text() for label in symbols],
-            [lv.SYMBOL.LEFT, lv.SYMBOL.RIGHT, lv.SYMBOL.UP, lv.SYMBOL.DOWN,
-             lv.SYMBOL.LIST, lv.SYMBOL.OK, lv.SYMBOL.BULLET])
+            [label.get_text() for label in labels],
+            ["TURN/WALK", "MENU", "OPEN/USE", "FIRE/ENTER"])
 
         stick = self.zones.stick_width
         points = (
-            (12, doom.GAME_HEIGHT // 2),
-            (stick - 12, doom.GAME_HEIGHT // 2),
-            (stick // 2, 12),
-            (stick // 2, doom.GAME_HEIGHT - 12),
+            (stick // 2, doom.GAME_HEIGHT // 2),
             (stick + (doom.GAME_WIDTH - stick) // 2, self.zones.menu_bottom // 2),
             (stick + (doom.GAME_WIDTH - stick) // 2,
              (self.zones.menu_bottom + self.zones.use_bottom) // 2),
             (stick + (doom.GAME_WIDTH - stick) // 2,
              (self.zones.use_bottom + doom.GAME_HEIGHT) // 2),
         )
-        for label, point in zip(symbols, points):
+        for label, point in zip(labels, points):
             panel_x, panel_y = self.activity.game_to_panel(*point)
             centre_x = label.get_x() + label.get_width() // 2
             centre_y = label.get_y() + label.get_height() // 2

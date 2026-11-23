@@ -26,6 +26,7 @@
 #include "w_file.h"
 
 extern wad_file_class_t stdc_wad_file;
+extern wad_file_class_t memory_wad_file;
 
 /*
 #ifdef _WIN32
@@ -54,6 +55,15 @@ wad_file_t *W_OpenFile(char *path)
 {
     wad_file_t *result;
     int i;
+
+    // A WAD the host put in memory comes first: it has no file behind it.
+
+    result = memory_wad_file.OpenFile(path);
+
+    if (result != NULL)
+    {
+        return result;
+    }
 
     //!
     // Use the OS's virtual memory subsystem to map WAD files

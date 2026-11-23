@@ -68,7 +68,16 @@ def setContentView(new_activity, new_screen):
     # animation delete it once it is off the display.
     auto_del = _orphan_screen is not None and _orphan_screen == lv.screen_active()
     _orphan_screen = None
-    lv.screen_load_anim(new_screen, lv.SCREEN_LOAD_ANIM.OVER_LEFT, 500, 0, auto_del)
+    # Most activities slide in. One that paints its own start-up sets this to
+    # 0: a zero-duration load activates the screen at once, so a progress
+    # repaint during a blocking start lands on it instead of the old screen.
+    transition_ms = getattr(new_activity, "screen_transition_ms", 500)
+    if transition_ms:
+        lv.screen_load_anim(
+            new_screen, lv.SCREEN_LOAD_ANIM.OVER_LEFT, transition_ms, 0, auto_del)
+    else:
+        lv.screen_load_anim(
+            new_screen, lv.SCREEN_LOAD_ANIM.NONE, 0, 0, auto_del)
     if new_activity:
         try:
             new_activity.onResume(new_screen)

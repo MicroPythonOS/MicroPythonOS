@@ -10,6 +10,8 @@
 // The contract with Python:
 //
 //   create(wad_path, mb)   boot the engine (doomgeneric_Create) and draw one frame
+//   create_from_memory(buffer, mb)  the same, with the WAD already in RAM
+//   clear_wad()            drop the memory WAD reference (before freeing it)
 //   tick(now_ms)           run one engine frame; now_ms is the wall clock
 //   frame()                bytearray (by reference) holding the 320x200 pixels
 //   palette()              bytearray (by reference) of 256 RGB565 entries
@@ -37,6 +39,7 @@
 #include "d_main.h"
 #include "m_config.h"
 #include "m_menu.h"
+#include "w_file.h"
 
 #include "doom_data_init.h"
 #include "mpos_engine.h"
@@ -158,37 +161,30 @@ void DG_SetWindowTitle(const char *title) {
 
 // ---- module functions -----------------------------------------------------
 
-static mp_obj_t create(size_t n_args, const mp_obj_t *args) {
-    mp_obj_t wad_obj = args[0];
-    mp_obj_t mb_obj = args[1];
+static void engine_config(const mp_obj_t *args, size_t n_args) {
     if (n_args > 2 && args[2] != mp_const_none) {
         // Where .default.cfg and .savegame/ go, absolute: the host does not
         // change the process working directory for the engine.
         g_config_obj = args[2];
         M_SetConfigDir((char *)mp_obj_str_get_str(args[2]));
     }
+}
+
+// 1 when the engine has to boot, 0 when it is already loaded (the module
+// outlives the activity, so a second start goes back to the title screen).
+static int engine_prepare(mp_obj_t mb_obj) {
     if (g_created) {
-        // The app was started again after quitting: the module outlives the
-        // activity, so the engine is still loaded. Clear the request and put
-        // it back on the title screen instead of booting a second Copy of Doom.
+        // Clear the request and put it back on the title screen instead of
+        // booting a second copy of Doom.
         mpos_quit_requested = 0;
         M_ClearMenus();
         D_StartTitle();
-        return mp_const_none;
+        return 0;
     }
     mpos_quit_requested = 0;
     mpos_sound_module_init();
     mpos_music_module_init();
-    // Doom keeps the argv pointers for the whole session, so the string has to
-    // stay alive: hold a reference to the Python object.
-    g_wad_obj = wad_obj;
-    g_argv[0] = "doom";
-    g_argv[1] = "-iwad";
-    g_argv[2] = (char *)mp_obj_str_get_str(wad_obj);
-    g_argv[3] = "-mb";
     snprintf(g_mb_buf, sizeof(g_mb_buf), "%d", (int)mp_obj_get_int(mb_obj));
-    g_argv[4] = g_mb_buf;
-    g_argv[5] = NULL;
 
     g_now_ms = 0;
     g_start_ms = 0;
@@ -202,10 +198,55 @@ static mp_obj_t create(size_t n_args, const mp_obj_t *args) {
     // engine reads anything.
     mpos_libc_init();
     doom_init_all_data();
+    return 1;
+}
+
+static void engine_boot(const char *wad_name) {
+    // Doom keeps the argv pointers for the whole session, so the strings have
+    // to stay alive: the caller holds g_wad_obj for that.
+    g_argv[0] = "doom";
+    g_argv[1] = "-iwad";
+    g_argv[2] = (char *)wad_name;
+    g_argv[3] = "-mb";
+    g_argv[4] = g_mb_buf;
+    g_argv[5] = NULL;
     doomgeneric_Create(5, g_argv);
     mpos_sound_report();
+}
+
+static mp_obj_t create(size_t n_args, const mp_obj_t *args) {
+    engine_config(args, n_args);
+    W_ClearMemoryFile();
+    if (engine_prepare(args[1])) {
+        g_wad_obj = args[0];
+        engine_boot((char *)mp_obj_str_get_str(args[0]));
+    }
     return mp_const_none;
 }static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(create_obj, 2, 3, create);
+
+// The WAD is already in RAM (the host inflated the bundled zip). Nothing is
+// written to storage and no file is opened for it.
+static mp_obj_t create_from_memory(size_t n_args, const mp_obj_t *args) {
+    mp_buffer_info_t wad;
+    mp_get_buffer_raise(args[0], &wad, MP_BUFFER_READ);
+    engine_config(args, n_args);
+    W_SetMemoryFile(wad.buf, wad.len);
+    if (engine_prepare(args[1])) {
+        // Borrowed: the app keeps the buffer alive for as long as it is set.
+        g_wad_obj = args[0];
+        engine_boot(W_MEMORY_WAD_NAME);
+    }
+    return mp_const_none;
+}static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(create_from_memory_obj, 2, 3,
+                                           create_from_memory);
+
+// Drop the engine's reference to the buffer, so the host can free it without
+// leaving a dangling WAD behind (the engine still has lumps cached in its zone
+// until the next boot).
+static mp_obj_t clear_wad(void) {
+    W_ClearMemoryFile();
+    return mp_const_none;
+}static MP_DEFINE_CONST_FUN_OBJ_0(clear_wad_obj, clear_wad);
 
 static void present_frame(void);
 
@@ -419,6 +460,9 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     MP_DYNRUNTIME_INIT_ENTRY
 
     mp_store_global(MP_QSTR_create, MP_OBJ_FROM_PTR(&create_obj));
+    mp_store_global(MP_QSTR_create_from_memory,
+                    MP_OBJ_FROM_PTR(&create_from_memory_obj));
+    mp_store_global(MP_QSTR_clear_wad, MP_OBJ_FROM_PTR(&clear_wad_obj));
     mp_store_global(MP_QSTR_tick, MP_OBJ_FROM_PTR(&tick_obj));
     mp_store_global(MP_QSTR_frame, MP_OBJ_FROM_PTR(&frame_obj));
     mp_store_global(MP_QSTR_palette, MP_OBJ_FROM_PTR(&palette_obj));

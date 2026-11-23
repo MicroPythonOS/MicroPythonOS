@@ -628,6 +628,8 @@ class TestDoomActivity(unittest.TestCase):
         self.activity._rotated = True
         self.activity._started = True
         self.activity._paused = False
+        # The harness stands in for a session whose engine already started.
+        self.activity._ready = True
         self.activity._wad = doom._WadSource("doom1.wad", 10, path="doom1.wad")
 
     def tearDown(self):
@@ -834,9 +836,16 @@ class TestDoomActivity(unittest.TestCase):
 
     def test_the_joystick_ignores_a_drag_inside_the_deadzone(self):
         self._touch_game(lv.EVENT.PRESSED, 80, 100)
-        self._touch_game(lv.EVENT.PRESSING, 90, 108)
+        self._touch_game(lv.EVENT.PRESSING, 86, 106)
         self.assertEqual(self.engine.keys, [])
         self.assertEqual(self.activity.holds.held(), {})
+
+    def test_a_short_drag_already_turns(self):
+        # The stick is relative to the thumb, so it has to answer a small
+        # movement: a deliberate turn is a few pixels, not a full swipe.
+        self._touch_game(lv.EVENT.PRESSED, 80, 100)
+        self._touch_game(lv.EVENT.PRESSING, 90, 100)
+        self.assertEqual(self.engine.keys, [(doom.KEY_RIGHT, True)])
 
     def test_the_fire_band_holds_fire_while_pressed(self):
         self._touch_game(lv.EVENT.PRESSED, 240, 180)

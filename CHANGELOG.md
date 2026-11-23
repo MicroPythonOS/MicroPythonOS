@@ -52,12 +52,34 @@ Frameworks:
   "engine is corrupt, reinstall" instead of a crash.
 - `NativeActivity.set_message()` replaces the standing message text in place, so
   a launch can report progress without creating a label per update.
+- A native game's screen is black and cannot scroll. The OS theme's white
+  background and scrollbars were visible around the picture (and a drag the game
+  ignored could shift it); `NativeActivity` now owns a black, non-scrollable
+  screen.
+- `NativeActivity.screen_transition_ms` lets an activity skip the 500 ms
+  slide-in (`0`). A game that paints its own start-up needs that: while a
+  blocking engine load ran, the new screen was still animating in from the
+  side, so its "Unpacking WAD 42%" repaints landed on the old screen and the
+  launch looked frozen.
 - Multi-touch: the GT911 and FocalTech drivers read every touch point (`get_touches()`) instead of only the first, and `mpos.ui.multitouch.MultiTouchGesture` reports pinch scale, rotation and pan from two fingers. A second finger is gesture-only: the driver sends the contact to LVGL as released until every finger lifts, so a pinch cannot click the widget under it or trigger the back-swipe.
 - AudioManager: `get()` rebuilds a singleton whose initialisation never finished. A
   constructor call that raised (a wrong keyword argument, a preferences read failing
   at boot) used to leave a half-built instance behind, and every later audio call
   then failed with `AttributeError: 'AudioManager' object has no attribute ...`.
 - `mpos.ui.native_display.NativeDisplay.flush()` checks the render headroom before drawing. A native engine presents from inside its own tick, where a full LVGL pass runs on top of the engine's C frames; when the stack is nearly full the invalidation is left to LVGL's refresh timer instead, because an overflow there resets or hangs the board without a traceback.
+- `NativeActivity` only starts its frame loop when `start_engine()` returned
+  something to run. A game that showed "not enough memory" used to be ticked
+  anyway, raising `no core is running` on every frame.
+- `mpos_core.start()` reloads the partition table once when the lookup comes
+  back empty: a cold boot can read the table sector badly, and only its first
+  entry ends up in the list (the filesystem still mounts because it uses a
+  fixed address, so the fault looked like "no partition labelled vfs").
+- `mpos_core.buffer(size)` / `buffer_free(buf)` hand an app memory from the C
+  heap as a `bytearray`, outside MicroPython's GC. A large asset (Doom's 1.8 MiB
+  WAD) allocated as a Python `bytearray` makes the split GC heap add an area;
+  once anything else lives in that area the memory never returns to the IDF
+  heap, and a native core's zone then has no contiguous block on the next
+  launch. `zipasset.load(..., buffer=...)` fills such a buffer in place.
 - `mpos.ui.native_activity.NativeActivity` closes the audio sink before stopping the engine, so a device is not left writing into a buffer whose owner is gone.
 - `mpos.ui.native_display.NativeDisplay`: a way to run a native (C) renderer at panel speed. It owns one RGB565 surface shown by a full-screen `lv_image` and presents only the bands of rows a frame changed, so LVGL stays the only writer of the panel; on a 320x240 badge that took Breakout from 7.6 to 56 fps with no flicker. Pausing LVGL's refresh or stealing its display buffers does not work and is documented, with the measurements, in `docs/apps/native-apps.md`.
 - Activities can opt out of the OS edge swipes with

@@ -21,6 +21,8 @@
 //     mpos_core.tick(now_ms)
 //     mpos_core.stop()
 //     mpos_core.abi_version
+//     mpos_core.buffer(size)     - C-heap memory for an asset (free explicitly)
+//     mpos_core.buffer_free(buf)
 //
 // The blob's first bytes are a mpos_core_entry_t whose abi_version must match.
 
@@ -326,6 +328,31 @@ static void abi_log(void *host, const char *text) {
 
 // -- module functions --------------------------------------------------------
 
+// The partition list is loaded lazily and never refreshed. A bad read of the
+// table sector leaves only its first entry in the list (the badge has been
+// seen to do this on some cold boots), and every later lookup then claims the
+// partition is missing while the flash is intact - the filesystem still
+// mounts, because it uses a fixed address. Drop the list and read it again
+// before believing that the partition does not exist.
+static const esp_partition_t *find_partition(const char *label) {
+    const esp_partition_t *partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, label);
+    if (partition == NULL) {
+        partition = esp_partition_find_first(
+            ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, label);
+    }
+    return partition;
+}
+
+static const esp_partition_t *find_partition_retry(const char *label) {
+    const esp_partition_t *partition = find_partition(label);
+    for (int attempt = 0; partition == NULL && attempt < 2; attempt++) {
+        esp_partition_unload_all();
+        partition = find_partition(label);
+    }
+    return partition;
+}
+
 static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     // start(label, offset, size, present_band, palette, poll_key, read_file,
     //       file_size, log, wad_path, width, height, frame, band_rows,
@@ -341,12 +368,7 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     size_t offset = (size_t)mp_obj_get_int_truncated(args[1]);
     size_t size = (size_t)mp_obj_get_int_truncated(args[2]);
 
-    const esp_partition_t *partition =
-        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, label);
-    if (partition == NULL) {
-        partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
-                                             ESP_PARTITION_SUBTYPE_ANY, label);
-    }
+    const esp_partition_t *partition = find_partition_retry(label);
     if (partition == NULL) {
         mp_raise_msg_varg(&mp_type_ValueError,
                           MP_ERROR_TEXT("no partition labelled %s"), label);
@@ -715,6 +737,70 @@ static mp_obj_t mpos_core_abi_version(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_abi_version_obj, mpos_core_abi_version);
 
+// -- host buffers ------------------------------------------------------------
+//
+// A native game's asset (Doom's 1.8 MiB WAD) has to live outside MicroPython's
+// GC heap. A Python bytearray of that size forces the split GC heap to add an
+// area, and as soon as anything else lives in that area it can never be handed
+// back to the IDF heap - while the engine's zone needs one contiguous block
+// after the asset is in RAM, so a second launch in the same boot fails.
+// A buffer from here is ordinary C memory with an explicit free; the caller
+// owns it for exactly as long as its game session needs it.
+
+#define MPOS_CORE_MAX_BUFFERS 4
+
+typedef struct {
+    void *ptr;
+    size_t size;
+} mpos_core_buffer_t;
+
+static mpos_core_buffer_t s_buffers[MPOS_CORE_MAX_BUFFERS];
+
+static mp_obj_t mpos_core_buffer(mp_obj_t size_obj) {
+    size_t size = (size_t)mp_obj_get_int_truncated(size_obj);
+    if (size == 0) {
+        mp_raise_ValueError(MP_ERROR_TEXT("buffer size must be positive"));
+    }
+    int slot = -1;
+    for (int i = 0; i < MPOS_CORE_MAX_BUFFERS; i++) {
+        if (s_buffers[i].ptr == NULL) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        mp_raise_msg(&mp_type_MemoryError,
+                     MP_ERROR_TEXT("too many mpos_core buffers"));
+    }
+    void *ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (ptr == NULL) {
+        ptr = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    if (ptr == NULL) {
+        mp_raise_msg(&mp_type_MemoryError,
+                     MP_ERROR_TEXT("cannot allocate the buffer"));
+    }
+    s_buffers[slot].ptr = ptr;
+    s_buffers[slot].size = size;
+    return mp_obj_new_bytearray_by_ref(size, ptr);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(mpos_core_buffer_obj, mpos_core_buffer);
+
+static mp_obj_t mpos_core_buffer_free(mp_obj_t buffer) {
+    mp_buffer_info_t info;
+    mp_get_buffer_raise(buffer, &info, MP_BUFFER_READ);
+    for (int i = 0; i < MPOS_CORE_MAX_BUFFERS; i++) {
+        if (s_buffers[i].ptr == info.buf) {
+            heap_caps_free(s_buffers[i].ptr);
+            s_buffers[i].ptr = NULL;
+            s_buffers[i].size = 0;
+            return mp_const_none;
+        }
+    }
+    mp_raise_ValueError(MP_ERROR_TEXT("not an mpos_core buffer"));
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(mpos_core_buffer_free_obj, mpos_core_buffer_free);
+
 static const mp_rom_map_elem_t mpos_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_mpos_core) },
     { MP_ROM_QSTR(MP_QSTR_start), MP_ROM_PTR(&mpos_core_start_obj) },
@@ -725,6 +811,8 @@ static const mp_rom_map_elem_t mpos_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_abi_version), MP_ROM_PTR(&mpos_core_abi_version_obj) },
     { MP_ROM_QSTR(MP_QSTR_audio_mix), MP_ROM_PTR(&mpos_core_audio_mix_obj) },
     { MP_ROM_QSTR(MP_QSTR_quit_requested), MP_ROM_PTR(&mpos_core_quit_requested_obj) },
+    { MP_ROM_QSTR(MP_QSTR_buffer), MP_ROM_PTR(&mpos_core_buffer_obj) },
+    { MP_ROM_QSTR(MP_QSTR_buffer_free), MP_ROM_PTR(&mpos_core_buffer_free_obj) },
 };
 static MP_DEFINE_CONST_DICT(mpos_core_module_globals, mpos_core_module_globals_table);
 
