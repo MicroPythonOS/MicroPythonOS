@@ -291,9 +291,6 @@ class NostrManager:
     _instance = None
     EVENTS_TO_SHOW = 50
     NWC_POLL_SECONDS = 120
-    # How long an NWC request waits for its reply before replies without an
-    # "e" tag stop being matched to it. Under NWC_POLL_SECONDS on purpose.
-    NWC_REPLY_WINDOW_SECONDS = 60
     RELAY_SILENT_RECONNECT_THRESHOLD = 3
 
     @classmethod
@@ -346,10 +343,14 @@ class NostrManager:
         # Set when the wallet answered UNSUPPORTED_ENCRYPTION to a nip04
         # request: then nip44_v2 is used even with the slow ChaCha20 core.
         self._nwc_nip04_refused = False
-        # [request event id, encryption, sent at, wallet relay connected] of
-        # the NWC requests not answered yet, oldest first, so an error reply
-        # can be matched to the scheme of the request it answers.
+        # [request event id, encryption, poll number, wallet relay connected]
+        # of the NWC requests not answered yet, oldest first, so an error
+        # reply can be matched to the scheme of the request it answers.
         self._nwc_request_schemes = []
+        # Number of the current scheduled NWC poll. The immediate poll after
+        # an encryption switch keeps the number of the poll that caused it.
+        self._nwc_poll_number = 0
+        self._nwc_repoll = False
         # wallet pubkey -> (created_at, schemes) of the newest info event
         # applied for that wallet. The relay pool drops a replayed event it has
         # seen before, so pairing with a wallet again reuses this.
@@ -1307,6 +1308,10 @@ class NostrManager:
             # --- Periodic NWC polling ---
             if self._nwc_configured and now - self._last_nwc_poll >= self.NWC_POLL_SECONDS:
                 self._last_nwc_poll = now
+                if self._nwc_repoll:
+                    self._nwc_repoll = False
+                else:
+                    self._nwc_poll_number += 1
 
                 if self._polls_since_last_event >= self.RELAY_SILENT_RECONNECT_THRESHOLD:
                     await self._reconnect_relay()
@@ -1646,11 +1651,11 @@ class NostrManager:
                 return "stale"
         # A request that is never answered (its relay was down, or dropped
         # it) must not shift the order for good: skip requests the wallet's
-        # relay did not get, and give up on any older than the reply window.
-        # Polls are NWC_POLL_SECONDS apart and wallets answer in seconds, so
-        # a reply never belongs to an earlier poll.
-        cutoff = time.time() - self.NWC_REPLY_WINDOW_SECONDS
-        while sent and (not sent[0][3] or sent[0][2] < cutoff):
+        # relay did not get, and those of earlier scheduled polls, whose
+        # replies are NWC_POLL_SECONDS overdue. Poll numbers, not clock
+        # time, so a reply processed late still finds its own request.
+        current_poll = getattr(self, "_nwc_poll_number", 0)
+        while sent and (not sent[0][3] or sent[0][2] < current_poll):
             sent.pop(0)
         if sent:
             return sent.pop(0)[1]
@@ -1661,7 +1666,8 @@ class NostrManager:
         # of untagged replies: a reply tagged with this id still finds it
         # (another spelling of the same relay may have carried it).
         self._nwc_request_schemes.append(
-            (request_id, scheme, time.time(), self._nwc_relay_connected()))
+            (request_id, scheme, getattr(self, "_nwc_poll_number", 0),
+             self._nwc_relay_connected()))
         if len(self._nwc_request_schemes) > 16:
             self._nwc_request_schemes.pop(0)
 
@@ -1727,6 +1733,7 @@ class NostrManager:
             self._publish_nwc_subscription()
         if poll_now:
             self._last_nwc_poll = time.time() - self.NWC_POLL_SECONDS
+            self._nwc_repoll = True
 
     def _build_nwc_filters(self):
         """NWC subscription: replies and notifications for this connection,

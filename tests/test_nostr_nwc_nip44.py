@@ -65,6 +65,8 @@ def _manager(client_key, wallet_key):
     mgr._nwc_nip44_refused = False
     mgr._nwc_nip04_refused = False
     mgr._nwc_request_schemes = []
+    mgr._nwc_poll_number = 1
+    mgr._nwc_repoll = False
     mgr._nwc_list_limit = 21
     mgr._nwc_info = {}
     mgr._nwc_conversation_key = nip44.get_conversation_key(
@@ -481,9 +483,7 @@ class TestNwcReplies(_FastNip44Case):
         # Poll 1 is lost although the relay looked connected; poll 2 goes
         # out NWC_POLL_SECONDS later and its untagged replies must match it.
         self._send_poll()
-        sent_earlier = time.time() - NostrManager.NWC_POLL_SECONDS
-        self.mgr._nwc_request_schemes = [
-            (i, sch, sent_earlier, up) for i, sch, _, up in self.mgr._nwc_request_schemes]
+        self.mgr._nwc_poll_number += 1
         self.mgr._nwc_encryption = "nip44_v2"
         self._send_poll()
         self.mgr._process_event(_reply_event(
@@ -491,10 +491,9 @@ class TestNwcReplies(_FastNip44Case):
         self.assertEqual(self.mgr._nwc_encryption, "nip04")
         self.assertTrue(self.mgr._nwc_nip44_refused)
 
-    def test_requests_older_than_the_reply_window_are_given_up(self):
+    def test_requests_of_earlier_polls_are_given_up(self):
         self._send_poll()
-        old = time.time() - NostrManager.NWC_REPLY_WINDOW_SECONDS - 30
-        self.mgr._nwc_request_schemes = [(i, sch, old, up) for i, sch, _, up in self.mgr._nwc_request_schemes]
+        self.mgr._nwc_poll_number += 3
         self.mgr._nwc_encryption = "nip44_v2"
         self._send_poll()
         self.mgr._process_event(_reply_event(
@@ -660,6 +659,25 @@ class TestNwcOnTheSlowChaCha20Core(unittest.TestCase):
         for result_type in ("get_balance", "list_transactions"):
             self.mgr._process_event(_reply_event(
                 self.wallet, self.client, _unsupported(result_type), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertFalse(self.mgr._nwc_nip44_refused)
+        self.assertEqual(self.errors, [])
+
+    def test_late_untagged_refusals_around_the_switch_poll(self):
+        # Both refusals of a poll are processed late, with the immediate
+        # re-poll from the switch sent between them: the second still
+        # belongs to the nip04 poll, not to the fresh nip44_v2 requests.
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2"))
+        self.mgr.nwc_fetch_balance()
+        self.mgr.nwc_fetch_payments()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertTrue(self.mgr._nwc_repoll)
+        self.mgr.nwc_fetch_balance()  # the re-poll keeps the poll number
+        self.mgr.nwc_fetch_payments()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("list_transactions"), "nip04"))
         self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
         self.assertFalse(self.mgr._nwc_nip44_refused)
         self.assertEqual(self.errors, [])
