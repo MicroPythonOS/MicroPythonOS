@@ -2,33 +2,29 @@ Future release (next version)
 =====
 
 Frameworks:
-- AppManager: app packages can carry a `native` map in `MANIFEST.JSON` that selects the files per platform, and only those are installed; a `.xip` core is streamed straight into a littlefs2e extent
+- AppManager: a `native` map in `MANIFEST.JSON` selects the files per platform; a `.xip` core installs straight into a littlefs2e extent
 - AudioManager: `get()` rebuilds a singleton whose initialisation never finished
-- Fork LittleFS2 into littlefs2e: contiguous extent files on the internal filesystem, mapped from flash (XIP) instead of read through the CTZ list; `mpos.extent` creates, reads and verifies them, and a normal write converts one back to a regular file. Stock littlefs treats extents as free blocks, so stock tools must be read-only
-- littlefs2e: the defragmenter also relocates directory metadata pairs and runs as one C pass (`lfs2e.defrag`); a local `.mpk` install closes the archive around the defrag
-- littlefs2e: committing or aborting an extent drops the allocator's lookahead, so the next file no longer overwrites the extent's blocks
-- littlefs2e: caches a whole block instead of a quarter of one, about twice as fast for a metadata scan (48-block window: 18 s to 11 s), costing 6 KiB at mount and ~3 KiB per open file
-- littlefs2e: lives in its own fork, consumed as the `third_party/littlefs2e` submodule and synced into the MicroPython tree at build time
-- `mpos.zipasset`: reads one entry out of a `.zip` into a buffer, with progress and a CRC check
-- `mpos.extent.Writer`: streams data into a reserved extent (reserve, write chunks, commit)
-- `mpos_core.start()`: takes an optional expected CRC32 and refuses a corrupt engine before mapping it, and reloads the partition table once when the lookup comes back empty
-- `mpos_core.buffer()` / `buffer_free()`: C-heap memory as a `bytearray` outside the MicroPython GC, so a large asset no longer takes a GC area that cannot return to the IDF heap
-- `mpos.ui.native_input`: the default thumb-stick deadzone is 10 px (was 8), so a resting thumb does not start a turn
-- `mpos.ui.multitouch`: GT911 and FT6x36 read every touch point and keep its slot number as its identity, and `MultiTouchGesture` reports pinch scale, rotation and pan; a second finger is gesture-only
-- `NativeActivity`: black non-scrollable screen, `screen_transition_ms = 0` skips the slide-in, the audio sink closes before the engine stops, and the frame loop only starts when an engine did
-- `NativeActivity.set_message()`: replaces the standing message text in place
-- `NativeActivity.touch_fingers` / `key_state`: two thumbs at once through `mpos.TouchMonitor` and `ThumbZones`, and held keys read from `InputManager.held_keys()` instead of a key repeat
-- `NativeDisplay`: runs a native renderer at panel speed from one RGB565 surface and presents only the changed bands; pausing LVGL or stealing its buffers does not work
-- `NativeDisplay.flush()`: leaves the invalidation to LVGL's refresh timer when the render stack is nearly full
-- `Activity.system_gestures_enabled`: opt out of the OS edge swipes; `NativeActivity.game_to_panel()` and `game_rect_to_panel()` convert back from the rotated picture
+- littlefs2e: a LittleFS2 fork with contiguous extent files that map from flash (XIP); `mpos.extent` creates and verifies them, and `lfs2e.defrag` moves files and directory metadata in one C pass. Stock littlefs sees extents as free blocks, so stock tools must be read-only
+- littlefs2e: caches a whole block instead of a quarter, twice as fast for metadata scans (48-block window: 18 s to 11 s), at 6 KiB more RAM at mount and ~3 KiB per open file
+- littlefs2e: a committed or aborted extent drops the allocator's lookahead, so the next file no longer overwrites its blocks
+- `mpos.extent.Writer`: streams data into a reserved extent (reserve, write, commit)
+- `mpos.zipasset`: reads one `.zip` entry into a buffer, with progress and a CRC check
+- `mpos_core.start()`: optional expected CRC32, and a partition-table reload when the lookup comes back empty on a cold boot
+- `mpos_core.buffer()` / `buffer_free()`: C-heap memory as a `bytearray` outside the GC, so a large asset no longer pins a GC area
+- `NativeActivity`: black, non-scrollable screen; `screen_transition_ms = 0` skips the slide-in; `set_message()` replaces the message text in place; the audio sink closes before the engine stops
+- `NativeActivity.touch_fingers` / `key_state`: two thumbs through `mpos.TouchMonitor` and `ThumbZones`, and held keys from `InputManager.held_keys()` instead of key repeats
+- `NativeDisplay`: presents only the changed bands of an RGB565 surface at panel speed; `flush()` defers to LVGL's refresh timer when the stack is nearly full
+- `mpos.ui.multitouch`: GT911 and FT6x36 read every point and keep its slot id; `MultiTouchGesture` adds pinch, rotation and pan
+- `mpos.ui.native_input`: thumb-stick deadzone is 10 px (was 8)
+- `Activity.system_gestures_enabled`: opt out of the edge swipes, with `NativeActivity.game_to_panel()` to map back from the rotated picture
 
 Builtin Apps:
-- AppStore: shows 'Defragmenting storage... 60%' while an extent is being made room for, and the defragmenter yields to the UI between steps
+- AppStore: shows 'Defragmenting storage... 60%' while an extent is being made room for, and yields to the UI between defrag steps
 - OSUpdate: an update check tries the remaining mirror when the first one is unreachable
 
 Testing:
-- connectivity: machine/socket/thread/WifiService mocks are installed per test instead of at module import, so they no longer leak into later tests in a one-interpreter device run
-- test runner: stages `lib/unittest` first on a device run (frozen -O3 bytecode strips `assert`) and installs its asyncio wrappers once instead of per test
+- connectivity: mocks are installed per test instead of at module import, so they no longer leak into later tests in a one-interpreter device run
+- test runner: stages `lib/unittest` first on a device run (frozen -O3 strips `assert`) and installs its asyncio wrappers once instead of per test
 - screen camera: `cell_ncc_min` skips single-colour cells, so a mostly blank screen no longer fails webcam verification
 - native rendering: `NativeDisplay` band geometry, invalidation and flush contract, and Breakout's dirty-band loop with per-band row offsets
 
