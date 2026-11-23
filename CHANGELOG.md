@@ -2,6 +2,8 @@ Future release (next version)
 =====
 
 Frameworks:
+- `mpos.ui.native_input`: the default thumb-stick deadzone is 10 px (was
+  8), so a resting thumb does not start a turn.
 - littlefs2e: contiguous "extent" files on the internal filesystem. An extent is
   an immutable, aligned run of blocks whose bytes are stored verbatim, so it can
   be mapped from flash (XIP) instead of being read through the CTZ skip-list.

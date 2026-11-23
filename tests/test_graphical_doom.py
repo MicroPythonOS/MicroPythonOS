@@ -844,7 +844,8 @@ class TestDoomActivity(unittest.TestCase):
         # The stick is relative to the thumb, so it has to answer a small
         # movement: a deliberate turn is a few pixels, not a full swipe.
         self._touch_game(lv.EVENT.PRESSED, 80, 100)
-        self._touch_game(lv.EVENT.PRESSING, 90, 100)
+        self._touch_game(
+            lv.EVENT.PRESSING, 80 + self.activity.zones.deadzone + 1, 100)
         self.assertEqual(self.engine.keys, [(doom.KEY_RIGHT, True)])
 
     def test_the_fire_band_holds_fire_while_pressed(self):

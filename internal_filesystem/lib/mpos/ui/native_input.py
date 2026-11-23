@@ -306,7 +306,7 @@ class ThumbZones:
     STICK_WIDTH = 160
     MENU_BOTTOM = 60
     USE_BOTTOM = 120
-    STICK_DEADZONE = 8
+    STICK_DEADZONE = 10
 
     def __init__(self, keys, hold=None, stick_width=STICK_WIDTH,
                  menu_bottom=MENU_BOTTOM, use_bottom=USE_BOTTOM,

@@ -362,15 +362,16 @@ class ThumbZonesTest(unittest.TestCase):
     def test_a_touch_inside_the_deadzone_does_not_move(self):
         # The centre is the touch point, not the zone's middle: a thumb at the
         # far corner that hardly moves stays still instead of walking down.
+        deadzone = self.zones.deadzone
         self.zones.pressed(150, 190, 0)
-        self.zones.moving(155, 185, 0)
+        self.zones.moving(150 + deadzone, 190 - deadzone, 0)
         self.assertEqual(self.hold.held(), {})
 
     def test_a_small_drag_turns(self):
         # Big enough to be deliberate, small enough that a thumb does not have
-        # to swipe: the stick answers a few pixels.
+        # to swipe: one pixel past the deadzone already turns.
         self.zones.pressed(80, 100, 0)
-        self.zones.moving(89, 100, 0)
+        self.zones.moving(80 + self.zones.deadzone + 1, 100, 0)
         self.assertTrue(self.hold.is_held(KEYS["right"]))
 
     def test_both_directions_of_one_finger_can_be_down(self):
