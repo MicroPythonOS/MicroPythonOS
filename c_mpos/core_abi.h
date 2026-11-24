@@ -34,15 +34,37 @@
  * both addresses in its entry table, and `data_offset` - a 64 KB boundary in
  * the partition - is where the data region starts.
  *
- * Versioning: abi_version must match exactly; a mismatch is refused rather than
- * guessed at. Bump it whenever a field is added, removed or reordered.
+ * Versioning: abi_version names the newest field a blob knows about. The host
+ * accepts blobs from MPOS_CORE_ABI_MIN_VERSION to MPOS_CORE_ABI_VERSION and
+ * refuses the rest rather than guessing: a newer blob may call a field this
+ * host does not have, and an older one is not worth supporting. Fields are
+ * only ever appended to the two structs, which is what makes the range safe.
+ *
+ * Two ways to run a core
+ * ----------------------
+ * By default the host calls init() and tick() from the MicroPython task, and
+ * the core's callbacks (present, read, poll, log) run there too. That needs
+ * one stack for the OS and the engine together.
+ *
+ * A core with MPOS_CORE_FLAG_WORKER instead gets its own task, created by the
+ * loader: init() and tick() run there, in C, and the loader answers every
+ * callback the core can make without entering MicroPython. The core renders
+ * into a back buffer and calls frame_ready(); the host shows the published
+ * frame from its own task. That is how MPOS keeps a small Python stack while
+ * a 1990s engine gets the 48 KB it wants, and it also lets the render and the
+ * panel transfer run on two cores at once.
  */
 #ifndef MPOS_CORE_ABI_H
 #define MPOS_CORE_ABI_H
 
 #include <stdint.h>
 
-#define MPOS_CORE_ABI_VERSION 8
+#define MPOS_CORE_ABI_VERSION 9
+/* Oldest entry table this loader still runs. Everything added since is
+ * appended to both structs, so a core built against an older header keeps
+ * working: it never reads the fields it does not know about. A blob is refused
+ * when it is newer than the host, or older than this. */
+#define MPOS_CORE_ABI_MIN_VERSION 8
 
 /* Flags for mpos_core_entry_t.flags. */
 #define MPOS_CORE_FLAG_FRAMEBUFFER_PALETTED (1u << 0)  /* 8-bit indices */
@@ -53,6 +75,12 @@
  * surface the host shows, not the engine's own resolution. */
 #define MPOS_CORE_FLAG_BAND_RGB565          (1u << 2)
 /* present_band() hands over RGB565 rows; the core converts its own palette. */
+#define MPOS_CORE_FLAG_WORKER               (1u << 3)
+/* The core runs on its own FreeRTOS task (ABI 9), not on the MicroPython one.
+ * Everything it can call is then implemented in C by the loader: it never
+ * re-enters the interpreter from its task, so the host is free to keep the
+ * Python task small. The core must call frame_ready() when a frame is
+ * complete; the host presents it from its own task. */
 
 /*
  * Host services, called from core code. `host` is opaque to the core and is
@@ -119,6 +147,29 @@ typedef struct mpos_core_abi {
      */
     uint16_t *frame;
     int band_rows;
+
+    /*
+     * ABI 9, for a core that runs on its own task (MPOS_CORE_FLAG_WORKER).
+     *
+     * frame_ready(host):
+     *     the frame in `abi->frame` is complete. The host publishes it and
+     *     hands back the other buffer: after this call `abi->frame` points at
+     *     the buffer to draw the next frame into, and presenting the previous
+     *     one happens on the host's own task. A core calls it once per frame
+     *     and must not touch the old buffer afterwards. May block, which is
+     *     the intended backpressure - a core cannot run more than a frame
+     *     ahead of the display. Always NULL in the on-task (ABI 8) mode,
+     *     where present_band() presents each band immediately.
+     *
+     * yield(host):
+     *     let other tasks run (the scheduler's idle task feeds the interrupt
+     *     watchdog). A core calls this from long non-frame work such as
+     *     parsing a table at start-up, and never more than a few times a
+     *     second while playing. Replaces the "\x01yield" log sentinel, which
+     *     is still honoured for cores built against ABI 8.
+     */
+    void (*frame_ready)(void *host);
+    void (*yield)(void *host);
 } mpos_core_abi_t;
 
 /*

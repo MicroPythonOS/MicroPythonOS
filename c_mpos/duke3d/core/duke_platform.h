@@ -14,6 +14,7 @@ void duke_platform_frame_presented(void);
 void duke_platform_add_convert(uint32_t ms);
 void duke_platform_add_present(uint32_t ms);
 void duke_platform_add_engine(uint32_t ms);
+void duke_platform_add_wait(uint32_t ms);
 
 // A no-op in a core (there is no scheduler to yield to), but it is where the
 // retro-go shims park their SDL_Delay/vTaskDelay calls.

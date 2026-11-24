@@ -1,6 +1,10 @@
 Future release (next version)
 =====
 
+Frameworks:
+- `mpos_core.start_task()`: a core can run on a FreeRTOS task of its own (ABI 9), with C-only services for input, its asset and its log, and a two-buffer frame hand-off to the activity. A Duke-sized engine then needs 48 KiB on that task instead of 48 KiB on the MicroPython task, which is back to 24 KiB
+- `NativeDisplay`: `add_buffer()` / `select_buffer()` show whichever of a device's buffers is finished
+
 0.23.0
 ======
 

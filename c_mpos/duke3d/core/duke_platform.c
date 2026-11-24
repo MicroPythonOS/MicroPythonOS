@@ -27,6 +27,7 @@ static uint32_t s_frames;
 static uint32_t s_present_ms;
 static uint32_t s_convert_ms;
 static uint32_t s_engine_ms;
+static uint32_t s_wait_ms;
 static uint32_t s_frame_start_ms;
 static uint32_t s_profile_start_ms;
 static uint32_t s_last_log_ms;
@@ -50,13 +51,19 @@ static void sanitize_ascii(char *text) {
 
 
 static unsigned long current_sp(void) {
-    unsigned long sp;
+    unsigned long sp = 0;
+#if defined(__xtensa__)
     __asm__ volatile("mov %0, a1" : "=r"(sp));
+#endif
     return sp;
 }
 
 void duke_platform_stack_mark(const char *tag) {
     const unsigned long sp = current_sp();
+    // A host build has no a1; there is no meaningful mark to take.
+    if (sp == 0) {
+        return;
+    }
     if (s_stack_min == 0 || sp + 32 < s_stack_min) {
         s_stack_min = sp;
         char line[96];
@@ -106,6 +113,12 @@ void duke_platform_add_engine(uint32_t ms) {
     s_engine_ms += ms;
 }
 
+// Time the engine spent waiting for the host to finish with a buffer: that is
+// the part of the frame the panel owns, not the renderer.
+void duke_platform_add_wait(uint32_t ms) {
+    s_wait_ms += ms;
+}
+
 void duke_platform_frame_presented(void) {
     if (s_abi == NULL) {
         return;
@@ -120,12 +133,13 @@ void duke_platform_frame_presented(void) {
     if (elapsed >= 5000 && s_frames > 1) {
         char line[120];
         snprintf(line, sizeof(line),
-                 "duke: %u frames in %u ms (%.1f fps), engine %.1f, convert %.1f, present %.1f",
+                 "duke: %u frames in %u ms (%.1f fps), engine %.1f, convert %.1f, present %.1f, wait %.1f",
                  (unsigned)s_frames, (unsigned)elapsed,
                  (double)s_frames * 1000.0 / (double)elapsed,
                  (double)s_engine_ms / (double)s_frames,
                  (double)s_convert_ms / (double)s_frames,
-                 (double)s_present_ms / (double)s_frames);
+                 (double)s_present_ms / (double)s_frames,
+                 (double)s_wait_ms / (double)s_frames);
         int decodes = mpos_duke_tile_decodes;
         mpos_duke_tile_decodes = 0;
         snprintf(line + strlen(line), sizeof(line) - strlen(line),
@@ -135,16 +149,17 @@ void duke_platform_frame_presented(void) {
         s_present_ms = 0;
         s_convert_ms = 0;
         s_engine_ms = 0;
+        s_wait_ms = 0;
         s_profile_start_ms = now;
     }
 }
 
 void duke_platform_idle(void) {
     // The engine calls this from SDL_Delay and around file reads. A core has
-    // no scheduler of its own, so the host's log callback is the one place a
-    // yield can happen without an ABI change: the sentinel tells the app to
-    // sleep one tick, which lets the FreeRTOS idle task feed the interrupt
-    // watchdog during the multi-second start-up.
+    // no scheduler of its own, so the ABI is the one place a yield can happen:
+    // on its own task it is a direct vTaskDelay, and on the MicroPython task
+    // it is the ABI 8 log sentinel, which the loader honours in C. Sleeping
+    // from a callback would re-enter the interpreter on a deep engine stack.
     static uint32_t last_yield;
     if (s_abi == NULL) {
         return;
@@ -161,6 +176,10 @@ void duke_platform_idle(void) {
         return;
     }
     last_yield = now == 0 ? 1 : now;
+    if (s_abi->yield != NULL) {
+        s_abi->yield(s_abi->host);
+        return;
+    }
     s_abi->log(s_abi->host, "\x01yield");
 }
 

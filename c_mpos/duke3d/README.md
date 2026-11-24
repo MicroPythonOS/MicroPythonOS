@@ -55,25 +55,61 @@ The engine is the DukeNano3D source, with a small set of host seams:
 * `Game/game.c` `loadtmb()`: its 8 KB local buffer is static (`.bss`), the
   largest single frame in the engine.
 
+## Running on its own task
+
+The engine does not run on the MicroPython task. The loader creates a FreeRTOS
+task for it (`mpos_core.start_task`, ABI 9, `MPOS_CORE_FLAG_WORKER`), and that
+task's stack is the engine's own:
+
+| Stack | Duke start-up | Notes |
+|---|---|---|
+| 16 KiB MicroPython task | cannot run the engine at all | |
+| 24 KiB MicroPython task | the engine needs ~12 KB more | overflows in `compilecons` |
+| 32 KiB MicroPython task | stack-overflow detected | |
+| 48 KiB MicroPython task | works, ~24 KB free | the old arrangement |
+
+The whole engine's start-up (`compilecons`, `enterlevel`) and its frames now
+run on a **48 KiB worker** (peak use ~37 KB, 11 KB free), while the MicroPython
+task is back to **24 KiB** with 8 KB free. Nothing of the engine's is on that
+stack any more.
+
+Two rules make the split safe, and they are the reason a worker core can be a
+plain C engine:
+
+* **the worker never enters MicroPython.** Every service it can call is
+  implemented by the loader in C: the input ring (`post_key`), the asset it
+  reads (the inflated GRP, sliced by pointer), the log (a line ring the main
+  thread drains), the surface (its own buffers) and the clock (`esp_timer`).
+  The only callbacks left are `present_band` (a no-op) and `frame_ready`;
+* **the main thread keeps LVGL.** The worker renders into one of two buffers
+  and calls `frame_ready()`; the activity shows the published buffer with
+  `NativeDisplay.select_buffer()` + `flush()` and then gives it back with
+  `task_presented()`. A buffer is only handed back after the pass that read it
+  finished, so the engine is always drawing into the buffer nobody is showing.
+
+The engine is pinned to core 0; the MicroPython task is on core 1.
+
 ## Firmware requirements
 
 Two firmware changes are needed, both in the OS build this was tested with:
 
 * the core loader's `log` trampoline handles a `"\x01yield"` sentinel in C
   with `vTaskDelay(1)`; a core cannot call FreeRTOS, and re-entering
-  MicroPython from a deep engine frame to sleep is not safe (it panics);
-* `MICROPY_TASK_STACK_SIZE` is 48 KiB (from 16 KiB). Duke's original port gave
-  the engine a 48 KiB task for a reason. 24 KiB leaves 340 bytes at start-up;
-  32 KiB hit FreeRTOS' stack-overflow check during the CON compile in testing.
-  See `PERFORMANCE.md` for the measurements.
+  MicroPython from a deep engine frame to sleep is not safe (it panics). ABI 9
+  adds a `yield()` callback for the same thing;
+* `MICROPY_TASK_STACK_SIZE` is 24 KiB (from 16 KiB). The engine has its own
+  stack now, so what the MicroPython task needs is its own frames: an LVGL pass
+  runs on it (`lv.refr_now` from the frame loop) and at 16 KiB that pass leaves
+  **32 bytes** free. At 24 KiB it leaves 8 KB. Measured, not guessed - see
+  `PERFORMANCE.md`.
 
 Measured on the MaTouch (ESP32-S3, 8 MB PSRAM): start-up (inflate the 2.6 MB
 GRP, DEF/CON parse, level load, first-frame tiles) is about 7 s; gameplay runs
-at 14-17 fps at 320x200 with the picture transposed to the 200x320 logical
-panel, present ~21-28 ms of a ~57-70 ms frame. Hiding the labelled touch hint
-after 6 s and disabling the task handler's fairness wait for the foreground
-game are what took it from 8 to 17 fps; the engine's own render + simulation is
-about 21 ms. `PERFORMANCE.md` has the breakdown and the next levers.
+at **20-22 fps** at 320x200 with the picture transposed to the 200x320 logical
+panel. A frame is ~47 ms of engine (render ~35 ms + palette convert ~12 ms);
+the panel transfer (~22 ms) happens on the other core and overlaps it. The
+engine's own frame time alone is ~30 ms when the MicroPython task is idle, so
+the two cores do contend - `PERFORMANCE.md` has the numbers and why.
 
 ## Memory
 

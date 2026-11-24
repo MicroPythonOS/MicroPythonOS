@@ -18,13 +18,31 @@
 //     mpos_core.start(label, offset, size, present_band, palette, poll_key,
 //                     read_file, alloc, log, wad_path, width, height, frame,
 //                     band_rows[, expected_crc[, config_dir]])
-//     mpos_core.tick(now_ms)
+//     mpos_core.start_task(label, offset, size, width, height,
+//                          band_rows=..., stack_bytes=..., asset=...,
+//                          asset_name=..., wad_path=..., config_dir=...,
+//                          expected_crc=..., affinity=..., surface=...)
+//     mpos_core.tick(now_ms)              - on-task mode only
 //     mpos_core.stop()
 //     mpos_core.abi_version
 //     mpos_core.buffer(size)     - C-heap memory for an asset (free explicitly)
 //     mpos_core.buffer_free(buf)
 //
-// The blob's first bytes are a mpos_core_entry_t whose abi_version must match.
+// and, while a worker core runs:
+//
+//     mpos_core.task_frame()     - (buffer index, sequence) or None
+//     mpos_core.task_presented() - that frame is on the panel; free its buffer
+//     mpos_core.task_surface(i)  - the pixels of buffer i, no copy
+//     mpos_core.task_log()       - the next start-up/game log line, or None
+//     mpos_core.post_key(code, pressed)
+//     mpos_core.task_running()
+//     mpos_core.task_stack()     - free bytes on the worker's stack
+//
+// The blob's first bytes are a mpos_core_entry_t whose abi_version must be
+// between MPOS_CORE_ABI_MIN_VERSION and MPOS_CORE_ABI_VERSION.
+
+#include <stdio.h>
+#include <string.h>
 
 #include "py/runtime.h"
 #include "py/obj.h"
@@ -32,11 +50,14 @@
 #include "py/mphal.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "freertos/idf_additions.h"
 
 #include "esp_partition.h"
 #include "esp_heap_caps.h"
 #include "esp_rom_crc.h"
 #include "esp_mmu_map.h"
+#include "esp_timer.h"
 #include "hal/mmu_hal.h"
 #include "hal/mmu_types.h"
 #include "soc/soc_caps.h"
@@ -55,6 +76,26 @@
 // registered root pointer: a plain C static is invisible to it, and a collected
 // bound method would be a dangling pointer the next time the core called back.
 MP_REGISTER_ROOT_POINTER(mp_obj_t mpos_core_refs);
+
+// -- worker mode ------------------------------------------------------------
+
+// Two surfaces: the core draws into one while the other is on its way to the
+// panel. The handshake below never lets the presenter read a buffer the engine
+// is writing, and the engine can run one frame ahead of the display, no more.
+#define MPOS_CORE_BUFFERS 2
+#define MPOS_CORE_KEY_RING 64
+#define MPOS_CORE_LOG_LINES 48
+#define MPOS_CORE_LOG_CHARS 160
+#define MPOS_CORE_ASSET_NAME 32
+#define MPOS_CORE_PATH_CHARS 96
+// The engine's stack, not the OS's. Measured on Duke: its start-up peak is the
+// deep one (GRP index, CON compile, first level load) and it is the reason the
+// whole system used to need 48 KB.
+#define MPOS_CORE_WORKER_STACK (48u * 1024u)
+// The MicroPython task runs on core 1 (MP_TASK_COREID); the renderer gets the
+// other one so the panel transfer and the next frame overlap.
+#define MPOS_CORE_WORKER_CORE 0
+#define MPOS_CORE_WORKER_PRIORITY 5
 
 // -- state -------------------------------------------------------------------
 
@@ -101,6 +142,46 @@ static void *s_allocs[MPOS_CORE_MAX_ALLOCATIONS];
 static int s_alloc_count;
 
 static mpos_core_abi_t s_abi;
+
+// Worker task and its hand-off state.
+static TaskHandle_t s_task;
+static SemaphoreHandle_t s_task_ready;
+static SemaphoreHandle_t s_task_exit;
+// Given whenever the presenter starts or stops reading a buffer, so a worker
+// waiting for one wakes at once instead of on its next poll.
+static SemaphoreHandle_t s_present_wake;
+static volatile int s_task_stop;
+static volatile int s_task_result;
+static volatile int s_front_buffer;
+static volatile int s_back_buffer;
+static volatile uint32_t s_published;
+static int s_presenting;
+static uint32_t s_presenting_seq;
+static uint32_t s_presented;
+static uint16_t *s_buffers[MPOS_CORE_BUFFERS];
+static int s_buffer_owned[MPOS_CORE_BUFFERS];
+static size_t s_buffer_bytes;
+
+// The asset a worker core reads: an ordinary buffer the app allocated, served
+// by the loader's read_file so the engine never asks Python for a byte.
+static void *s_asset;
+static uint32_t s_asset_size;
+static char s_asset_name[MPOS_CORE_ASSET_NAME];
+static char s_wad_path[MPOS_CORE_PATH_CHARS];
+static char s_config_dir[MPOS_CORE_PATH_CHARS];
+
+// Input and log rings between the two tasks. One producer and one consumer
+// each, and the critical section is only a few instructions: a spinlock is
+// cheaper than a queue allocation and does not block either side.
+static uint8_t *s_key_code;
+static uint8_t *s_key_pressed;
+static uint32_t s_key_head;
+static uint32_t s_key_tail;
+static char *s_log_ring;
+static uint32_t s_log_head;
+static uint32_t s_log_tail;
+static uint32_t s_log_lost;
+static portMUX_TYPE s_ring_lock = portMUX_INITIALIZER_UNLOCKED;
 
 // -- mapping ----------------------------------------------------------------
 
@@ -245,8 +326,9 @@ static uint32_t abi_now_ms(void *host) {
     (void)host;
     // A live clock, not the tick's timestamp: a core measures its own phases
     // with it, and pacing on a clock that only moves once per tick cannot tell
-    // how long the tick took.
-    return (uint32_t)mp_hal_ticks_ms();
+    // how long the tick took. esp_timer is the same clock MicroPython's
+    // time.ticks_ms() is built on, and it is safe to read from any task.
+    return (uint32_t)(esp_timer_get_time() / 1000);
 }
 
 static int abi_read_file(void *host, const char *path, uint32_t offset,
@@ -337,6 +419,180 @@ static void abi_log(void *host, const char *text) {
     mp_call_function_1(s_log_fun, mp_obj_new_str(text, strlen(text)));
 }
 
+// -- worker-side services ----------------------------------------------------
+//
+// Nothing below may enter MicroPython: it runs on the worker task, next to a
+// main thread that is inside the interpreter.
+
+static void abi_yield(void *host) {
+    (void)host;
+    // One tick. The idle task then runs, and it is the idle task that feeds
+    // the interrupt watchdog during a multi-second engine start-up.
+    vTaskDelay(1);
+}
+
+static void worker_present_band(void *host, int band, int rows,
+                                const uint8_t *pixels) {
+    (void)host;
+    (void)band;
+    (void)rows;
+    (void)pixels;
+    // The core drew into its own surface; there is nothing to copy and nothing
+    // to show yet. frame_ready() is the end of the frame.
+}
+
+static void worker_palette(void *host, uint16_t *out, int entries) {
+    (void)host;
+    if (out != NULL && entries > 0) {
+        memset(out, 0, (size_t)entries * 2u);
+    }
+}
+
+static int worker_poll_key(void *host, int *pressed) {
+    (void)host;
+    int code = 0;
+    int state = 0;
+    int have = 0;
+    if (s_key_code == NULL) {
+        return -1;
+    }
+    portENTER_CRITICAL(&s_ring_lock);
+    if (s_key_head != s_key_tail) {
+        const uint32_t slot = s_key_tail % MPOS_CORE_KEY_RING;
+        code = s_key_code[slot];
+        state = s_key_pressed[slot];
+        s_key_tail++;
+        have = 1;
+    }
+    portEXIT_CRITICAL(&s_ring_lock);
+    if (!have) {
+        return -1;
+    }
+    *pressed = state;
+    return code;
+}
+
+static int worker_read_file(void *host, const char *path, uint32_t offset,
+                            void *dst, uint32_t len) {
+    (void)host;
+    if (s_asset == NULL || path == NULL || dst == NULL
+            || strcmp(path, s_asset_name) != 0) {
+        return -1;
+    }
+    if (offset >= s_asset_size) {
+        return -1;
+    }
+    uint32_t count = s_asset_size - offset;
+    if (count > len) {
+        count = len;
+    }
+    memcpy(dst, (const uint8_t *)s_asset + offset, count);
+    return (int)count;
+}
+
+static int worker_file_size(void *host, const char *path) {
+    (void)host;
+    if (s_asset == NULL || path == NULL || strcmp(path, s_asset_name) != 0) {
+        return -1;
+    }
+    return (int)s_asset_size;
+}
+
+static void log_push(const char *line) {
+    if (s_log_ring == NULL || line == NULL) {
+        return;
+    }
+    portENTER_CRITICAL(&s_ring_lock);
+    if (s_log_head - s_log_tail >= MPOS_CORE_LOG_LINES) {
+        s_log_lost++;
+    } else {
+        char *dst = s_log_ring
+                  + (size_t)(s_log_head % MPOS_CORE_LOG_LINES) * MPOS_CORE_LOG_CHARS;
+        size_t i = 0;
+        while (line[i] != '\0' && i + 1 < MPOS_CORE_LOG_CHARS) {
+            dst[i] = line[i];
+            i++;
+        }
+        dst[i] = '\0';
+        s_log_head++;
+    }
+    portEXIT_CRITICAL(&s_ring_lock);
+}
+
+static void worker_log(void *host, const char *text) {
+    (void)host;
+    if (text == NULL) {
+        return;
+    }
+    if (text[0] == '\x01') {
+        // The ABI 8 way of asking for a yield; a core built against the older
+        // header still sends it through here.
+        vTaskDelay(1);
+        return;
+    }
+    log_push(text);
+}
+
+// The end of a frame: publish it, then wait until the buffer the next frame
+// goes into is not the one the presenter is reading.
+//
+// Two rules, and between them they are the whole hand-off:
+//
+//  - the presenter only ever reads `s_front_buffer`, which is never the buffer
+//    the core is drawing into (this function makes them differ before the core
+//    carries on);
+//  - the core may recycle the buffer it published *two* frames ago, which is
+//    the one the presenter may still be reading, so it waits for that.
+//
+// A frame the presenter never gets to (a newer one was published first) is
+// simply overwritten, which is the whole point of a second buffer. Naming the
+// condition - "is the presenter reading this one?" - also means a skipped
+// frame cannot wedge the pair the way a token count can.
+static void worker_frame_ready(void *host) {
+    (void)host;
+    const int published = s_back_buffer;
+    s_back_buffer = published ^ 1;
+    portENTER_CRITICAL(&s_ring_lock);
+    s_front_buffer = published;
+    s_published++;
+    portEXIT_CRITICAL(&s_ring_lock);
+    for (;;) {
+        portENTER_CRITICAL(&s_ring_lock);
+        const int busy = s_presenting == s_back_buffer;
+        portEXIT_CRITICAL(&s_ring_lock);
+        if (!busy || s_task_stop) {
+            break;
+        }
+        // The presenter gives the wake-up when it finishes, so this is a
+        // fallback for a signal that arrived just before the check.
+        xSemaphoreTake(s_present_wake, pdMS_TO_TICKS(5));
+    }
+    // The next frame goes into whichever buffer the presenter is not showing.
+    s_abi.frame = s_buffers[s_back_buffer];
+}
+
+static void core_task_main(void *arg) {
+    (void)arg;
+    int result = s_entry->init(
+        &s_abi, s_wad_path[0] != '\0' ? s_wad_path : NULL,
+        s_config_dir[0] != '\0' ? s_config_dir : NULL);
+    if (result != 0 && s_entry->stop != NULL) {
+        s_entry->stop(&s_abi);
+    }
+    s_task_result = result;
+    xSemaphoreGive(s_task_ready);
+    if (result == 0) {
+        while (!s_task_stop) {
+            s_entry->tick(&s_abi, abi_now_ms(NULL));
+        }
+        if (s_entry->stop != NULL) {
+            s_entry->stop(&s_abi);
+        }
+    }
+    xSemaphoreGive(s_task_exit);
+    vTaskDelete(NULL);
+}
+
 // -- module functions --------------------------------------------------------
 
 // The partition list is loaded lazily and never refreshed. A bad read of the
@@ -364,21 +620,38 @@ static const esp_partition_t *find_partition_retry(const char *label) {
     return partition;
 }
 
-static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
-    // start(label, offset, size, present_band, palette, poll_key, read_file,
-    //       file_size, log, wad_path, width, height, frame, band_rows,
-    //       expected_crc=0, config_dir=None)
-    if (n_args < 14 || n_args > 16) {
-        mp_raise_TypeError(MP_ERROR_TEXT("start() takes 14 to 16 arguments"));
+// Unmap everything the core was given and release its memory. Safe to call
+// after a partial map, and after a failed init.
+static void core_release(void) {
+    if (s_mapped != NULL) {
+        unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size, s_text_alias);
     }
-    if (s_active) {
-        mp_raise_ValueError(MP_ERROR_TEXT("a core is already running"));
+    if (s_data_alias != NULL) {
+        unmap_fixed(s_data_addr, s_data_size, s_data_alias);
     }
+    if (s_arena_buf != NULL) {
+        unmap_arena(s_arena_addr, s_arena_size, s_arena_buf);
+    }
+    free_allocations();
+    s_text_alias = NULL;
+    s_data_alias = NULL;
+    s_arena_buf = NULL;
+    s_arena_addr = 0;
+    s_arena_size = 0;
+    s_mapped = NULL;
+    s_mapped_size = 0;
+    s_data_addr = 0;
+    s_data_size = 0;
+    s_partition = NULL;
+    s_entry = NULL;
+    s_active = 0;
+}
 
-    const char *label = mp_obj_str_get_str(args[0]);
-    size_t offset = (size_t)mp_obj_get_int_truncated(args[1]);
-    size_t size = (size_t)mp_obj_get_int_truncated(args[2]);
-
+// Map the blob at the addresses it was linked for and fill in the identity
+// fields of the ABI. Everything a mode decides (callbacks, surface, who runs
+// init) is left to the caller.
+static void core_attach(const char *label, size_t offset, size_t size,
+                        uint32_t expected_crc) {
     const esp_partition_t *partition = find_partition_retry(label);
     if (partition == NULL) {
         mp_raise_msg_varg(&mp_type_ValueError,
@@ -391,11 +664,6 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     // Read the entry table through a temporary data mapping to learn where the
     // blob wants to live. The paddr must be page aligned: the blob is mapped
     // at exactly load_addr, so the flash page must start there too.
-    uint32_t expected_crc = 0;
-    if (n_args > 14 && args[14] != mp_const_none) {
-        expected_crc = (uint32_t)mp_obj_get_int_truncated(args[14]);
-    }
-
     const void *tmp = NULL;
     esp_partition_mmap_handle_t tmp_handle = 0;
     esp_err_t err = esp_partition_mmap(partition, offset, size,
@@ -416,12 +684,15 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
         }
     }
     const mpos_core_entry_t *probe = (const mpos_core_entry_t *)tmp;
-    if (probe->abi_version != MPOS_CORE_ABI_VERSION || probe->init == NULL) {
+    if (probe->abi_version < MPOS_CORE_ABI_MIN_VERSION
+            || probe->abi_version > MPOS_CORE_ABI_VERSION
+            || probe->init == NULL) {
         uint32_t found = probe->abi_version;
         esp_partition_munmap(tmp_handle);
         mp_raise_msg_varg(&mp_type_ValueError,
-                          MP_ERROR_TEXT("core ABI %u, expected %u"),
+                          MP_ERROR_TEXT("core ABI %u, expected %u..%u"),
                           (unsigned)found,
+                          (unsigned)MPOS_CORE_ABI_MIN_VERSION,
                           (unsigned)MPOS_CORE_ABI_VERSION);
     }
     // Copy the table out now: after the temporary mapping goes away the blob is
@@ -568,6 +839,42 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     s_data_addr = entry.data_addr;
     s_data_size = data_size;
     s_entry = &s_entry_copy;
+    s_active = 1;
+}
+
+// The ABI fields every mode shares. The callbacks and the surface are the
+// difference between the two modes and are set by each caller.
+static void abi_init_common(void) {
+    memset(&s_abi, 0, sizeof(s_abi));
+    s_abi.version = s_entry->abi_version;
+    s_abi.host = NULL;
+    s_abi.now_ms = abi_now_ms;
+    s_abi.alloc = abi_alloc;
+    s_abi.dealloc = abi_dealloc;
+    s_abi.frame_width = s_width;
+    s_abi.frame_height = s_height;
+    s_abi.band_rows = s_band_rows;
+}
+
+static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
+    // start(label, offset, size, present_band, palette, poll_key, read_file,
+    //       file_size, log, wad_path, width, height, frame, band_rows,
+    //       expected_crc=0, config_dir=None)
+    if (n_args < 14 || n_args > 16) {
+        mp_raise_TypeError(MP_ERROR_TEXT("start() takes 14 to 16 arguments"));
+    }
+    if (s_active) {
+        mp_raise_ValueError(MP_ERROR_TEXT("a core is already running"));
+    }
+
+    const char *label = mp_obj_str_get_str(args[0]);
+    uint32_t expected_crc = 0;
+    if (n_args > 14 && args[14] != mp_const_none) {
+        expected_crc = (uint32_t)mp_obj_get_int_truncated(args[14]);
+    }
+    core_attach(label, (size_t)mp_obj_get_int_truncated(args[1]),
+                (size_t)mp_obj_get_int_truncated(args[2]), expected_crc);
+
     s_width = (int)mp_obj_get_int(args[10]);
     s_height = (int)mp_obj_get_int(args[11]);
 
@@ -585,6 +892,7 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
         mp_buffer_info_t buf;
         if (!mp_get_buffer(args[12], &buf, MP_BUFFER_WRITE)
                 || buf.len < (size_t)s_width * (size_t)s_height * 2u) {
+            core_release();
             mp_raise_ValueError(MP_ERROR_TEXT("frame buffer is too small"));
         }
         s_frame = (uint16_t *)buf.buf;
@@ -606,24 +914,18 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     }
     roots[6] = args[12];
     MP_STATE_VM(mpos_core_refs) = mp_obj_new_tuple(7, roots);
-    s_now_ms = mp_hal_ticks_ms();
-    s_active = 1;
+    s_now_ms = abi_now_ms(NULL);
 
-    s_abi.version = MPOS_CORE_ABI_VERSION;
-    s_abi.host = NULL;
+    abi_init_common();
     s_abi.present_band = abi_present_band;
     s_abi.palette = abi_palette;
     s_abi.poll_key = abi_poll_key;
-    s_abi.now_ms = abi_now_ms;
     s_abi.read_file = abi_read_file;
     s_abi.file_size = abi_file_size;
-    s_abi.alloc = abi_alloc;
-    s_abi.dealloc = abi_dealloc;
     s_abi.log = abi_log;
-    s_abi.frame_width = s_width;
-    s_abi.frame_height = s_height;
     s_abi.frame = s_frame;
-    s_abi.band_rows = s_band_rows;
+    // No frame_ready/yield: this mode presents every band as it is finished and
+    // has no task of its own to yield from.
 
     const char *config_dir = NULL;
     if (n_args > 15 && args[15] != mp_const_none) {
@@ -632,19 +934,7 @@ static mp_obj_t mpos_core_start(size_t n_args, const mp_obj_t *args) {
     int result = s_entry->init(&s_abi, mp_obj_str_get_str(args[9]), config_dir);
     if (result != 0) {
         s_entry->stop(&s_abi);
-        unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size, s_text_alias);
-        if (s_data_alias != NULL) {
-            unmap_fixed(s_data_addr, s_data_size, s_data_alias);
-        }
-        if (s_arena_buf != NULL) {
-            unmap_arena(s_arena_addr, s_arena_size, s_arena_buf);
-        }
-        free_allocations();
-        s_text_alias = NULL;
-        s_data_alias = NULL;
-        s_arena_buf = NULL;
-        s_active = 0;
-        s_entry = NULL;
+        core_release();
         mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("core init failed: %d"), result);
     }
     return mp_const_none;
@@ -655,36 +945,321 @@ static mp_obj_t mpos_core_tick(mp_obj_t now_obj) {
     if (!s_active || s_entry == NULL) {
         mp_raise_ValueError(MP_ERROR_TEXT("no core is running"));
     }
+    if (s_task != NULL) {
+        // A worker core advances itself; the frame loop only presents.
+        return mp_const_none;
+    }
     s_now_ms = (uint32_t)mp_obj_get_int_truncated(now_obj);
     s_entry->tick(&s_abi, s_now_ms);
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mpos_core_tick_obj, mpos_core_tick);
 
+// -- worker start ------------------------------------------------------------
+
+// Stop the worker and wait for it to leave the engine. The core's globals live
+// in the arena and its code in the mapping, so nothing may be released while
+// it is still ticking.
+static void stop_task(void) {
+    if (s_task == NULL) {
+        return;
+    }
+    s_task_stop = 1;
+    // Wake a worker parked in the buffer handshake.
+    if (s_present_wake != NULL) {
+        xSemaphoreGive(s_present_wake);
+    }
+    if (xSemaphoreTake(s_task_exit, pdMS_TO_TICKS(3000)) != pdTRUE) {
+        // A core that will not return from a tick cannot be left running over
+        // memory the host is about to hand back. Killing it leaks whatever it
+        // held, which beats the alternative of it executing unmapped code.
+        printf("mpos_core: worker did not stop, deleting it\n");
+        vTaskDelete(s_task);
+    }
+    s_task = NULL;
+    s_task_stop = 0;
+}
+
+static void release_task_memory(void) {
+    stop_task();
+    for (int i = 0; i < MPOS_CORE_BUFFERS; i++) {
+        if (s_buffer_owned[i] && s_buffers[i] != NULL) {
+            heap_caps_free(s_buffers[i]);
+        }
+        s_buffers[i] = NULL;
+        s_buffer_owned[i] = 0;
+    }
+    if (s_present_wake != NULL) {
+        vSemaphoreDelete(s_present_wake);
+        s_present_wake = NULL;
+    }
+    if (s_key_code != NULL) {
+        heap_caps_free(s_key_code);
+        s_key_code = NULL;
+    }
+    if (s_key_pressed != NULL) {
+        heap_caps_free(s_key_pressed);
+        s_key_pressed = NULL;
+    }
+    if (s_log_ring != NULL) {
+        heap_caps_free(s_log_ring);
+        s_log_ring = NULL;
+    }
+    if (s_task_ready != NULL) {
+        vSemaphoreDelete(s_task_ready);
+        s_task_ready = NULL;
+    }
+    if (s_task_exit != NULL) {
+        vSemaphoreDelete(s_task_exit);
+        s_task_exit = NULL;
+    }
+    s_buffer_bytes = 0;
+    s_asset = NULL;
+    s_asset_size = 0;
+    s_asset_name[0] = '\0';
+    s_wad_path[0] = '\0';
+    s_config_dir[0] = '\0';
+    s_key_head = 0;
+    s_key_tail = 0;
+    s_log_head = 0;
+    s_log_tail = 0;
+    s_log_lost = 0;
+    s_published = 0;
+    s_presented = 0;
+    s_presenting = -1;
+    s_presenting_seq = 0;
+    s_front_buffer = 0;
+    s_back_buffer = 0;
+    s_task_result = 0;
+    s_task_stop = 0;
+}
+
+enum {
+    ARG_label,
+    ARG_offset,
+    ARG_size,
+    ARG_width,
+    ARG_height,
+    ARG_band_rows,
+    ARG_stack_bytes,
+    ARG_asset,
+    ARG_asset_name,
+    ARG_wad_path,
+    ARG_config_dir,
+    ARG_expected_crc,
+    ARG_affinity,
+    ARG_surface,
+};
+
+static const mp_arg_t start_task_args[] = {
+    { MP_QSTR_label, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+    { MP_QSTR_offset, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
+    { MP_QSTR_size, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
+    { MP_QSTR_width, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
+    { MP_QSTR_height, MP_ARG_REQUIRED | MP_ARG_INT, {.u_int = 0} },
+    { MP_QSTR_band_rows, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
+    { MP_QSTR_stack_bytes, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = (int)MPOS_CORE_WORKER_STACK} },
+    { MP_QSTR_asset, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+    { MP_QSTR_asset_name, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+    { MP_QSTR_wad_path, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+    { MP_QSTR_config_dir, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+    { MP_QSTR_expected_crc, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
+    { MP_QSTR_affinity, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = MPOS_CORE_WORKER_CORE} },
+    { MP_QSTR_surface, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+};
+
+// Copy a Python string into a fixed buffer; an empty result means "none".
+static void copy_path(char *dst, size_t size, mp_obj_t value) {
+    dst[0] = '\0';
+    if (value == mp_const_none) {
+        return;
+    }
+    const char *text = mp_obj_str_get_str(value);
+    size_t len = strlen(text);
+    if (len >= size) {
+        len = size - 1;
+    }
+    memcpy(dst, text, len);
+    dst[len] = '\0';
+}
+
+static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
+                                     mp_map_t *kw_args) {
+    mp_arg_val_t parsed[MP_ARRAY_SIZE(start_task_args)];
+    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(start_task_args),
+                     start_task_args, parsed);
+
+    if (s_active) {
+        mp_raise_ValueError(MP_ERROR_TEXT("a core is already running"));
+    }
+
+    const char *label = mp_obj_str_get_str(parsed[ARG_label].u_obj);
+    core_attach(label, (size_t)parsed[ARG_offset].u_int,
+                (size_t)parsed[ARG_size].u_int,
+                (uint32_t)parsed[ARG_expected_crc].u_int);
+
+    s_width = parsed[ARG_width].u_int;
+    s_height = parsed[ARG_height].u_int;
+    if (s_width <= 0 || s_height <= 0) {
+        core_release();
+        mp_raise_ValueError(MP_ERROR_TEXT("surface size must be positive"));
+    }
+    int band_rows = parsed[ARG_band_rows].u_int;
+    if (band_rows <= 0 || band_rows > s_height) {
+        band_rows = s_height;
+    }
+    s_band_rows = band_rows;
+
+    // A worker core never enters MicroPython, so its input, its log and its
+    // asset are all served from C. The rings are small and fixed.
+    s_key_code = heap_caps_malloc(MPOS_CORE_KEY_RING, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    s_key_pressed = heap_caps_malloc(MPOS_CORE_KEY_RING, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    s_log_ring = heap_caps_malloc(MPOS_CORE_LOG_LINES * MPOS_CORE_LOG_CHARS,
+                                  MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_log_ring == NULL) {
+        s_log_ring = heap_caps_malloc(MPOS_CORE_LOG_LINES * MPOS_CORE_LOG_CHARS,
+                                      MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    if (s_key_code == NULL || s_key_pressed == NULL || s_log_ring == NULL) {
+        release_task_memory();
+        core_release();
+        mp_raise_msg(&mp_type_MemoryError,
+                     MP_ERROR_TEXT("no memory for the core's input and log rings"));
+    }
+
+    // The asset: an ordinary buffer the app allocated, sliced by the loader.
+    if (parsed[ARG_asset].u_obj != mp_const_none) {
+        mp_buffer_info_t info;
+        if (!mp_get_buffer(parsed[ARG_asset].u_obj, &info, MP_BUFFER_READ)) {
+            release_task_memory();
+            core_release();
+            mp_raise_TypeError(MP_ERROR_TEXT("asset must be a buffer"));
+        }
+        s_asset = info.buf;
+        s_asset_size = (uint32_t)info.len;
+        copy_path(s_asset_name, sizeof(s_asset_name), parsed[ARG_asset_name].u_obj);
+        if (s_asset_name[0] == '\0') {
+            release_task_memory();
+            core_release();
+            mp_raise_ValueError(MP_ERROR_TEXT("an asset needs asset_name"));
+        }
+    }
+    copy_path(s_wad_path, sizeof(s_wad_path), parsed[ARG_wad_path].u_obj);
+    copy_path(s_config_dir, sizeof(s_config_dir), parsed[ARG_config_dir].u_obj);
+
+    // Two surfaces. The app's own (the one LVGL shows) is used as buffer 0 when
+    // it passes one, so only the second has to be allocated here.
+    s_buffer_bytes = (size_t)s_width * (size_t)s_height * 2u;
+    for (int i = 0; i < MPOS_CORE_BUFFERS; i++) {
+        s_buffers[i] = NULL;
+        s_buffer_owned[i] = 0;
+    }
+    if (parsed[ARG_surface].u_obj != mp_const_none) {
+        mp_buffer_info_t info;
+        if (!mp_get_buffer(parsed[ARG_surface].u_obj, &info, MP_BUFFER_WRITE)
+                || info.len < s_buffer_bytes) {
+            release_task_memory();
+            core_release();
+            mp_raise_ValueError(MP_ERROR_TEXT("frame buffer is too small"));
+        }
+        s_buffers[0] = (uint16_t *)info.buf;
+    }
+    for (int i = 0; i < MPOS_CORE_BUFFERS; i++) {
+        if (s_buffers[i] != NULL) {
+            continue;
+        }
+        s_buffers[i] = heap_caps_malloc(s_buffer_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (s_buffers[i] == NULL) {
+            s_buffers[i] = heap_caps_malloc(s_buffer_bytes,
+                                            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        }
+        if (s_buffers[i] == NULL) {
+            release_task_memory();
+            core_release();
+            mp_raise_msg_varg(&mp_type_MemoryError,
+                              MP_ERROR_TEXT("no memory for a %u byte surface"),
+                              (unsigned)s_buffer_bytes);
+        }
+        s_buffer_owned[i] = 1;
+    }
+
+    // Root the asset and the surface: the loader holds raw pointers into both
+    // for the whole session, and the collector cannot see those pointers.
+    mp_obj_t roots[2];
+    roots[0] = parsed[ARG_asset].u_obj;
+    roots[1] = parsed[ARG_surface].u_obj;
+    MP_STATE_VM(mpos_core_refs) = mp_obj_new_tuple(2, roots);
+
+    s_task_ready = xSemaphoreCreateBinary();
+    s_task_exit = xSemaphoreCreateBinary();
+    s_present_wake = xSemaphoreCreateBinary();
+    if (s_task_ready == NULL || s_task_exit == NULL
+            || s_present_wake == NULL) {
+        release_task_memory();
+        core_release();
+        mp_raise_msg(&mp_type_MemoryError,
+                     MP_ERROR_TEXT("no memory for the core's hand-off"));
+    }
+
+    s_task_stop = 0;
+    s_task_result = 0;
+    s_published = 0;
+    s_presented = 0;
+    s_presenting = -1;
+    s_presenting_seq = 0;
+    s_front_buffer = MPOS_CORE_BUFFERS - 1;
+    s_back_buffer = 0;
+    s_key_head = 0;
+    s_key_tail = 0;
+    s_log_head = 0;
+    s_log_tail = 0;
+    s_log_lost = 0;
+
+    abi_init_common();
+    s_abi.present_band = worker_present_band;
+    s_abi.palette = worker_palette;
+    s_abi.poll_key = worker_poll_key;
+    s_abi.read_file = worker_read_file;
+    s_abi.file_size = worker_file_size;
+    s_abi.log = worker_log;
+    s_abi.frame = s_buffers[s_back_buffer];
+    s_abi.frame_ready = worker_frame_ready;
+    s_abi.yield = abi_yield;
+
+    BaseType_t created = xTaskCreatePinnedToCore(
+        core_task_main, "mpos_core", (uint32_t)parsed[ARG_stack_bytes].u_int,
+        NULL, MPOS_CORE_WORKER_PRIORITY, &s_task, parsed[ARG_affinity].u_int);
+    if (created != pdPASS) {
+        s_task = NULL;
+        release_task_memory();
+        core_release();
+        mp_raise_msg(&mp_type_MemoryError,
+                     MP_ERROR_TEXT("cannot create the core's task"));
+    }
+
+    // Block until the core has finished its start-up (or failed): the caller
+    // shows a progress message, and nothing may tick before init returned.
+    xSemaphoreTake(s_task_ready, portMAX_DELAY);
+    if (s_task_result != 0) {
+        int result = s_task_result;
+        release_task_memory();
+        core_release();
+        mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("core init failed: %d"), result);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_KW(mpos_core_start_task_obj, 3, mpos_core_start_task);
+
 static mp_obj_t mpos_core_stop(void) {
     if (!s_active) {
         return mp_const_none;
     }
-    if (s_entry != NULL && s_entry->stop != NULL) {
+    if (s_task != NULL) {
+        release_task_memory();
+    } else if (s_entry != NULL && s_entry->stop != NULL) {
         s_entry->stop(&s_abi);
     }
-    unmap_fixed((uint32_t)s_mapped, (uint32_t)s_mapped_size, s_text_alias);
-    if (s_data_alias != NULL) {
-        unmap_fixed(s_data_addr, s_data_size, s_data_alias);
-    }
-    if (s_arena_buf != NULL) {
-        unmap_arena(s_arena_addr, s_arena_size, s_arena_buf);
-    }
-    free_allocations();
-    s_text_alias = NULL;
-    s_data_alias = NULL;
-    s_arena_buf = NULL;
-    s_arena_addr = 0;
-    s_arena_size = 0;
-    s_mapped = NULL;
-    s_mapped_size = 0;
-    s_data_addr = 0;
-    s_data_size = 0;
+    core_release();
     // The engine can be started again after stop() (a game that quits to the
     // launcher and is started again), so leave nothing of this session behind
     // for the next one to read: the surface pointer especially, which points
@@ -695,8 +1270,6 @@ static mp_obj_t mpos_core_stop(void) {
     s_band_rows = 0;
     s_flags = 0;
     s_now_ms = 0;
-    s_partition = NULL;
-    s_entry = NULL;
     s_present_fun = MP_OBJ_NULL;
     s_palette_fun = MP_OBJ_NULL;
     s_poll_fun = MP_OBJ_NULL;
@@ -704,7 +1277,6 @@ static mp_obj_t mpos_core_stop(void) {
     s_size_fun = MP_OBJ_NULL;
     s_log_fun = MP_OBJ_NULL;
     MP_STATE_VM(mpos_core_refs) = MP_OBJ_NULL;
-    s_active = 0;
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_stop_obj, mpos_core_stop);
@@ -728,6 +1300,135 @@ static mp_obj_t mpos_core_stack_high_water(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_stack_high_water_obj,
                                  mpos_core_stack_high_water);
+
+static mp_obj_t mpos_core_task_frame(void) {
+    if (!s_active || s_task == NULL) {
+        return mp_const_none;
+    }
+    int index;
+    uint32_t seq;
+    portENTER_CRITICAL(&s_ring_lock);
+    if (s_presenting < 0 && s_published != s_presented) {
+        s_presenting = s_front_buffer;
+        s_presenting_seq = s_published;
+    }
+    index = s_presenting;
+    seq = s_presenting_seq;
+    portEXIT_CRITICAL(&s_ring_lock);
+    if (index < 0) {
+        return mp_const_none;
+    }
+    mp_obj_t items[2];
+    items[0] = mp_obj_new_int(index);
+    items[1] = mp_obj_new_int_from_uint(seq);
+    return mp_obj_new_tuple(2, items);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_task_frame_obj, mpos_core_task_frame);
+
+// The frame is on the panel (or has been dropped on purpose): the buffer goes
+// back to the engine, which has been waiting for it.
+static mp_obj_t mpos_core_task_presented(void) {
+    if (!s_active || s_presenting < 0) {
+        return mp_const_none;
+    }
+    int index;
+    portENTER_CRITICAL(&s_ring_lock);
+    index = s_presenting;
+    s_presented = s_presenting_seq;
+    s_presenting = -1;
+    portEXIT_CRITICAL(&s_ring_lock);
+    if (s_present_wake != NULL) {
+        xSemaphoreGive(s_present_wake);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_task_presented_obj, mpos_core_task_presented);
+
+// The pixels of one buffer, with no copy: the app wraps it in a display surface
+// and LVGL reads it directly.
+static mp_obj_t mpos_core_task_surface(mp_obj_t index_obj) {
+    if (!s_active || s_task == NULL) {
+        mp_raise_ValueError(MP_ERROR_TEXT("no worker core is running"));
+    }
+    int index = (int)mp_obj_get_int(index_obj);
+    if (index < 0 || index >= MPOS_CORE_BUFFERS || s_buffers[index] == NULL) {
+        mp_raise_ValueError(MP_ERROR_TEXT("no such surface"));
+    }
+    return mp_obj_new_bytearray_by_ref(s_buffer_bytes, s_buffers[index]);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(mpos_core_task_surface_obj, mpos_core_task_surface);
+
+static mp_obj_t mpos_core_task_log(void) {
+    if (s_log_ring == NULL) {
+        return mp_const_none;
+    }
+    char line[MPOS_CORE_LOG_CHARS];
+    uint32_t lost = 0;
+    int have = 0;
+    portENTER_CRITICAL(&s_ring_lock);
+    if (s_log_head != s_log_tail) {
+        const char *src = s_log_ring
+                        + (size_t)(s_log_tail % MPOS_CORE_LOG_LINES) * MPOS_CORE_LOG_CHARS;
+        size_t i = 0;
+        while (src[i] != '\0' && i + 1 < MPOS_CORE_LOG_CHARS) {
+            line[i] = src[i];
+            i++;
+        }
+        line[i] = '\0';
+        s_log_tail++;
+        have = 1;
+    } else {
+        lost = s_log_lost;
+        s_log_lost = 0;
+    }
+    portEXIT_CRITICAL(&s_ring_lock);
+    if (have) {
+        return mp_obj_new_str(line, strlen(line));
+    }
+    if (lost != 0) {
+        char text[48];
+        snprintf(text, sizeof(text), "(%u log lines dropped)", (unsigned)lost);
+        return mp_obj_new_str(text, strlen(text));
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_task_log_obj, mpos_core_task_log);
+
+static mp_obj_t mpos_core_post_key(mp_obj_t code_obj, mp_obj_t pressed_obj) {
+    if (s_key_code == NULL) {
+        return mp_const_false;
+    }
+    const uint8_t code = (uint8_t)mp_obj_get_int(code_obj);
+    const uint8_t pressed = mp_obj_get_int(pressed_obj) ? 1 : 0;
+    int pushed = 0;
+    portENTER_CRITICAL(&s_ring_lock);
+    if (s_key_head - s_key_tail < MPOS_CORE_KEY_RING) {
+        const uint32_t slot = s_key_head % MPOS_CORE_KEY_RING;
+        s_key_code[slot] = code;
+        s_key_pressed[slot] = pressed;
+        s_key_head++;
+        pushed = 1;
+    }
+    portEXIT_CRITICAL(&s_ring_lock);
+    return mp_obj_new_bool(pushed);
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(mpos_core_post_key_obj, mpos_core_post_key);
+
+static mp_obj_t mpos_core_task_running(void) {
+    return mp_obj_new_bool(s_task != NULL);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_task_running_obj, mpos_core_task_running);
+
+// Free bytes left on the worker's stack: the record of the engine's own deepest
+// frame, without the OS's frames mixed into it.
+static mp_obj_t mpos_core_task_stack(void) {
+    if (s_task == NULL) {
+        return mp_obj_new_int(0);
+    }
+    return mp_obj_new_int((mp_int_t)uxTaskGetStackHighWaterMark(s_task)
+                          * (mp_int_t)sizeof(StackType_t));
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_task_stack_obj, mpos_core_task_stack);
 
 static mp_obj_t mpos_core_audio_mix(mp_obj_t buffer) {
     if (s_entry == NULL || s_entry->audio_mix == NULL) {
@@ -775,7 +1476,7 @@ typedef struct {
     size_t size;
 } mpos_core_buffer_t;
 
-static mpos_core_buffer_t s_buffers[MPOS_CORE_MAX_BUFFERS];
+static mpos_core_buffer_t s_buffers_pool[MPOS_CORE_MAX_BUFFERS];
 
 static mp_obj_t mpos_core_buffer(mp_obj_t size_obj) {
     size_t size = (size_t)mp_obj_get_int_truncated(size_obj);
@@ -784,7 +1485,7 @@ static mp_obj_t mpos_core_buffer(mp_obj_t size_obj) {
     }
     int slot = -1;
     for (int i = 0; i < MPOS_CORE_MAX_BUFFERS; i++) {
-        if (s_buffers[i].ptr == NULL) {
+        if (s_buffers_pool[i].ptr == NULL) {
             slot = i;
             break;
         }
@@ -801,8 +1502,8 @@ static mp_obj_t mpos_core_buffer(mp_obj_t size_obj) {
         mp_raise_msg(&mp_type_MemoryError,
                      MP_ERROR_TEXT("cannot allocate the buffer"));
     }
-    s_buffers[slot].ptr = ptr;
-    s_buffers[slot].size = size;
+    s_buffers_pool[slot].ptr = ptr;
+    s_buffers_pool[slot].size = size;
     return mp_obj_new_bytearray_by_ref(size, ptr);
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mpos_core_buffer_obj, mpos_core_buffer);
@@ -811,10 +1512,10 @@ static mp_obj_t mpos_core_buffer_free(mp_obj_t buffer) {
     mp_buffer_info_t info;
     mp_get_buffer_raise(buffer, &info, MP_BUFFER_READ);
     for (int i = 0; i < MPOS_CORE_MAX_BUFFERS; i++) {
-        if (s_buffers[i].ptr == info.buf) {
-            heap_caps_free(s_buffers[i].ptr);
-            s_buffers[i].ptr = NULL;
-            s_buffers[i].size = 0;
+        if (s_buffers_pool[i].ptr == info.buf) {
+            heap_caps_free(s_buffers_pool[i].ptr);
+            s_buffers_pool[i].ptr = NULL;
+            s_buffers_pool[i].size = 0;
             return mp_const_none;
         }
     }
@@ -825,6 +1526,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(mpos_core_buffer_free_obj, mpos_core_buffer_fre
 static const mp_rom_map_elem_t mpos_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_mpos_core) },
     { MP_ROM_QSTR(MP_QSTR_start), MP_ROM_PTR(&mpos_core_start_obj) },
+    { MP_ROM_QSTR(MP_QSTR_start_task), MP_ROM_PTR(&mpos_core_start_task_obj) },
     { MP_ROM_QSTR(MP_QSTR_tick), MP_ROM_PTR(&mpos_core_tick_obj) },
     { MP_ROM_QSTR(MP_QSTR_stop), MP_ROM_PTR(&mpos_core_stop_obj) },
     { MP_ROM_QSTR(MP_QSTR_mapped), MP_ROM_PTR(&mpos_core_mapped_obj) },
@@ -833,6 +1535,13 @@ static const mp_rom_map_elem_t mpos_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_abi_version), MP_ROM_PTR(&mpos_core_abi_version_obj) },
     { MP_ROM_QSTR(MP_QSTR_audio_mix), MP_ROM_PTR(&mpos_core_audio_mix_obj) },
     { MP_ROM_QSTR(MP_QSTR_quit_requested), MP_ROM_PTR(&mpos_core_quit_requested_obj) },
+    { MP_ROM_QSTR(MP_QSTR_task_frame), MP_ROM_PTR(&mpos_core_task_frame_obj) },
+    { MP_ROM_QSTR(MP_QSTR_task_presented), MP_ROM_PTR(&mpos_core_task_presented_obj) },
+    { MP_ROM_QSTR(MP_QSTR_task_surface), MP_ROM_PTR(&mpos_core_task_surface_obj) },
+    { MP_ROM_QSTR(MP_QSTR_task_log), MP_ROM_PTR(&mpos_core_task_log_obj) },
+    { MP_ROM_QSTR(MP_QSTR_task_running), MP_ROM_PTR(&mpos_core_task_running_obj) },
+    { MP_ROM_QSTR(MP_QSTR_task_stack), MP_ROM_PTR(&mpos_core_task_stack_obj) },
+    { MP_ROM_QSTR(MP_QSTR_post_key), MP_ROM_PTR(&mpos_core_post_key_obj) },
     { MP_ROM_QSTR(MP_QSTR_buffer), MP_ROM_PTR(&mpos_core_buffer_obj) },
     { MP_ROM_QSTR(MP_QSTR_buffer_free), MP_ROM_PTR(&mpos_core_buffer_free_obj) },
 };

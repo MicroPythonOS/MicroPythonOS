@@ -51,6 +51,35 @@ except ImportError:
     zipasset = None
 
 SELFTEST_PATH = "/duke3d_selftest"
+# Run the engine on the MicroPython task instead of its own, for measuring the
+# difference on a badge without rebuilding anything.
+ON_TASK_PATH = "/duke3d_on_task"
+# A run's log, on the device's filesystem. The console is a serial port that
+# nobody is reading while the badge is held in a hand, so the one place a
+# post-mortem can be found is here. Truncated at every start.
+DEBUG_LOG_PATH = "/duke3d.log"
+
+_DEBUG_LOG = None
+
+
+def _debug(text):
+    """Append a line to the run's log (no-op when it is not open)."""
+    if _DEBUG_LOG is None:
+        return
+    try:
+        _DEBUG_LOG.write("%s\n" % (text,))
+    except Exception:
+        pass
+
+
+def _open_debug_log():
+    """Open the run log unbuffered, so a probe can read it while it is open."""
+    for kwargs in ({"buffering": 0}, {}):
+        try:
+            return open(DEBUG_LOG_PATH, "w", **kwargs)
+        except Exception:
+            continue
+    return None
 
 GAME_WIDTH = 320
 GAME_HEIGHT = 200
@@ -66,8 +95,11 @@ RETRO_CORE_PARTITION = "retro-core"
 RETRO_CORE_SIZE = 0xF0000
 
 # Duke's logic runs at 30 tics and a 320x200 frame is what limits the picture;
-# the engine is ticked once per display frame.
+# the engine is ticked once per display frame. On its own task it renders as
+# fast as the panel can take frames, so the loop polls for a published one at
+# twice that rate (the poll is a couple of instructions when nothing is ready).
 TARGET_FPS = 30
+WORKER_TARGET_FPS = 60
 
 # The name the engine opens. Its GRP loader is patched to ask for exactly this,
 # and the core's read callback answers from the inflated buffer.
@@ -76,6 +108,11 @@ GRP_ZIP_NAME = "E1L1-4_compromise.grp.zip"
 
 HINT_TEXT = "Hold sideways: left is walk/turn, right is the action pad"
 TOUCH_HINT_MS = 8000
+
+# The engine's task. Core 0 is the one the MicroPython task (core 1) leaves
+# alone; see c_mpos/duke3d/PERFORMANCE.md for what the two cores cost each
+# other.
+WORKER_AFFINITY = 0
 
 PREFS_DIR = "prefs/com.micropythonos.duke3d"
 
@@ -199,7 +236,15 @@ def prepare_grp(loading):
 
 
 class _CoreEngine:
-    """The engine as a littlefs2e extent (the badge)."""
+    """The engine as a littlefs2e extent (the badge).
+
+    Two ways to run it, chosen by what the firmware offers. On its own task
+    (``start_task``) the engine renders into one of two buffers while this
+    activity presents the other; the engine's stack is the worker's, so the
+    OS keeps its own small one, and the render and the panel transfer run at
+    the same time. Without that API the engine ticks on the MicroPython task
+    and presents each band as it finishes.
+    """
 
     name = "core"
     quit = False
@@ -216,6 +261,18 @@ class _CoreEngine:
         self._callbacks = None
         self.quit = False
         self._quit_query = getattr(mpos_core, "quit_requested", None)
+        # A firmware with ABI 9 can run the engine on a task of its own.
+        self._worker = getattr(mpos_core, "start_task", None) is not None
+        try:
+            os.stat(ON_TASK_PATH)
+            self._worker = False
+        except OSError:
+            pass
+        self._worker_surfaces = []
+        self._surface_index = None
+        stack_query = getattr(mpos_core, "task_stack" if self._worker
+                              else "stack_high_water", None)
+        self._stack_query = stack_query
 
     def surface_size(self, display):
         # A portrait panel (240x320 logical, the badge held sideways) cannot
@@ -263,6 +320,10 @@ class _CoreEngine:
             offset, length, crc = 0, RETRO_CORE_SIZE, 0
         config_dir = _absolute(PREFS_DIR)
         _makedirs(config_dir)
+        if self._worker:
+            self._start_worker(partition, offset, length, crc, surface,
+                               config_dir)
+            return
         # The engine runs its whole start-up (GRP index, palette, the first
         # level) inside init(); that is one blocking step of a few seconds, and
         # the activity is showing its loading message while it happens.
@@ -272,6 +333,31 @@ class _CoreEngine:
             GRP_NAME, surface.width, surface.height,
             surface.buffer, surface.rows_per_band, crc, config_dir)
 
+    def _start_worker(self, partition, offset, length, crc, surface,
+                      config_dir):
+        """Run the engine on its own task, presenting its frames here.
+
+        The engine's surface is the one LVGL shows, so it is buffer 0 and the
+        loader allocates only the second; the app keeps the pixels of both,
+        because a published frame stays valid until it says otherwise.
+        """
+        self._worker_surfaces = [surface.buffer]
+        self._core.start_task(
+            partition, offset, length,
+            width=surface.width,
+            height=surface.height,
+            band_rows=surface.rows_per_band,
+            asset=self._grp,
+            asset_name=GRP_NAME,
+            wad_path=GRP_NAME,
+            config_dir=config_dir,
+            expected_crc=crc,
+            affinity=WORKER_AFFINITY,
+            surface=surface.buffer)
+        buffer = self._core.task_surface(1)
+        self._worker_surfaces.append(buffer)
+        self._surface_index = [0, surface.add_buffer(buffer)]
+
     def resume(self):
         pass
 
@@ -279,14 +365,24 @@ class _CoreEngine:
         self._keys = []
 
     def tick(self, now):
-        self._core.tick(now)
+        if self._worker:
+            self._present()
+        else:
+            self._core.tick(now)
         if self._quit_query is not None and self._quit_query():
             self.quit = True
+            _debug("engine asked to quit")
 
     def audio_mix(self, buffer):
         self._core.audio_mix(buffer)
 
     def key(self, code, pressed):
+        if self._worker:
+            try:
+                self._core.post_key(code, pressed)
+                return
+            except Exception:
+                pass
         self._keys.append((code, pressed))
 
     def stop(self):
@@ -299,6 +395,47 @@ class _CoreEngine:
         self._keys = []
         self._io_count = 0
         self._callbacks = None
+        self._worker_surfaces = []
+        self._surface_index = None
+
+    # -- worker mode ------------------------------------------------------
+
+    def _present(self):
+        """Show the frame the engine published, then give the buffer back."""
+        frame = self._core.task_frame()
+        if frame is None:
+            self._drain_log()
+            return
+        index, _seq = frame
+        surface = self._surface
+        # A frame published before the activity is on screen is dropped, not
+        # queued: an idle surface must not hold a buffer the engine needs.
+        shown = False
+        if surface is not None and surface._active:
+            surface.select_buffer(self._surface_index[index])
+            shown = surface.flush()
+            if shown:
+                self._core.task_presented()
+        else:
+            self._core.task_presented()
+        self._present_count = getattr(self, "_present_count", 0) + 1
+        if self._present_count <= 8:
+            _debug("present %d: index %d shown %r active %r"
+                   % (self._present_count, index, shown,
+                      surface is not None and surface._active))
+        self._drain_log()
+
+    def _drain_log(self):
+        # The worker cannot print: it has no interpreter and no console. Its
+        # lines are queued in C and printed here, on the task that owns both.
+        drain = getattr(self._core, "task_log", None)
+        if drain is None:
+            return
+        while True:
+            line = drain()
+            if line is None:
+                break
+            self._log(line)
 
     # -- ABI callbacks ----------------------------------------------------
 
@@ -353,8 +490,9 @@ class _CoreEngine:
         # it reaches Python; a line that still arrives starts with that byte.
         if line and line[0] == "\x01":
             return
+        _debug("log: %s" % (line,))
         if line.startswith("duke: "):
-            query = getattr(self._core, "stack_high_water", None)
+            query = self._stack_query
             if query is not None:
                 try:
                     line = "%s, stack free %d" % (line, query())
@@ -366,6 +504,15 @@ class _CoreEngine:
             # The REPL can stop draining while the engine owns the CPU; a
             # failed log line must not become a failed frame.
             pass
+        # The console is a serial port nobody is holding a reader to while the
+        # badge is in a hand. Keep the last lines where a probe (or the file on
+        # stop) can find them.
+        tail = getattr(self, "_log_tail", None)
+        if tail is None:
+            tail = self._log_tail = []
+        tail.append(line)
+        if len(tail) > 20:
+            del tail[0]
 
 
 class Duke3D(NativeActivity):
@@ -382,12 +529,22 @@ class Duke3D(NativeActivity):
     screen_transition_ms = 0
 
     def onCreate(self):
+        _debug("onCreate")
         # These are created before the base class can deliver a touch or ask
         # for an engine.
         self._touch = DukeTouch(self.key)
         self._overlay = None
         self._overlay_until = 0
         self._grp = None
+        # Poll faster when the engine runs on its own task: the frame loop only
+        # shows what the engine published, and it publishes as soon as the
+        # panel is done with the last frame.
+        try:
+            import mpos_core
+            if getattr(mpos_core, "start_task", None) is not None:
+                self.target_fps = WORKER_TARGET_FPS
+        except ImportError:
+            pass
         self._selftest = False
         try:
             os.stat(SELFTEST_PATH)
@@ -420,7 +577,28 @@ class Duke3D(NativeActivity):
     def make_engine(self):
         return _CoreEngine()
 
+    def onResume(self, screen):
+        _debug("onResume enter")
+        try:
+            super().onResume(screen)
+        except Exception as error:
+            _debug("onResume raised: %r" % (error,))
+            raise
+        _debug("onResume exit, error=%r ready=%r" % (self.error, self._ready))
+
+    def onPause(self, screen):
+        _debug("onPause")
+        super().onPause(screen)
+
+    def _leave(self):
+        _debug("leave requested")
+        super()._leave()
+
     def start_engine(self, surface):
+        global _DEBUG_LOG
+        _DEBUG_LOG = _open_debug_log()
+        _debug("start: surface %dx%d in %d-row bands"
+               % (surface.width, surface.height, surface.rows_per_band))
         self._loading("Unpacking Duke3D data 0%")
         try:
             self._grp = prepare_grp(self._loading)
@@ -441,25 +619,29 @@ class Duke3D(NativeActivity):
             raise
         return True
 
-    def onResumed(self):
+    def on_resumed(self):
         self._touch.release_all()
+        _debug("resumed, error=%r" % (self.error,))
         if self._overlay is not None:
             self._overlay.set_visible(True)
             self._overlay_until = time.ticks_add(time.ticks_ms(), 6000)
-        # A native game runs long C frames on the MicroPython task. The task
-        # handler reserves a quarter of the last pass as a fairness gap for the
-        # main thread; at 50-60 ms frames that is ~13 ms, a fifth of the frame.
-        # The game is foreground, its core yields to the idle task itself, and
-        # the handler still runs every 2 ms, so the gap can be raised while we
-        # are in front. (The timer period, and therefore the REPL's share
-        # between passes, is unchanged; only the extra wait is removed.)
+        # A native game on the MicroPython task runs long C frames there, and
+        # the task handler reserves a quarter of the last pass as a fairness
+        # gap for the main thread; at 50-60 ms frames that is ~13 ms, a fifth
+        # of the frame. It is raised while the game is in front. When the
+        # engine has a task of its own the opposite is true: the handler then
+        # runs back-to-back and its passes evict the engine's code from the
+        # cache the two cores share, which is worth more than the gap.
+        if getattr(self.engine, "_worker", False):
+            return
         try:
             import mpos.ui
             mpos.ui.task_handler.duration = 200
         except Exception:
             pass
 
-    def onPaused(self):
+    def on_paused(self):
+        _debug("activity paused")
         self._touch.release_all()
         try:
             import mpos.ui
@@ -471,6 +653,8 @@ class Duke3D(NativeActivity):
         self._selftest_down = ()
 
     def onStop(self, screen):
+        global _DEBUG_LOG
+        _debug("activity stopped, error=%r" % (self.error,))
         try:
             import mpos.ui
             mpos.ui.task_handler.duration = 2
@@ -481,6 +665,12 @@ class Duke3D(NativeActivity):
             buffer, _size = self._grp
             _free_asset_buffer(buffer)
             self._grp = None
+        if _DEBUG_LOG is not None:
+            try:
+                _DEBUG_LOG.close()
+            except Exception:
+                pass
+            _DEBUG_LOG = None
 
     def _run_selftest(self, now):
         """Drive the engine through the controls, for a hands-free playtest.
@@ -526,6 +716,7 @@ class Duke3D(NativeActivity):
         try:
             self.engine.tick(now)
         except Exception as error:
+            _debug("frame exception: %r" % (error,))
             print("duke3d: frame exception type=%s repr=%r" % (type(error), error))
             try:
                 sys.print_exception(error)

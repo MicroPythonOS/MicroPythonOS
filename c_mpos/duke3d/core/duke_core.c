@@ -54,6 +54,7 @@ static jmp_buf s_fatal_jmp;
 static int s_fatal_armed;
 static void *s_heap;
 static uint32_t s_heap_bytes;
+static int s_quit_logged;
 
 void mpos_fatal_jump(void) {
     if (s_fatal_armed) {
@@ -151,9 +152,11 @@ static void core_tick(const mpos_core_abi_t *abi, uint32_t now_ms) {
     const uint32_t engine_started = abi->now_ms(abi->host);
     if (setjmp(s_fatal_jmp) == 0) {
         if (!duke_run_frame()) {
+            abi->log(abi->host, "core: the engine ended the frame");
             s_finished = 1;
         }
     } else {
+        abi->log(abi->host, "core: a fatal error ended the frame");
         s_finished = 1;
     }
     duke_platform_add_engine(abi->now_ms(abi->host) - engine_started);
@@ -179,14 +182,23 @@ static void core_audio_mix(int16_t *dst, int frames) {
 }
 
 static int core_quit_requested(void) {
-    return s_finished || mpos_libc_exit_requested()
-           || duke_platform_exit_requested();
+    const int finished = s_finished;
+    const int libc = mpos_libc_exit_requested();
+    const int platform = duke_platform_exit_requested();
+    if ((finished || libc || platform) && s_abi != NULL && !s_quit_logged) {
+        s_quit_logged = 1;
+        char text[64];
+        snprintf(text, sizeof(text), "core: quit (%d/%d/%d)",
+                 finished, libc, platform);
+        s_abi->log(s_abi->host, text);
+    }
+    return finished || libc || platform;
 }
 
 __attribute__((section(".core_entry")))
 const mpos_core_entry_t mpos_core_entry = {
     .abi_version = MPOS_CORE_ABI_VERSION,
-    .flags = MPOS_CORE_FLAG_BAND_RGB565,
+    .flags = MPOS_CORE_FLAG_BAND_RGB565 | MPOS_CORE_FLAG_WORKER,
     .load_addr = DUKE_CORE_TEXT_ADDR,
     .data_addr = DUKE_CORE_DATA_ADDR,
     .data_offset = 0,  // patched by build_duke_core.sh from the linked sections

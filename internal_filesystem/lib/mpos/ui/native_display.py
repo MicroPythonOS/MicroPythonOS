@@ -110,17 +110,12 @@ class NativeDisplay:
                 raise ValueError("buffer holds %d bytes, %d needed" % (
                     len(buffer), needed))
             self.buffer = buffer
-        self._descriptor = lv.image_dsc_t({
-            "header": {
-                "magic": lv.IMAGE_HEADER_MAGIC,
-                "w": self.width,
-                "h": self.height,
-                "stride": self.stride,
-                "cf": lv.COLOR_FORMAT.RGB565,
-            },
-            "data_size": self.stride * self.height,
-            "data": self.buffer,
-        })
+        # A device that renders on its own task hands over whichever of its
+        # buffers is finished, so the surface can be pointed at more than one.
+        self._buffers = [self.buffer]
+        self._descriptors = [self._make_descriptor(self.buffer)]
+        self._current = 0
+        self._descriptor = self._descriptors[0]
 
         self.image = lv.image(screen)
         self.image.set_src(self._descriptor)
@@ -137,6 +132,45 @@ class NativeDisplay:
         self.bands = 0
 
     # -- lifecycle --------------------------------------------------------
+
+    def _make_descriptor(self, buffer):
+        """An image descriptor over `buffer`, of this surface's size."""
+        return lv.image_dsc_t({
+            "header": {
+                "magic": lv.IMAGE_HEADER_MAGIC,
+                "w": self.width,
+                "h": self.height,
+                "stride": self.stride,
+                "cf": lv.COLOR_FORMAT.RGB565,
+            },
+            "data_size": self.stride * self.height,
+            "data": buffer,
+        })
+
+    def add_buffer(self, buffer):
+        """Register another buffer of this size; returns its index.
+
+        A device that renders on its own task publishes frames into its own
+        buffers, and the activity shows whichever one is finished. Both are the
+        same size and format, so switching between them is a pointer change.
+        Index 0 is always the buffer the surface was created with.
+        """
+        needed = self.width * self.height * self.bytes_per_pixel
+        if len(buffer) < needed:
+            raise ValueError("buffer holds %d bytes, %d needed" % (
+                len(buffer), needed))
+        self._buffers.append(buffer)
+        self._descriptors.append(self._make_descriptor(buffer))
+        return len(self._buffers) - 1
+
+    def select_buffer(self, index):
+        """Show buffer `index` from now on."""
+        if index == self._current:
+            return
+        self._current = index
+        self.buffer = self._buffers[index]
+        self._descriptor = self._descriptors[index]
+        self.image.set_src(self._descriptor)
 
     def begin(self):
         """Start presenting. The image is part of the activity's screen."""
@@ -181,10 +215,15 @@ class NativeDisplay:
         refresh timer draws it from a shallow point. A skipped flush costs one
         frame of latency, not the frame itself - and an overflow here does not
         raise, it resets or hangs the board.
+
+        Returns True when the pass ran, False when it was left for the refresh
+        timer. A caller that owns the pixels (a buffer borrowed from another
+        task) must keep them alive until it gets a True.
         """
         if not has_render_headroom():
-            return
+            return False
         lv.refr_now(None)
+        return True
 
     def present(self, bands, render, flush=True):
         """Render and flush ``bands``; ``render(band)`` fills one band.

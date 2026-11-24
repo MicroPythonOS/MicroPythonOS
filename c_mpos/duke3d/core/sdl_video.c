@@ -362,6 +362,16 @@ int SDL_Flip(SDL_Surface *screen) {
         abi->present_band(abi->host, y, rows, NULL);
         duke_platform_add_present(abi->now_ms(abi->host) - converted);
     }
+    // On a core that runs on its own task the host shows the whole frame: the
+    // bands above went into a buffer nobody is reading, and the transfer
+    // happens on the other task while this one draws the next frame. This call
+    // also waits for the buffer the next frame needs, which is the panel's
+    // share of the frame and is profiled separately.
+    if (abi->frame_ready != NULL) {
+        const uint32_t waiting = abi->now_ms(abi->host);
+        abi->frame_ready(abi->host);
+        duke_platform_add_wait(abi->now_ms(abi->host) - waiting);
+    }
     duke_platform_frame_presented();
     return 0;
 }
