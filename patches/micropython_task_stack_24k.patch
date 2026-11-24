@@ -1,0 +1,13 @@
+diff --git a/ports/esp32/mpconfigport.h b/ports/esp32/mpconfigport.h
+index 55503ff0..963f4fbe 100644
+--- a/ports/esp32/mpconfigport.h
++++ b/ports/esp32/mpconfigport.h
+@@ -216,7 +216,7 @@
+ 
+ // task size
+ #ifndef MICROPY_TASK_STACK_SIZE
+-#define MICROPY_TASK_STACK_SIZE             (16 * 1024)
++#define MICROPY_TASK_STACK_SIZE             (24 * 1024)
+ #endif
+ 
+ #define MP_STATE_PORT MP_STATE_VM

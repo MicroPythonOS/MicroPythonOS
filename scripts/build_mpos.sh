@@ -268,6 +268,13 @@ echo "Copying littlefs2e sources from third_party/littlefs2e..."
 echo "Applying littlefs2 block-sized cache patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/lfs2_cache_size.patch
 
+# An engine that renders and simulates on the MicroPython task needs its own
+# 48 KiB there (Duke); with the engine on a task of its own what is left on this
+# stack is an LVGL pass, which needs 24 KiB (16 KiB leaves 32 bytes). See
+# c_mpos/duke3d/PERFORMANCE.md for the measurements.
+echo "Applying 24 KiB MicroPython task stack patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/micropython_task_stack_24k.patch
+
 echo "Applying lvgl_micropython/lib/lvgl bmp scaling fix patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropython/lib_lvgl_lv_bmp.c.patch
 
