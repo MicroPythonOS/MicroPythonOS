@@ -352,6 +352,11 @@ class _CoreEngine:
             wad_path=GRP_NAME,
             config_dir=config_dir,
             expected_crc=crc,
+            # The deepest engine path needs ~38 KiB (canary: 16/20/24/31 all
+            # die in play, 48 has 11 KiB to spare), which is more than the
+            # largest internal block a fragmented board can give, so the
+            # loader falls back to PSRAM.
+            stack_bytes=48 * 1024,
             affinity=WORKER_AFFINITY,
             surface=surface.buffer)
         buffer = self._core.task_surface(1)

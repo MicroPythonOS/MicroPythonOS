@@ -83,50 +83,39 @@ place for the on-task mode.
 |---|---|---|
 | 16 KiB | 2.4 KB | **32 bytes** (an LVGL pass in the frame loop) |
 | 24 KiB | 10.6 KB | **8.2 KB** (the build that ships) |
-| 48 KiB | 35 KB | ~24 KB (the old arrangement) |
 
 With the engine on the MicroPython task the peak was the engine's start-up:
 24 KiB left **340 bytes**, and 32 KiB hit FreeRTOS' overflow check during the
 CON compile. With the engine on its own task the MicroPython task no longer
 sees any of that, and what is left is its own deepest frame - the LVGL pass
-that `flush()` runs - which needs 24 KiB.
+that `flush()` runs - which needs 24 KiB. 16 KiB is 32 bytes short, so 20 KiB
+would probably do, but the margin is not worth 4 KiB.
 
-The worker's own stack:
+The worker's stack was chosen by canary, not by guess. Duke's **start-up is
+not** its deepest path:
 
-| worker stack | free after start-up |
+| worker stack | result |
 |---|---|
-| 48 KiB | **11.4 KB** (peak use 37.8 KB, during `compilecons`) |
-| 32 KiB | would overflow |
+| 16 KiB | overflow at start-up |
+| 20 KiB | runs ~15 s, then overflow in play |
+| 24 KiB | runs ~75 s, then overflow in play |
+| 31 KiB | runs ~100 s, then overflow in play |
+| 48 KiB | works, **11.4 KiB free** (peak use 37.8 KiB) |
 
-So: 24 KiB for the OS, 48 KiB for a Duke-class engine, and the engine's depth
-is entirely its own business.
+So the engine has a path that needs about 38 KiB, and it is a gameplay path,
+not the GRP/CON/level-load phase. `uxTaskGetStackHighWaterMark` is trustworthy
+here: the 20-31 KiB runs each reported ~1.5 KiB free, which is exactly the
+"nearly out" the overflow then confirmed.
 
-## Things tried, and their effect
+38 KiB is more than some boards can hand out: the fri3d 2026's internal DRAM
+is fragmented into ~32 KiB islands however much is free in total (largest free
+block 32,768 at a clean boot, with 120 KiB free across the region), so
+`xTaskCreatePinnedToCore` cannot make a 48 KiB stack there and Duke reports
+`MemoryError: cannot create the core's task`. `start_task` therefore retries
+with `MALLOC_CAP_SPIRAM` and the stack comes from PSRAM on such a board
+(logged as `core: no 48 KiB internal block, stack in PSRAM`). That is slower
+for a hot stack, but the engine's arena is already PSRAM and a playable game
+beats one that cannot start.
 
-| Change | Result |
-|---|---|
-| One LVGL pass per frame (invalidate all bands, flush on the last) | no measurable change; the panel transfer, not the pass count, is the cost |
-| `ud.shadows = 0` | no measurable change |
-| Tile cache reserve 640 -> 320 KB | no change *at the spawn*: `tile decodes 0` during gameplay |
-| `ud.detail = 0` (half-resolution renderer) | **crashes**: integer divide by zero in `setaspect`; needs a fix before it can be used |
-| Hiding the overlay after 6 s | **+5.7 fps** (8.6 -> 14.3) |
-| Task handler fairness off (on-task only) | **+3.1 fps** (14.3 -> 17.4) |
-| Engine on its own task | **+3.5 fps** (17.4 -> 21), and 24 KiB of MicroPython stack instead of 48 |
-
-## The next levers
-
-1. **Cut the convert.** It is 12 ms for 64k pixels: palette lookup plus a
-   tiled transpose, reading the engine's framebuffer and writing the surface,
-   both in PSRAM. Writing rows instead of tiles would be cheaper if the surface
-   could be rotated once by the panel (it cannot), and a 16-bit lookup table
-   per channel would halve the lookup work at the cost of cache.
-2. **Make the renderer cheaper** rather than faster: `ud.detail` (half the
-   pixels) is the classic answer and is currently broken by a divide in
-   `setaspect`.
-3. **Keep the engine's hot data out of PSRAM.** The arena is PSRAM because it
-   is 1.8 MB, so every global is a PSRAM access. A smaller level format (fewer
-   sectors, a smaller sprite array) would let part of it live in internal RAM,
-   which is also the memory the caches are closest to.
-4. **Interleave instead of overlap**, if the contention ever gets worse than
-   the transfer: pinning the worker to the MicroPython task's core removes the
-   cache fight but also the overlap, which measures ~2 fps worse.
+So: 24 KiB for the OS, 48 KiB for a Duke-class engine, from internal RAM when
+the board has a block that size and from PSRAM when it does not.

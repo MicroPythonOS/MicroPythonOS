@@ -69,9 +69,15 @@ task's stack is the engine's own:
 | 48 KiB MicroPython task | works, ~24 KB free | the old arrangement |
 
 The whole engine's start-up (`compilecons`, `enterlevel`) and its frames now
-run on a **48 KiB worker** (peak use ~37 KB, 11 KB free), while the MicroPython
-task is back to **24 KiB** with 8 KB free. Nothing of the engine's is on that
-stack any more.
+run on a **48 KiB worker** (peak use ~38 KB, 11 KB free - reached in play, not
+at start-up), while the MicroPython task is back to **24 KiB** with 8 KB free.
+Nothing of the engine's is on that stack any more.
+
+A board whose DRAM is fragmented into blocks smaller than 48 KiB cannot give
+the worker an internal stack - the fri3d 2026's largest free block is 32 KiB,
+and 16/20/24/31 KiB stacks all overflow once the game is under way - so
+`start_task` falls back to a PSRAM stack there. `PERFORMANCE.md` has the
+canary results.
 
 Two rules make the split safe, and they are the reason a worker core can be a
 plain C engine:

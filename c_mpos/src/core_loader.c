@@ -88,9 +88,12 @@ MP_REGISTER_ROOT_POINTER(mp_obj_t mpos_core_refs);
 #define MPOS_CORE_LOG_CHARS 160
 #define MPOS_CORE_ASSET_NAME 32
 #define MPOS_CORE_PATH_CHARS 96
-// The engine's stack, not the OS's. Measured on Duke: its start-up peak is the
-// deep one (GRP index, CON compile, first level load) and it is the reason the
-// whole system used to need 48 KB.
+// The engine's stack, not the OS's. Measured with Duke: its deepest path
+// (not start-up - that stays under 20 KiB) needs about 38 KiB, so 16, 20, 24
+// and 31 KiB all die in play while 48 KiB has 11 KiB to spare. That is more
+// than the largest internal block some boards can hand out (the fri3d's DRAM
+// comes in 32 KiB islands), which is the one case start_task falls back to
+// PSRAM for.
 #define MPOS_CORE_WORKER_STACK (48u * 1024u)
 // The MicroPython task runs on core 1 (MP_TASK_COREID); the renderer gets the
 // other one so the panel transfer and the next frame overlap.
@@ -1226,9 +1229,30 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
     s_abi.frame_ready = worker_frame_ready;
     s_abi.yield = abi_yield;
 
-    BaseType_t created = xTaskCreatePinnedToCore(
-        core_task_main, "mpos_core", (uint32_t)parsed[ARG_stack_bytes].u_int,
-        NULL, MPOS_CORE_WORKER_PRIORITY, &s_task, parsed[ARG_affinity].u_int);
+    // Internal RAM first: it is what a task stack has always been, and it is
+    // several times faster than PSRAM. A board whose DRAM is fragmented into
+    // blocks smaller than the engine's stack cannot give one, though, and the
+    // engine's data already lives in PSRAM - a stack there is slower for the
+    // hot frames, which beats a game that cannot start at all.
+    const uint32_t stack_bytes = (uint32_t)parsed[ARG_stack_bytes].u_int;
+    const BaseType_t core_id = (BaseType_t)parsed[ARG_affinity].u_int;
+    BaseType_t created = xTaskCreatePinnedToCoreWithCaps(
+        core_task_main, "mpos_core", stack_bytes, NULL,
+        MPOS_CORE_WORKER_PRIORITY, &s_task, core_id,
+        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (created != pdPASS) {
+        created = xTaskCreatePinnedToCoreWithCaps(
+            core_task_main, "mpos_core", stack_bytes, NULL,
+            MPOS_CORE_WORKER_PRIORITY, &s_task, core_id,
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (created == pdPASS) {
+            char line[96];
+            snprintf(line, sizeof(line),
+                     "core: no %u KiB internal block, stack in PSRAM",
+                     (unsigned)(stack_bytes / 1024));
+            log_push(line);
+        }
+    }
     if (created != pdPASS) {
         s_task = NULL;
         release_task_memory();
