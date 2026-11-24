@@ -185,6 +185,36 @@ def detect_lilygo_t_hmi():
 
     return False
 
+def detect_lilygo_t_deck():
+    """T-Deck: no ID chip, so look for its keyboard controller and GT911 touch.
+
+    Both sit on SDA 18 / SCL 8. The keyboard only answers at 0x55 after
+    KB_POWERON (GPIO10) goes high, and it can take a moment to boot, so the
+    probe retries; the GT911 at 0x5D on this bus is a second signature. Those
+    pins are not shared with any other ESP32-S3 board file.
+    """
+    from machine import Pin
+    import time
+
+    try:
+        Pin(10, Pin.OUT, value=1)  # KB_POWERON, also needed later by the board module
+        for delay_ms in (150, 300, 600):
+            time.sleep_ms(delay_ms)
+            i2c0 = fail_save_i2c(sda=18, scl=8)
+            if not i2c0:
+                continue
+            try:
+                if single_address_i2c_scan(i2c0, 0x55):  # keyboard controller
+                    return True
+                if single_address_i2c_scan(i2c0, 0x5D):  # GT911 touch
+                    return True
+            finally:
+                restore_i2c(18, 8)
+        return False
+    except Exception as e:
+        if __debug__: logger.debug("lilygo_t_deck detection failed: %s", e)
+        return False
+
 def fail_save_i2c(sda, scl):
     from machine import I2C, Pin
 
@@ -247,6 +277,12 @@ def detect_board():
             return None
 
         if is_esp32s3:
+            # Probe the T-Deck first: the other probes drive GPIO 15/16/18/9,
+            # which are the keyboard bus and touch interrupt of this board.
+            if __debug__: logger.debug("lilygo_t_deck ?")
+            if detect_lilygo_t_deck():
+                return "lilygo_t_deck"
+
             if detect_d_shell():
                 return "d_shell"
 
