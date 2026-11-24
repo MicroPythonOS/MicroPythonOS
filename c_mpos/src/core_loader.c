@@ -30,6 +30,8 @@
 #include "py/obj.h"
 #include "py/objarray.h"
 #include "py/mphal.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "esp_partition.h"
 #include "esp_heap_caps.h"
@@ -320,6 +322,15 @@ static void free_allocations(void) {
 
 static void abi_log(void *host, const char *text) {
     (void)host;
+    // A core that parses a large table in C has no way to yield: it cannot
+    // call FreeRTOS, and re-entering MicroPython to sleep from a deep engine
+    // frame is not safe. A one-byte sentinel asks for a scheduler yield here,
+    // in C, which is what keeps the idle task feeding the interrupt watchdog
+    // during Duke3D's start-up.
+    if (text != NULL && text[0] == '\x01') {
+        vTaskDelay(1);
+        return;
+    }
     if (s_log_fun == MP_OBJ_NULL) {
         return;
     }

@@ -75,6 +75,76 @@ def _mpremote_cmd(port=None, *rest):
     return cmd + list(rest)
 
 
+def _decode_script(b64_path, path, gz_path, packed):
+    """A device-side decoder for a pushed file.
+
+    It reads the base64 text, optionally inflates it, writes the target, and
+    prints a WROTE line with the size and CRC that the host checks. Running it
+    through `mpremote run` avoids pasting the decode loop into the REPL, where
+    the OS's aiorepl was dropping bytes out of longer blocks.
+    """
+    lines = [
+        "import os, ubinascii, binascii",
+        "_raw = open(%r, 'rb')" % (b64_path,),
+    ]
+    if packed:
+        lines += [
+            "import deflate",
+            "_gz = open(%r, 'wb')" % (gz_path,),
+            "while True:",
+            "    _c = _raw.read(4096)",
+            "    if not _c:",
+            "        break",
+            "    _gz.write(ubinascii.a2b_base64(_c))",
+            "_raw.close()",
+            "_gz.close()",
+            "_src = open(%r, 'rb')" % (gz_path,),
+            "_stream = deflate.DeflateIO(_src, deflate.GZIP)",
+            "try:",
+            "    os.remove(%r)" % (path,),
+            "except OSError:",
+            "    pass",
+            "_out = open(%r, 'wb')" % (path,),
+            "while True:",
+            "    _c = _stream.read(8192)",
+            "    if not _c:",
+            "        break",
+            "    _out.write(_c)",
+            "_stream.close()",
+            "_src.close()",
+            "_out.close()",
+            "try:",
+            "    os.remove(%r)" % (gz_path,),
+            "except OSError:",
+            "    pass",
+        ]
+    else:
+        lines += [
+            "try:",
+            "    os.remove(%r)" % (path,),
+            "except OSError:",
+            "    pass",
+            "_out = open(%r, 'wb')" % (path,),
+            "while True:",
+            "    _c = _raw.read(4096)",
+            "    if not _c:",
+            "        break",
+            "    _out.write(ubinascii.a2b_base64(_c))",
+            "_raw.close()",
+            "_out.close()",
+        ]
+    lines += [
+        "try:",
+        "    os.remove(%r)" % (b64_path,),
+        "except OSError:",
+        "    pass",
+        "_d = open(%r, 'rb').read()" % (path,),
+        "print('WROTE', len(_d), '%08x' % (binascii.crc32(_d) & 0xffffffff))",
+        "del _d",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _count_usb_serial_devices():
     """
     Count the attached USB serial devices, or give None if the count is unknown.
@@ -1502,6 +1572,7 @@ class SerialBackend:
         import binascii
         import gzip
         import re
+        import tempfile
 
         raw = bytes(data)
         payload = raw
@@ -1533,59 +1604,30 @@ class SerialBackend:
                     "the device did not accept all {} bytes of {}".format(
                         len(encoded), path))
 
-            steps = [
-                "import os, ubinascii, binascii, deflate",
-                "_raw = open({!r}, 'rb')".format(b64_path),
-            ]
-            if packed:
-                steps.append("_gz = open({!r}, 'wb')".format(gz_path))
-                steps.append(
-                    "while True:\n"
-                    "    _c = _raw.read(4096)\n"
-                    "    if not _c:\n"
-                    "        break\n"
-                    "    _gz.write(ubinascii.a2b_base64(_c))")
-                steps.append("_raw.close(); _gz.close()")
-                steps.append(
-                    "_src = open({!r}, 'rb')\n"
-                    "_stream = deflate.DeflateIO(_src, deflate.GZIP)".format(
-                        gz_path))
-                steps.append(
-                    "try: os.remove({!r})\n"
-                    "except OSError: pass".format(path))
-                steps.append("_out = open({!r}, 'wb')".format(path))
-                steps.append(
-                    "while True:\n"
-                    "    _c = _stream.read(8192)\n"
-                    "    if not _c:\n"
-                    "        break\n"
-                    "    _out.write(_c)")
-                steps.append("_stream.close(); _src.close(); _out.close()")
-                steps.append(
-                    "try: os.remove({!r})\n"
-                    "except OSError: pass".format(gz_path))
-            else:
-                steps.append(
-                    "try: os.remove({!r})\n"
-                    "except OSError: pass".format(path))
-                steps.append("_out = open({!r}, 'wb')".format(path))
-                steps.append(
-                    "while True:\n"
-                    "    _c = _raw.read(4096)\n"
-                    "    if not _c:\n"
-                    "        break\n"
-                    "    _out.write(ubinascii.a2b_base64(_c))")
-                steps.append("_raw.close(); _out.close()")
-            steps.append(
-                "try: os.remove({!r})\n"
-                "except OSError: pass".format(b64_path))
-            steps.append(
-                "_d = open({!r}, 'rb').read()\n"
-                "_n = len(_d)\n"
-                "_crc = binascii.crc32(_d) & 0xffffffff\n"
-                "del _d\n"
-                "print('WROTE', _n, '%08x' % _crc)".format(path))
-            out = self.exec("\n".join(steps), timeout=120)
+            # The decode is a *file* run with mpremote, not a pasted exec:
+            # the OS's aiorepl truncates a multi-line paste of this size, and
+            # a truncated block leaves the REPL interpreting the remainder as
+            # new commands. `mpremote run` has carried the same script over
+            # this link without dropping a byte.
+            script = _decode_script(b64_path, path, gz_path, packed)
+            with tempfile.NamedTemporaryFile(
+                    suffix=".py", mode="w", delete=False) as tmp:
+                tmp.write(script)
+                script_path = tmp.name
+            try:
+                # fs cp carries the script reliably; exec then only has to
+                # read it from flash. (A pasted block of this size is exactly
+                # what the aiorepl truncates, and `mpremote run` pastes.)
+                subprocess.run(
+                    _mpremote_cmd(self.port, "fs", "cp", script_path,
+                                  ":/_mpos_decode.py"),
+                    capture_output=True, timeout=300)
+                out = subprocess.run(
+                    _mpremote_cmd(self.port, "exec",
+                                  "exec(open('/_mpos_decode.py').read())"),
+                    capture_output=True, timeout=900).stdout
+            finally:
+                os.unlink(script_path)
         finally:
             if freeze:
                 try:
