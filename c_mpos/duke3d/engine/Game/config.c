@@ -242,6 +242,12 @@ void CONFIG_SetDefaults( void )
    ud.scrollmode = 0;
    ud.shadows = 0;
    ud.detail = 1; //1
+#ifdef MPOS_CORE
+   /* Dynamic shadows are a second render pass over every wall and floor; the
+    * badge cannot afford them at 320x200. Low detail (ud.detail=0) is NOT
+    * usable: this port's half-resolution path divides by zero in setaspect. */
+   ud.shadows = 0;
+#endif
    ud.lockout = 0;
    ud.pwlockout[0] = '\0';
    ud.crosshair = 1;

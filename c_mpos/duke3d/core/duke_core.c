@@ -148,6 +148,7 @@ static void core_tick(const mpos_core_abi_t *abi, uint32_t now_ms) {
         }
     }
     s_fatal_armed = 1;
+    const uint32_t engine_started = abi->now_ms(abi->host);
     if (setjmp(s_fatal_jmp) == 0) {
         if (!duke_run_frame()) {
             s_finished = 1;
@@ -155,6 +156,7 @@ static void core_tick(const mpos_core_abi_t *abi, uint32_t now_ms) {
     } else {
         s_finished = 1;
     }
+    duke_platform_add_engine(abi->now_ms(abi->host) - engine_started);
     s_fatal_armed = 0;
     if (s_finished) {
         s_initialised = 0;

@@ -7880,6 +7880,9 @@ static void apply_sound_overrides_from_def(void)
 
 void compilecons(void)
 {
+#ifdef MPOS_CORE
+    duke_platform_stack_mark("compilecons");
+#endif
 	char  userconfilename[512];
 
    mymembuf = (char  *)hittype;
@@ -7897,6 +7900,9 @@ void compilecons(void)
 void Startup(void)
 {
    int i;
+#ifdef MPOS_CORE
+   duke_platform_stack_mark("startup");
+#endif
 
    // Init the Console
    CONSOLE_Init();
@@ -7925,12 +7931,18 @@ void Startup(void)
 
 // CTW - MODIFICATION
 // initengine(ScreenMode,ScreenWidth,ScreenHeight);
+#ifdef MPOS_CORE
+   duke_platform_stack_mark("initengine");
+#endif
    initengine();
 // CTW END - MODIFICATION
    inittimer(TICRATE);
 
    // puts("Loading art header.");
 
+#ifdef MPOS_CORE
+   duke_platform_stack_mark("loadpics");
+#endif
    loadpics("tiles000.art", "\0");
 
 

@@ -32,6 +32,9 @@ Prepared for public release: 03/21/2003 - Charlie Wiederhold, 3D Realms
 #include "filesystem.h"
 #include "game.h"
 #include "rg_system.h"
+#ifdef MPOS_CORE
+#include "duke_platform.h"
+#endif
 
 
 extern uint8_t  everyothertime;
@@ -1470,6 +1473,9 @@ void resetmys(void)
 
 void enterlevel(uint8_t  g)
 {
+#ifdef MPOS_CORE
+    duke_platform_stack_mark("enterlevel");
+#endif
     short i;
     int32_t l;
     char  levname[256];

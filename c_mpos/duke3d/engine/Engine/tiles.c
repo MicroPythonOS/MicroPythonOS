@@ -274,6 +274,8 @@ static void apply_animtilerange_to_tiles(long startTile, long endTile, long spee
     }
 }
 
+int mpos_duke_tile_decodes;
+
 static void parse_tile_overrides_from_def(void)
 {
     int32_t defHandle;
@@ -1100,7 +1102,13 @@ int loadpics(char  *filename, char * gamedir)
     // Reserve space for things other than tile cache;
     // Not reserving enough will result in some textures failing to load, so they will be black, but still quite playable.
     // Reserving too much space will result in little space left over for texture cache, making the game laggy.
-    const int32_t reserve_bytes = 640 * 1024; // 500KB has missing textures, 750KB is fine, 640KB seems to be the sweet spot
+#ifdef MPOS_CORE
+    /* The S3 has less heap than the native port's boards; the cache is the
+     * difference between a texture decode every few frames and none. */
+    const int32_t reserve_bytes = 320 * 1024;
+#else
+    const int32_t reserve_bytes = 640 * 1024;
+#endif // 500KB has missing textures, 750KB is fine, 640KB seems to be the sweet spot
     const int32_t dynamic_size = (int32_t)ext_largest - reserve_bytes;
     int32_t min_cache_size = dynamic_size;
 

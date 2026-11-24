@@ -25,12 +25,16 @@ static int s_running;
 
 static uint32_t s_frames;
 static uint32_t s_present_ms;
+static uint32_t s_convert_ms;
+static uint32_t s_engine_ms;
 static uint32_t s_frame_start_ms;
 static uint32_t s_profile_start_ms;
 static uint32_t s_last_log_ms;
 static int s_log_lines;
-static unsigned long s_stack_entry;
 static unsigned long s_stack_min;
+
+// Engine-side counter (tiles.c), reset whenever the frame profile is printed.
+extern int mpos_duke_tile_decodes;
 
 // The host's log takes a MicroPython string, and the engine's console carries
 // arbitrary DOS bytes (a high-bit character in a message, a binary blob in a
@@ -51,24 +55,20 @@ static unsigned long current_sp(void) {
     return sp;
 }
 
-void duke_platform_stack_mark(void) {
+void duke_platform_stack_mark(const char *tag) {
     const unsigned long sp = current_sp();
-    if (s_stack_min == 0 || sp < s_stack_min) {
+    if (s_stack_min == 0 || sp + 32 < s_stack_min) {
         s_stack_min = sp;
+        char line[96];
+        snprintf(line, sizeof(line), "stack low 0x%lx at %s", sp,
+                 tag != NULL ? tag : "?");
+        mpos_duke_log("%s", line);
     }
-}
-
-unsigned duke_platform_stack_used(void) {
-    if (s_stack_entry == 0 || s_stack_min == 0 || s_stack_min > s_stack_entry) {
-        return 0;
-    }
-    return (unsigned)(s_stack_entry - s_stack_min);
 }
 
 void duke_platform_init(const mpos_core_abi_t *abi) {
     s_abi = abi;
-    s_stack_entry = current_sp();
-    s_stack_min = s_stack_entry;
+    s_stack_min = current_sp();
     s_frames = 0;
     s_present_ms = 0;
     s_frame_start_ms = abi->now_ms(abi->host);
@@ -94,13 +94,24 @@ void duke_platform_frame_started(void) {
     }
 }
 
+void duke_platform_add_convert(uint32_t ms) {
+    s_convert_ms += ms;
+}
+
+void duke_platform_add_present(uint32_t ms) {
+    s_present_ms += ms;
+}
+
+void duke_platform_add_engine(uint32_t ms) {
+    s_engine_ms += ms;
+}
+
 void duke_platform_frame_presented(void) {
     if (s_abi == NULL) {
         return;
     }
-    duke_platform_stack_mark();
+    duke_platform_stack_mark("present");
     const uint32_t now = s_abi->now_ms(s_abi->host);
-    s_present_ms += now - s_frame_start_ms;
     s_frames++;
     if (s_frames == 1) {
         s_profile_start_ms = now;
@@ -108,14 +119,22 @@ void duke_platform_frame_presented(void) {
     const uint32_t elapsed = now - s_profile_start_ms;
     if (elapsed >= 5000 && s_frames > 1) {
         char line[120];
-        snprintf(line, sizeof(line), "duke: %u frames in %u ms (%.1f fps), present %.1f ms, stack delta %u",
+        snprintf(line, sizeof(line),
+                 "duke: %u frames in %u ms (%.1f fps), engine %.1f, convert %.1f, present %.1f",
                  (unsigned)s_frames, (unsigned)elapsed,
                  (double)s_frames * 1000.0 / (double)elapsed,
-                 (double)s_present_ms / (double)s_frames,
-                 duke_platform_stack_used());
+                 (double)s_engine_ms / (double)s_frames,
+                 (double)s_convert_ms / (double)s_frames,
+                 (double)s_present_ms / (double)s_frames);
+        int decodes = mpos_duke_tile_decodes;
+        mpos_duke_tile_decodes = 0;
+        snprintf(line + strlen(line), sizeof(line) - strlen(line),
+                 ", tile decodes %d", decodes);
         s_abi->log(s_abi->host, line);
         s_frames = 0;
         s_present_ms = 0;
+        s_convert_ms = 0;
+        s_engine_ms = 0;
         s_profile_start_ms = now;
     }
 }

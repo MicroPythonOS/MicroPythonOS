@@ -349,14 +349,18 @@ int SDL_Flip(SDL_Surface *screen) {
         if (rows > band) {
             rows = band;
         }
+        uint32_t started = abi->now_ms(abi->host);
         if (rotate) {
             convert_band_rotated(abi, abi->frame, y, rows);
         } else {
             convert_band_direct(abi, abi->frame, y, rows);
         }
+        uint32_t converted = abi->now_ms(abi->host);
+        duke_platform_add_convert(converted - started);
         // The host flushes these rows now; its SPI transfer runs while the
         // next band is converted.
         abi->present_band(abi->host, y, rows, NULL);
+        duke_platform_add_present(abi->now_ms(abi->host) - converted);
     }
     duke_platform_frame_presented();
     return 0;

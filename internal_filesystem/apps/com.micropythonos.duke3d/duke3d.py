@@ -25,11 +25,14 @@ back.
 
 import os
 import sys
+import time
 
 import lvgl as lv
 
 from mpos.ui.native_activity import NativeActivity
-from duke_controls import DukeTouch
+from duke_controls import (
+    DukeTouch, KEY_CROUCH, KEY_DOWN, KEY_FIRE, KEY_JUMP,
+    KEY_LEFT, KEY_MENU, KEY_RIGHT, KEY_UP, KEY_USE, KEY_WEAPON)
 from duke_overlay import TouchOverlay
 
 try:
@@ -46,6 +49,8 @@ try:
     from mpos import zipasset
 except ImportError:
     zipasset = None
+
+SELFTEST_PATH = "/duke3d_selftest"
 
 GAME_WIDTH = 320
 GAME_HEIGHT = 200
@@ -304,6 +309,11 @@ class _CoreEngine:
         if not self._surface._active:
             return
         self._surface.invalidate_band(y // self._surface.rows_per_band)
+        # Invalidate every band first and run one LVGL pass for the whole
+        # frame. Flushing per band is correct but costs a full layout/draw
+        # cycle five times a frame, which is most of the present time.
+        if y + rows < self._surface.height:
+            return
         try:
             self._surface.flush()
         except Exception as error:
@@ -343,6 +353,13 @@ class _CoreEngine:
         # it reaches Python; a line that still arrives starts with that byte.
         if line and line[0] == "\x01":
             return
+        if line.startswith("duke: "):
+            query = getattr(self._core, "stack_high_water", None)
+            if query is not None:
+                try:
+                    line = "%s, stack free %d" % (line, query())
+                except Exception:
+                    pass
         try:
             print("duke3d: %s" % line)
         except Exception:
@@ -369,7 +386,17 @@ class Duke3D(NativeActivity):
         # for an engine.
         self._touch = DukeTouch(self.key)
         self._overlay = None
+        self._overlay_until = 0
         self._grp = None
+        self._selftest = False
+        try:
+            os.stat(SELFTEST_PATH)
+            self._selftest = True
+        except OSError:
+            pass
+        self._selftest_start = None
+        self._selftest_step = -1
+        self._selftest_down = ()
         super().onCreate()
         self._loading("Loading Duke Nukem 3D...")
 
@@ -407,6 +434,7 @@ class Duke3D(NativeActivity):
         try:
             self.engine.start(self._grp, surface)
             self._overlay = TouchOverlay(self)
+            self._overlay_until = time.ticks_add(time.ticks_ms(), 6000)
         except Exception as error:
             print("duke3d: engine start failed: %s" % (error,))
             sys.print_exception(error)
@@ -417,18 +445,84 @@ class Duke3D(NativeActivity):
         self._touch.release_all()
         if self._overlay is not None:
             self._overlay.set_visible(True)
+            self._overlay_until = time.ticks_add(time.ticks_ms(), 6000)
+        # A native game runs long C frames on the MicroPython task. The task
+        # handler reserves a quarter of the last pass as a fairness gap for the
+        # main thread; at 50-60 ms frames that is ~13 ms, a fifth of the frame.
+        # The game is foreground, its core yields to the idle task itself, and
+        # the handler still runs every 2 ms, so the gap can be raised while we
+        # are in front. (The timer period, and therefore the REPL's share
+        # between passes, is unchanged; only the extra wait is removed.)
+        try:
+            import mpos.ui
+            mpos.ui.task_handler.duration = 200
+        except Exception:
+            pass
 
     def onPaused(self):
         self._touch.release_all()
+        try:
+            import mpos.ui
+            mpos.ui.task_handler.duration = 2
+        except Exception:
+            pass
+        for code in self._selftest_down:
+            self.key(code, False)
+        self._selftest_down = ()
 
     def onStop(self, screen):
+        try:
+            import mpos.ui
+            mpos.ui.task_handler.duration = 2
+        except Exception:
+            pass
         super().onStop(screen)
         if self._grp is not None:
             buffer, _size = self._grp
             _free_asset_buffer(buffer)
             self._grp = None
 
+    def _run_selftest(self, now):
+        """Drive the engine through the controls, for a hands-free playtest.
+
+        Enabled only when /duke3d_selftest exists: it walks, strafes, fires,
+        uses, jumps, opens the menu and navigates it, so a long soak exercises
+        the same paths a player would without anybody holding the badge.
+        """
+        if self._selftest_start is None:
+            self._selftest_start = now
+        step = (time.ticks_diff(now, self._selftest_start) // 1500) % 14
+        if step == self._selftest_step:
+            return
+        self._selftest_step = step
+        for code in self._selftest_down:
+            self.key(code, False)
+        self._selftest_down = ()
+        actions = (
+            (KEY_UP,), (KEY_UP, KEY_FIRE), (KEY_RIGHT,), (KEY_LEFT,),
+            (KEY_DOWN,), (KEY_FIRE,), (KEY_USE,), (KEY_WEAPON,),
+            (KEY_JUMP,), (KEY_CROUCH,), (), (KEY_MENU,),
+            (KEY_MENU,), (),
+        )
+        if step in (11, 12):
+            self.key(KEY_MENU, True)
+            self.key(KEY_MENU, False)
+            return
+        codes = actions[step]
+        for code in codes:
+            self.key(code, True)
+        self._selftest_down = codes
+        print("duke3d: selftest step %d %s" % (step, codes))
+
     def on_frame(self, now):
+        if self._selftest:
+            self._run_selftest(now)
+        if (self._overlay is not None and self._overlay.visible
+                and time.ticks_diff(now, self._overlay_until) >= 0):
+            # The full labelled overlay is a hint, not chrome: every label
+            # overlapping the picture is redrawn on every present, and that is
+            # a third of the frame time. The outlines stay available on resume.
+            self._overlay.set_visible(False)
         try:
             self.engine.tick(now)
         except Exception as error:

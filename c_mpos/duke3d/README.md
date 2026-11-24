@@ -63,15 +63,17 @@ Two firmware changes are needed, both in the OS build this was tested with:
   with `vTaskDelay(1)`; a core cannot call FreeRTOS, and re-entering
   MicroPython from a deep engine frame to sleep is not safe (it panics);
 * `MICROPY_TASK_STACK_SIZE` is 48 KiB (from 16 KiB). Duke's original port gave
-  the engine a 48 KiB task for a reason; on 16 KiB the board resets after a few
-  frames.
+  the engine a 48 KiB task for a reason. 24 KiB leaves 340 bytes at start-up;
+  32 KiB hit FreeRTOS' stack-overflow check during the CON compile in testing.
+  See `PERFORMANCE.md` for the measurements.
 
 Measured on the MaTouch (ESP32-S3, 8 MB PSRAM): start-up (inflate the 2.6 MB
 GRP, DEF/CON parse, level load, first-frame tiles) is about 7 s; gameplay runs
-at 8-12 fps at 320x200 with the picture transposed to the 200x320 logical
-panel, present ~40-65 ms of a ~85-120 ms frame. 203 frames ran without a fault
-in a 60 s window; the remaining 8 fps is the engine (the simulation catches up
-with every pending tic, so a slow frame makes the next one heavier).
+at 14-17 fps at 320x200 with the picture transposed to the 200x320 logical
+panel, present ~21-28 ms of a ~57-70 ms frame. Hiding the labelled touch hint
+after 6 s and disabling the task handler's fairness wait for the foreground
+game are what took it from 8 to 17 fps; the engine's own render + simulation is
+about 21 ms. `PERFORMANCE.md` has the breakdown and the next levers.
 
 ## Memory
 

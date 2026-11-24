@@ -1492,6 +1492,9 @@ uint8_t  parsecommand(int readfromGRP)
 
 void passone(int readfromGRP)
 {
+#ifdef MPOS_CORE
+    duke_platform_stack_mark("passone");
+#endif
 
     while( parsecommand(readfromGRP) == 0 );
 

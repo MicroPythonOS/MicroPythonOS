@@ -719,6 +719,16 @@ static mp_obj_t mpos_core_mapped_size(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_mapped_size_obj, mpos_core_mapped_size);
 
+// Free bytes left on the calling task's stack. A core runs on the MicroPython
+// task, so this is the record of the deepest Python + engine frame since boot:
+// it is how a stack size is chosen instead of guessed.
+static mp_obj_t mpos_core_stack_high_water(void) {
+    return mp_obj_new_int((mp_int_t)uxTaskGetStackHighWaterMark(NULL)
+                          * (mp_int_t)sizeof(StackType_t));
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_stack_high_water_obj,
+                                 mpos_core_stack_high_water);
+
 static mp_obj_t mpos_core_audio_mix(mp_obj_t buffer) {
     if (s_entry == NULL || s_entry->audio_mix == NULL) {
         return mp_obj_new_int(0);
@@ -819,6 +829,7 @@ static const mp_rom_map_elem_t mpos_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_stop), MP_ROM_PTR(&mpos_core_stop_obj) },
     { MP_ROM_QSTR(MP_QSTR_mapped), MP_ROM_PTR(&mpos_core_mapped_obj) },
     { MP_ROM_QSTR(MP_QSTR_mapped_size), MP_ROM_PTR(&mpos_core_mapped_size_obj) },
+    { MP_ROM_QSTR(MP_QSTR_stack_high_water), MP_ROM_PTR(&mpos_core_stack_high_water_obj) },
     { MP_ROM_QSTR(MP_QSTR_abi_version), MP_ROM_PTR(&mpos_core_abi_version_obj) },
     { MP_ROM_QSTR(MP_QSTR_audio_mix), MP_ROM_PTR(&mpos_core_audio_mix_obj) },
     { MP_ROM_QSTR(MP_QSTR_quit_requested), MP_ROM_PTR(&mpos_core_quit_requested_obj) },

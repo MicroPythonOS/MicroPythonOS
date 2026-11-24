@@ -11,15 +11,17 @@ const mpos_core_abi_t *duke_platform_abi(void);
 // be sure the engine is making progress.
 void duke_platform_frame_started(void);
 void duke_platform_frame_presented(void);
+void duke_platform_add_convert(uint32_t ms);
+void duke_platform_add_present(uint32_t ms);
+void duke_platform_add_engine(uint32_t ms);
 
 // A no-op in a core (there is no scheduler to yield to), but it is where the
 // retro-go shims park their SDL_Delay/vTaskDelay calls.
 void duke_platform_idle(void);
 
-// Diagnostics for the 16 KB MicroPython task stack: the lowest stack pointer
-// seen from the engine, relative to where core_init entered.
-void duke_platform_stack_mark(void);
-unsigned duke_platform_stack_used(void);
+// Diagnostics for the MicroPython task stack: record the lowest stack pointer
+// seen from the engine and name the phase that reached it.
+void duke_platform_stack_mark(const char *tag);
 
 // The engine's exit request (its "quit" menu entry or a fatal error).
 void duke_platform_request_exit(void);
