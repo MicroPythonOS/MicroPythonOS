@@ -27,8 +27,10 @@ Desktop tests run headless: `test_runner.py` sets SDL's dummy video driver
 (`SDL_VIDEO_DRIVER=dummy`, `SDL_VIDEODRIVER=dummy`, `SDL_MAC_BACKGROUND_APP=1`)
 for the test binaries, so no window opens and takes the keyboard focus while
 you type elsewhere. LVGL still renders and simulated input still works.
-`--show-window` or `MPOS_TEST_SHOW_WINDOW=1` brings the window back. SDL
-variables you set yourself are kept.
+`--show-window` or `MPOS_TEST_SHOW_WINDOW=1` (or `true`, `yes`, `on`) brings
+the window back. SDL variables you set yourself are kept, and a video driver
+set under only one of its names (`SDL_VIDEO_DRIVER` or `SDL_VIDEODRIVER`) is
+used for the other too.
 
 ## Test Architecture
 

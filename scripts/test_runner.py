@@ -104,15 +104,21 @@ def _configure_desktop_display(show_window, environ=None):
     """Make the desktop binaries headless unless the window is wanted.
 
     Variables already set in the environment are kept, so a caller can still
-    pick another SDL video driver. The test binaries inherit the result.
-    Returns True when the run is headless.
+    pick another SDL video driver. A driver set under only one of its two
+    names is copied to the other, so SDL2 and SDL3 both use it. The test
+    binaries inherit the result. Returns True when the run is headless.
     """
     environ = os.environ if environ is None else environ
-    if show_window or environ.get("MPOS_TEST_SHOW_WINDOW") == "1":
+    show = environ.get("MPOS_TEST_SHOW_WINDOW", "").strip().lower()
+    if show_window or show in ("1", "true", "yes", "on"):
         return False
-    for key, value in HEADLESS_SDL_ENV.items():
-        environ.setdefault(key, value)
-    return True
+    driver = (environ.get("SDL_VIDEO_DRIVER") or environ.get("SDL_VIDEODRIVER")
+              or HEADLESS_SDL_ENV["SDL_VIDEO_DRIVER"])
+    for key in ("SDL_VIDEO_DRIVER", "SDL_VIDEODRIVER"):
+        if not environ.get(key):
+            environ[key] = driver
+    environ.setdefault("SDL_MAC_BACKGROUND_APP", HEADLESS_SDL_ENV["SDL_MAC_BACKGROUND_APP"])
+    return environ["SDL_VIDEO_DRIVER"] == "dummy"
 
 
 def _resolve_binary():

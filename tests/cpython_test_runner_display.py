@@ -39,15 +39,44 @@ class TestDesktopDisplay(unittest.TestCase):
         self.assertFalse(test_runner._configure_desktop_display(False, env))
         self.assertEqual(env, {"MPOS_TEST_SHOW_WINDOW": "1"})
 
+    def test_show_window_accepts_the_usual_true_spellings(self):
+        for value in ("true", "YES", "On", " 1 "):
+            env = {"MPOS_TEST_SHOW_WINDOW": value}
+            self.assertFalse(test_runner._configure_desktop_display(False, env), value)
+            self.assertFalse("SDL_VIDEO_DRIVER" in env, value)
+
     def test_other_show_window_values_stay_headless(self):
-        env = {"MPOS_TEST_SHOW_WINDOW": "0"}
-        self.assertTrue(test_runner._configure_desktop_display(False, env))
-        self.assertEqual(env["SDL_VIDEO_DRIVER"], "dummy")
+        for value in ("0", "no", "false", ""):
+            env = {"MPOS_TEST_SHOW_WINDOW": value}
+            self.assertTrue(test_runner._configure_desktop_display(False, env), value)
+            self.assertEqual(env["SDL_VIDEO_DRIVER"], "dummy")
 
     def test_existing_sdl_settings_are_kept(self):
-        env = {"SDL_VIDEODRIVER": "x11"}
-        test_runner._configure_desktop_display(False, env)
+        env = {"SDL_VIDEO_DRIVER": "x11", "SDL_VIDEODRIVER": "wayland"}
+        self.assertFalse(test_runner._configure_desktop_display(False, env))
+        self.assertEqual(env["SDL_VIDEO_DRIVER"], "x11")
+        self.assertEqual(env["SDL_VIDEODRIVER"], "wayland")
+
+    def test_a_driver_set_under_the_sdl2_name_is_used_for_sdl3_too(self):
+        env = {"SDL_VIDEODRIVER": "cocoa"}
+        self.assertFalse(test_runner._configure_desktop_display(False, env))
+        self.assertEqual(env["SDL_VIDEO_DRIVER"], "cocoa")
+        self.assertEqual(env["SDL_MAC_BACKGROUND_APP"], "1")
+
+    def test_a_driver_set_under_the_sdl3_name_is_used_for_sdl2_too(self):
+        env = {"SDL_VIDEO_DRIVER": "x11"}
+        self.assertFalse(test_runner._configure_desktop_display(False, env))
         self.assertEqual(env["SDL_VIDEODRIVER"], "x11")
+
+    def test_an_empty_driver_variable_counts_as_unset(self):
+        env = {"SDL_VIDEO_DRIVER": ""}
+        self.assertTrue(test_runner._configure_desktop_display(False, env))
+        self.assertEqual(env["SDL_VIDEO_DRIVER"], "dummy")
+        self.assertEqual(env["SDL_VIDEODRIVER"], "dummy")
+
+    def test_dummy_set_by_the_caller_counts_as_headless(self):
+        env = {"SDL_VIDEODRIVER": "dummy"}
+        self.assertTrue(test_runner._configure_desktop_display(False, env))
         self.assertEqual(env["SDL_VIDEO_DRIVER"], "dummy")
 
     def test_defaults_to_the_process_environment(self):
