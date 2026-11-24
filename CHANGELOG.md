@@ -16,6 +16,7 @@ Frameworks:
 - littlefs2e: a LittleFS2 fork with contiguous extent files that map from flash (XIP); `mpos.extent` creates and verifies them, and `lfs2e.defrag` moves files and directory metadata in one C pass. Stock littlefs sees extents as free blocks, so stock tools must be read-only
 - littlefs2e: caches a whole block instead of a quarter, twice as fast for metadata scans (48-block window: 18 s to 11 s), at 6 KiB more RAM at mount and ~3 KiB per open file
 - littlefs2e: a committed or aborted extent drops the allocator's lookahead, so the next file no longer overwrites its blocks
+- micropython-nostr: NIP-44 is about 100 times faster on MicroPython, with a Viper ChaCha20 core (an 11 KB payload takes 32 ms on an ESP32-S3 instead of 3.6 s)
 - `mpos.extent.Writer`: streams data into a reserved extent (reserve, write, commit)
 - `mpos.zipasset`: reads one `.zip` entry into a buffer, with progress and a CRC check
 - `mpos_core.start()`: optional expected CRC32, and a partition-table reload when the lookup comes back empty on a cold boot
@@ -29,6 +30,7 @@ Frameworks:
 
 Builtin Apps:
 - AppStore: shows 'Defragmenting storage... 60%' while an extent is being made room for, and yields to the UI between defrag steps
+- Nostr Chat 1.1.2: NostrManager speaks NIP-44 to Nostr Wallet Connect wallets whose info event (kind 13194) lists nip44_v2, listens for kind 23197 notifications instead of 23196, and falls back to NIP-04 for good when the wallet answers UNSUPPORTED_ENCRYPTION; wallets without the tag (LNbits) stay on NIP-04
 - OSUpdate: an update check tries the remaining mirror when the first one is unreachable
 
 Testing:

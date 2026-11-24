@@ -37,6 +37,33 @@ try:
 except ImportError:
     _tweaked_timestamp = None
 
+try:
+    from nostr.nip44 import (
+        decrypt as nip44_decrypt,
+        encrypt as nip44_encrypt,
+        get_conversation_key as nip44_conversation_key,
+    )
+    try:
+        from nostr.nip44 import FAST_CHACHA20 as NIP44_FAST
+    except ImportError:
+        # micropython-nostr before the Viper ChaCha20 core (frozen into
+        # MicroPythonOS 0.22.0 and older): NIP-44 works but takes seconds
+        # for a transaction list on a microcontroller.
+        NIP44_FAST = False
+except ImportError:
+    nip44_decrypt = None
+    nip44_encrypt = None
+    nip44_conversation_key = None
+    NIP44_FAST = False
+
+# NIP-47 (Nostr Wallet Connect) event kinds.
+KIND_NWC_INFO = 13194
+KIND_NWC_REQUEST = 23194
+KIND_NWC_RESPONSE = 23195
+KIND_NWC_NOTIFICATION_NIP04 = 23196
+KIND_NWC_NOTIFICATION_NIP44 = 23197
+NWC_REPLY_KINDS = (KIND_NWC_RESPONSE, KIND_NWC_NOTIFICATION_NIP04, KIND_NWC_NOTIFICATION_NIP44)
+
 
 def _wrap_timestamp(now):
     """created_at for a seal or gift wrap, from the Nostr (Unix) clock `now`.
@@ -306,6 +333,20 @@ class NostrManager:
         self._nwc_lud16 = None
         self._nwc_configured = False
         self._nwc_nwc_url = None
+        # "nip04" until the wallet's info event (kind 13194) advertises
+        # nip44_v2; an info event without an encryption tag means nip04 only.
+        self._nwc_encryption = "nip04"
+        self._nwc_conversation_key = None
+        # Set when the wallet answered UNSUPPORTED_ENCRYPTION to a nip44_v2
+        # request, so a replayed info event does not switch back to it.
+        self._nwc_nip44_refused = False
+        # [request event id, encryption] of the latest NWC requests, so an
+        # error reply can be matched to the scheme of the request it answers.
+        self._nwc_request_schemes = []
+        # wallet pubkey -> (created_at, schemes) of the newest info event
+        # applied for that wallet. The relay pool drops a replayed event it has
+        # seen before, so pairing with a wallet again reuses this.
+        self._nwc_info = {}
 
         # Set when new relays are configured after the manager started; the
         # main loop picks them up and hot-adds them to the running relay pool.
@@ -1001,11 +1042,7 @@ class NostrManager:
                     relay.publish(req_json)
         if self._nwc_configured and self._nwc_sub_id:
             if self._nwc_filters is None:
-                self._nwc_filters = Filters([Filter(
-                    kinds=[23195, 23196],
-                    authors=[self._nwc_wallet_pubkey],
-                    pubkey_refs=[self._nwc_private_key.public_key.hex()]
-                )])
+                self._nwc_filters = self._build_nwc_filters()
             self.relay_manager.add_subscription(self._nwc_sub_id, self._nwc_filters)
             req = [ClientMessageType.REQUEST, self._nwc_sub_id]
             req.extend(self._nwc_filters.to_json_array())
@@ -1032,8 +1069,33 @@ class NostrManager:
         self._nwc_private_key = PrivateKey(bytes.fromhex(secret))
         self._nwc_lud16 = lud16
         self._nwc_nwc_url = nwc_url
+        # A new connection starts on nip04 until its wallet says otherwise.
+        self._nwc_encryption = "nip04"
+        self._nwc_nip44_refused = False
+        self._nwc_filters = None
+        self._nwc_request_schemes = []
+        self._nwc_conversation_key = None
+        if nip44_conversation_key is not None:
+            try:
+                self._nwc_conversation_key = nip44_conversation_key(
+                    self._nwc_private_key, wallet_pubkey)
+            except Exception as e:
+                logger.warning("NostrManager: NIP-44 key setup failed, using NIP-04: %s", e)
+        cached = self._nwc_info.get(wallet_pubkey)
+        if cached is not None:
+            # A wallet seen before: its info event will not be delivered
+            # again, so apply what it said last time.
+            self._nwc_encryption = self._choose_nwc_encryption(cached[1])
         self._nwc_configured = True
         self._relays_dirty = True
+        if self.relay_manager is not None:
+            # Already running: send the new connection's subscription now.
+            # _sync_relays only resubscribes when the relay set grows, so a
+            # new secret or wallet on the same relays would otherwise keep
+            # listening with the old key until a watchdog reconnect.
+            if self._nwc_sub_id is None:
+                self._nwc_sub_id = _make_subscription_id("micropython_nwc_")
+            self._publish_nwc_subscription()
         self._ensure_main_task()
 
     def _parse_nwc_url(self, nwc_url):
@@ -1181,11 +1243,7 @@ class NostrManager:
         # Set up NWC subscription
         if self._nwc_configured:
             self._nwc_sub_id = _make_subscription_id("micropython_nwc_")
-            self._nwc_filters = Filters([Filter(
-                kinds=[23195, 23196],
-                authors=[self._nwc_wallet_pubkey],
-                pubkey_refs=[self._nwc_private_key.public_key.hex()]
-            )])
+            self._nwc_filters = self._build_nwc_filters()
             self.relay_manager.add_subscription(self._nwc_sub_id, self._nwc_filters)
             req = [ClientMessageType.REQUEST, self._nwc_sub_id]
             req.extend(self._nwc_filters.to_json_array())
@@ -1331,8 +1389,12 @@ class NostrManager:
         """Route a single event to all relevant handlers."""
 
         # NWC events are private and handled separately.
-        if event.kind in (23195, 23196) and self._nwc_configured:
+        if event.kind in NWC_REPLY_KINDS and self._nwc_configured:
             self._process_nwc_event(event)
+            return
+        if (event.kind == KIND_NWC_INFO and self._nwc_configured
+                and event.public_key == self._nwc_wallet_pubkey):
+            self._process_nwc_info(event)
             return
 
         if event.kind in NIP17_KINDS or event.kind in (KIND_RELAY_LIST, KIND_DM_RELAY_LIST):
@@ -1421,10 +1483,7 @@ class NostrManager:
                 logger.debug("NostrManager: NWC watchdog counter reset (event kind=%s)", getattr(event, "kind", "?"))
         self._polls_since_last_event = 0
         try:
-            decrypted = self._nwc_private_key.decrypt_message(
-                event.content,
-                event.public_key,
-            )
+            decrypted = self._nwc_decrypt(event)
             if __debug__:
                 logger.debug("NostrManager: decrypted NWC: %s", decrypted)
             response = json.loads(decrypted)
@@ -1440,6 +1499,9 @@ class NostrManager:
                 # unauthorized connection, and tearing down a relay that is
                 # answering only masks the real problem.
                 self._polls_since_last_event = 0
+                if (error.get("code") == "UNSUPPORTED_ENCRYPTION"
+                        and self._handle_nwc_unsupported_encryption(event)):
+                    return
                 msg = "NWC {}: {} ({})".format(
                     response.get("result_type") or "request",
                     error.get("message") or "unknown error",
@@ -1487,6 +1549,176 @@ class NostrManager:
             logger.error("NostrManager: NWC event processing error: %s", e)
             import sys
             sys.print_exception(e)
+
+    def _nwc_decrypt(self, event):
+        """Decrypt an NWC reply in whichever scheme the wallet used.
+
+        A NIP-04 payload always carries "?iv="; NIP-44 payloads are plain
+        base64 and never do. Replies to requests sent before a switch of
+        encryption mode can still arrive, so decide per event, not per mode.
+        """
+        content = event.content or ""
+        ck = getattr(self, "_nwc_conversation_key", None)
+        if ck is not None and nip44_decrypt is not None and "?iv=" not in content:
+            return nip44_decrypt(content, ck)
+        return self._nwc_private_key.decrypt_message(content, event.public_key)
+
+    def _handle_nwc_unsupported_encryption(self, event):
+        """Deal with an UNSUPPORTED_ENCRYPTION error reply.
+
+        Returns True when the error is handled here and must not reach the
+        error callback. The scheme that counts is the one of the request the
+        reply answers (its "e" tag), not the current mode: the first poll of a
+        connection goes out as nip04 before the info event arrives, and every
+        poll sends two requests, so replies to an older scheme still arrive
+        after a switch.
+        """
+        current = getattr(self, "_nwc_encryption", "nip04")
+        refused = getattr(self, "_nwc_nip44_refused", False)
+        scheme = self._nwc_request_scheme(event)
+        if scheme is None:
+            scheme = "nip44_v2" if (current == "nip44_v2" or refused) else "nip04"
+        if scheme == "nip44_v2":
+            if current == "nip44_v2":
+                # The wallet advertised nip44_v2 but refused it: go back to
+                # nip04 for good on this connection and ask again.
+                logger.warning("NostrManager: wallet refused NIP-44, falling back to NIP-04")
+                self._nwc_nip44_refused = True
+                self._set_nwc_encryption("nip04")
+            return True
+        if scheme != current:
+            # A nip04 request sent before the switch to nip44_v2; the same
+            # request has already gone out again in nip44_v2.
+            return True
+        return False
+
+    def _nwc_request_scheme(self, event):
+        """Encryption of the request an NWC reply answers, or None."""
+        sent = getattr(self, "_nwc_request_schemes", None)
+        if not sent:
+            return None
+        for tag in getattr(event, "tags", None) or []:
+            if len(tag) >= 2 and tag[0] == "e":
+                for request_id, scheme in sent:
+                    if request_id == tag[1]:
+                        return scheme
+        return None
+
+    def _remember_nwc_request(self, request_id, scheme):
+        self._nwc_request_schemes.append((request_id, scheme))
+        if len(self._nwc_request_schemes) > 16:
+            self._nwc_request_schemes.pop(0)
+
+    def _choose_nwc_encryption(self, schemes):
+        # With the slow pure-Python ChaCha20 (older firmware) a transaction
+        # list takes seconds to decrypt and blocks the UI, so use nip44_v2
+        # there only when the wallet does not offer nip04 at all.
+        if ("nip44_v2" in schemes and self._nwc_conversation_key is not None
+                and nip44_encrypt is not None and not self._nwc_nip44_refused
+                and (NIP44_FAST or "nip04" not in schemes)):
+            return "nip44_v2"
+        return "nip04"
+
+    def _process_nwc_info(self, event):
+        """Pick the NWC encryption from the wallet's info event (kind 13194).
+
+        NIP-47: an "encryption" tag lists the schemes the wallet supports,
+        space separated; without the tag the wallet only speaks nip04.
+        Each relay returns its own latest copy of this replaceable event, so
+        an older copy arriving after a newer one is ignored.
+        """
+        created_at = getattr(event, "created_at", None) or 0
+        wallet = self._nwc_wallet_pubkey
+        cached = self._nwc_info.get(wallet)
+        if cached is not None and created_at < cached[0]:
+            if __debug__:
+                logger.debug("NostrManager: ignoring older NWC info event (%s)", created_at)
+            return
+        schemes = []
+        for tag in event.tags or []:
+            if len(tag) >= 2 and tag[0] == "encryption":
+                schemes = str(tag[1]).split()
+                break
+        if cached is None and len(self._nwc_info) >= 4:
+            self._nwc_info.pop(next(iter(self._nwc_info)))
+        self._nwc_info[wallet] = (created_at, schemes)
+        wanted = self._choose_nwc_encryption(schemes)
+        if wanted != self._nwc_encryption:
+            logger.info("NostrManager: NWC wallet supports %s, using %s", schemes or ["nip04"], wanted)
+            self._set_nwc_encryption(wanted)
+
+    def _set_nwc_encryption(self, mode, poll_now=True):
+        """Switch NWC encryption, resubscribe for the matching notification
+        kind and, by default, poll again straight away in the new mode."""
+        self._nwc_encryption = mode
+        self._nwc_filters = None
+        if self.relay_manager is not None and self._nwc_sub_id:
+            self._publish_nwc_subscription()
+        if poll_now:
+            self._last_nwc_poll = time.time() - self.NWC_POLL_SECONDS
+
+    def _build_nwc_filters(self):
+        """NWC subscription: replies and notifications for this connection,
+        plus the wallet's info event to learn which encryption it speaks."""
+        if self._nwc_encryption == "nip44_v2":
+            notification_kind = KIND_NWC_NOTIFICATION_NIP44
+        else:
+            notification_kind = KIND_NWC_NOTIFICATION_NIP04
+        return Filters([
+            Filter(
+                kinds=[KIND_NWC_RESPONSE, notification_kind],
+                authors=[self._nwc_wallet_pubkey],
+                pubkey_refs=[self._nwc_private_key.public_key.hex()],
+            ),
+            Filter(
+                kinds=[KIND_NWC_INFO],
+                authors=[self._nwc_wallet_pubkey],
+                limit=1,
+            ),
+        ])
+
+    def _publish_nwc_subscription(self):
+        """(Re)send the NWC subscription to every connected relay."""
+        if self._nwc_filters is None:
+            self._nwc_filters = self._build_nwc_filters()
+        self.relay_manager.add_subscription(self._nwc_sub_id, self._nwc_filters)
+        self.relay_manager.publish_message(json.dumps(
+            [ClientMessageType.REQUEST, self._nwc_sub_id] + self._nwc_filters.to_json_array()))
+
+    def _publish_nwc_request(self, request):
+        """Encrypt, sign and publish an NWC request (kind 23194)."""
+        content = json.dumps(request)
+        if self._nwc_encryption == "nip44_v2":
+            if self.relay_manager is None:
+                raise RuntimeError("Relay manager is not ready yet")
+            dm = EncryptedDirectMessage(
+                recipient_pubkey=self._nwc_wallet_pubkey,
+                cleartext_content=content,
+                kind=KIND_NWC_REQUEST,
+            )
+            try:
+                # Setting content first stops sign_event() from NIP-04
+                # encrypting it.
+                dm.content = nip44_encrypt(content, self._nwc_conversation_key)
+            except Exception as e:
+                # NIP-44 is broken on this build: never let that stop NWC.
+                logger.warning("NostrManager: NIP-44 encryption failed, using NIP-04: %s", e)
+                self._nwc_nip44_refused = True
+                self._set_nwc_encryption("nip04", poll_now=False)
+            else:
+                dm.tags.append(["encryption", "nip44_v2"])
+                self._nwc_private_key.sign_event(dm)
+                self.relay_manager.publish_event(dm)
+                self._remember_nwc_request(dm.id, "nip44_v2")
+                return dm.id
+        request_id = self._publish_signed_dm(
+            self._nwc_private_key,
+            self._nwc_wallet_pubkey,
+            content,
+            kind=KIND_NWC_REQUEST,
+        )
+        self._remember_nwc_request(request_id, "nip04")
+        return request_id
 
     def _handle_nwc_static_receive_code(self, lud16):
         if self._nwc_notification_cb:
@@ -1589,14 +1821,7 @@ class NostrManager:
             self._publish_subscription(sub, sub_id)
 
         if self._nwc_configured and self._nwc_sub_id:
-            self._nwc_filters = Filters([Filter(
-                kinds=[23195, 23196],
-                authors=[self._nwc_wallet_pubkey],
-                pubkey_refs=[self._nwc_private_key.public_key.hex()]
-            )])
-            self.relay_manager.add_subscription(self._nwc_sub_id, self._nwc_filters)
-            self.relay_manager.publish_message(json.dumps(
-                [ClientMessageType.REQUEST, self._nwc_sub_id] + self._nwc_filters.to_json_array()))
+            self._publish_nwc_subscription()
 
         self._relay_connected_state.update({
             url: relay.connected for url, relay in self.relay_manager.relays.items()
@@ -1614,12 +1839,7 @@ class NostrManager:
         if not self._nwc_configured:
             return
         balance_request = {"method": "get_balance", "params": {}}
-        self._publish_signed_dm(
-            self._nwc_private_key,
-            self._nwc_wallet_pubkey,
-            json.dumps(balance_request),
-            kind=23194,
-        )
+        self._publish_nwc_request(balance_request)
 
     def nwc_fetch_payments(self):
         if not self._nwc_configured:
@@ -1628,12 +1848,7 @@ class NostrManager:
             "method": "list_transactions",
             "params": {"limit": self._nwc_list_limit}
         }
-        self._publish_signed_dm(
-            self._nwc_private_key,
-            self._nwc_wallet_pubkey,
-            json.dumps(list_transactions),
-            kind=23194,
-        )
+        self._publish_nwc_request(list_transactions)
 
 
 class NostrClientService(Service):
