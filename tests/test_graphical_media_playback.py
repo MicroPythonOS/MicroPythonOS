@@ -547,10 +547,22 @@ class TestMediaPlayback(unittest.TestCase):
         self.assertEqual(activity._play_icon.get_text(), lv.SYMBOL.PAUSE)
 
         # Closing from the pump must not tear the screen down inside the pass.
+        # Take the deferred call out of the queue for the assertions: on
+        # desktop the LVGL timer thread drains lv.async_call at any bytecode
+        # boundary, so "it has not run yet" is not something a test can rely
+        # on. Where it does run is covered by
+        # test_deferred_exit_does_not_finish_another_activity.
+        deferred = []
+        activity._defer = deferred.append
         activity._request_exit()
         self.assertTrue(activity._exit_requested)
+        self.assertEqual(len(deferred), 1, "the exit was not deferred")
         self.assertTrue(activity._playing, "finish ran inside the pump")
         activity._stop_playback()
+        self.assertFalse(activity._playing)
+        # And the queue can still drain afterwards: a stop is safe to repeat.
+        deferred[0]()
+        self.assertFalse(activity._playing)
 
     def test_deferred_exit_does_not_finish_another_activity(self):
         intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
@@ -576,6 +588,18 @@ class TestMediaPlayback(unittest.TestCase):
         # A queued stop can outlive the screen; reporting must not raise.
         activity._stop_playback()
         self.assertIsNone(activity.status_label)
+
+    def test_stop_survives_a_deleted_screen(self):
+        intent = Intent(action="view", data=CLIP, extras={"loop": "1"})
+        self.assertTrue(AppManager.start_app("com.micropythonos.media_player", intent))
+        activity = self._current_activity()
+        # The exit is deferred by a bytecode checkpoint or an LVGL async call,
+        # so the activity can be torn down - and its widgets deleted - before
+        # the stop runs. The stop must not raise on the way out.
+        activity._bar.delete()
+        activity.video_bg.delete()
+        activity._stop_playback()
+        self.assertFalse(activity._playing)
 
     def test_picking_a_folder_plays_every_clip_in_order(self):
         folder = "data/video_playlist_test"

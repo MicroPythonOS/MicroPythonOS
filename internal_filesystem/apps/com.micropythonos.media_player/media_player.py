@@ -40,6 +40,22 @@ def _run_deferred(func):
         logger.error("media_player: deferred %s failed: %s", func, e)
 
 
+def _hide_widget(widget):
+    """Hide a widget, tolerating one the screen has already deleted.
+
+    A stop can be queued - a scheduled call on device, an LVGL async one
+    elsewhere - and the activity can be torn down before it runs, so by the
+    time it does, these references point at deleted objects. Nothing here
+    carries the picture, so a dead widget is not an error.
+    """
+    if widget is None:
+        return
+    try:
+        widget.add_flag(lv.obj.FLAG.HIDDEN)
+    except lv.LvReferenceError:
+        pass
+
+
 def compute_stats(durations_ms):
     n = len(durations_ms)
     total = 0
@@ -499,7 +515,7 @@ class MediaPlayer(Activity):
         self._sync_scrubber()
 
     def _hide_controls(self):
-        self._bar.add_flag(lv.obj.FLAG.HIDDEN)
+        _hide_widget(self._bar)
         self._controls_until = 0
 
     def _update_play_icon(self):
@@ -1681,7 +1697,7 @@ class MediaPlayer(Activity):
         self._play_bufs = None
         self._play_dscs = None
         self._pacer = None
-        self.video_bg.add_flag(lv.obj.FLAG.HIDDEN)
+        _hide_widget(self.video_bg)
 
     def _report_playback(self):
         if self._reported or not self._stats:
@@ -1746,7 +1762,7 @@ class MediaPlayer(Activity):
 
     def _hide_overlays(self):
         for obj in self._overlays:
-            obj.add_flag(lv.obj.FLAG.HIDDEN)
+            _hide_widget(obj)
 
     def _show_overlays(self):
         for obj in self._overlays:
