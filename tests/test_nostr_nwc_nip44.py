@@ -102,18 +102,22 @@ def _info_event(wallet_key, encryption=None, created_at=None):
     return event
 
 
-def _reply_event(wallet_key, client_key, payload, scheme, kind=23195, request_id=None):
+def _reply_event(wallet_key, client_key, payload, scheme, kind=23195, request_id=None, created_at=None):
     text = json.dumps(payload)
     if scheme == "nip44_v2":
         ck = nip44.get_conversation_key(wallet_key, client_key.public_key.hex())
         content = nip44.encrypt(text, ck)
     else:
         content = wallet_key.encrypt_message(text, client_key.public_key.hex())
+    kwargs = {}
+    if created_at is not None:
+        kwargs["created_at"] = created_at
     event = Event(
         content=content,
         public_key=wallet_key.public_key.hex(),
         kind=kind,
         tags=[["p", client_key.public_key.hex()]] + ([["e", request_id]] if request_id else []),
+        **kwargs
     )
     wallet_key.sign_event(event)
     return event
@@ -281,6 +285,31 @@ class TestNwcRequestsWhenNip44Breaks(_FastNip44Case):
         self.assertTrue(mgr._nwc_nip44_refused)
         mgr._process_event(_info_event(wallet, "nip44_v2 nip04"))
         self.assertEqual(mgr._nwc_encryption, "nip04")
+
+
+class TestNwcRequestsWhenNip44RunsOutOfMemory(_FastNip44Case):
+    def test_out_of_memory_sends_one_request_as_nip04_and_keeps_nip44(self):
+        client = PrivateKey()
+        wallet = PrivateKey()
+        mgr = _manager(client, wallet)
+        mgr._nwc_encryption = "nip44_v2"
+        original = nostr_service.nip44_encrypt
+
+        def out_of_memory(*args):
+            raise MemoryError("memory allocation failed")
+
+        nostr_service.nip44_encrypt = out_of_memory
+        try:
+            mgr.nwc_fetch_balance()
+        finally:
+            nostr_service.nip44_encrypt = original
+        self.assertTrue("?iv=" in mgr.relay_manager.published[0].content)
+        self.assertEqual(mgr._nwc_encryption, "nip44_v2")
+        self.assertFalse(mgr._nwc_nip44_refused)
+        mgr.nwc_fetch_balance()
+        event = mgr.relay_manager.published[1]
+        self.assertFalse("?iv=" in event.content)
+        self.assertTrue(["encryption", "nip44_v2"] in event.tags)
 
 
 class TestNwcReplies(_FastNip44Case):
@@ -551,6 +580,37 @@ class TestNwcReplies(_FastNip44Case):
         self.assertFalse(self.mgr._nwc_nip44_refused)
         self.assertEqual(self.errors, [])
 
+    def test_late_untagged_reply_answers_the_earlier_poll(self):
+        self._send_poll()
+        self.mgr._nwc_poll_number += 1
+        self.mgr._nwc_poll_sent_unix = Event.epoch_seconds()
+        self.mgr._nwc_encryption = "nip44_v2"
+        self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04",
+            created_at=self.mgr._nwc_poll_sent_unix - 120))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertFalse(self.mgr._nwc_nip44_refused)
+        self.assertEqual(self.errors, [])
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertTrue(self.mgr._nwc_nip44_refused)
+
+    def test_late_untagged_reply_without_an_earlier_request_matches_nothing(self):
+        self.mgr._nwc_poll_sent_unix = Event.epoch_seconds()
+        self.mgr._nwc_encryption = "nip44_v2"
+        self._send_poll()
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04",
+            created_at=self.mgr._nwc_poll_sent_unix - 120))
+        self.assertEqual(len(self.mgr._nwc_request_schemes), 2)
+
+    def test_info_event_resets_the_silence_watchdog(self):
+        self.mgr._polls_since_last_event = 2
+        self.mgr._process_event(_info_event(self.wallet, "nip04"))
+        self.assertEqual(self.mgr._polls_since_last_event, 0)
+
     def test_request_scheme_memory_is_bounded(self):
         for _ in range(12):
             self._send_poll()
@@ -629,6 +689,24 @@ class TestConfigureNwc(_FastNip44Case):
             wallet = PrivateKey()
             mgr.configure_nwc(self._url(wallet, PrivateKey()))
             mgr._process_event(_info_event(wallet, "nip44_v2"))
+        self.assertEqual(len(mgr._nwc_info), 4)
+
+    def test_info_cache_keeps_the_most_recently_used_wallets(self):
+        mgr = _manager(PrivateKey(), PrivateKey())
+        mgr._nwc_nwc_url = None
+        wallets = []
+        for _ in range(4):
+            wallet = PrivateKey()
+            wallets.append(wallet)
+            mgr.configure_nwc(self._url(wallet, PrivateKey()))
+            mgr._process_event(_info_event(wallet, "nip44_v2"))
+        mgr.configure_nwc(self._url(wallets[0], PrivateKey()))
+        newest = PrivateKey()
+        mgr.configure_nwc(self._url(newest, PrivateKey()))
+        mgr._process_event(_info_event(newest, "nip44_v2"))
+        self.assertTrue(wallets[0].public_key.hex() in mgr._nwc_info)
+        self.assertFalse(wallets[1].public_key.hex() in mgr._nwc_info)
+        self.assertTrue(newest.public_key.hex() in mgr._nwc_info)
         self.assertEqual(len(mgr._nwc_info), 4)
 
     def test_reconfiguring_a_running_manager_resubscribes_at_once(self):

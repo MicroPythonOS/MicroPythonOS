@@ -294,6 +294,7 @@ class NostrManager:
     # A wallet answers an NWC request within seconds; a request older than
     # this when an info event triggers a new poll is not waited for.
     NWC_REPLY_WINDOW_SECONDS = 60
+    NWC_CLOCK_SKEW_SECONDS = 30
     RELAY_SILENT_RECONNECT_THRESHOLD = 3
 
     @classmethod
@@ -354,6 +355,7 @@ class NostrManager:
         # an encryption switch keeps the number of the poll that caused it.
         self._nwc_poll_number = 0
         self._nwc_poll_sent_at = 0
+        self._nwc_poll_sent_unix = 0
         # False, or why an immediate poll is due: "reply" (a refusal) or
         # "info" (the wallet's info event).
         self._nwc_repoll = False
@@ -361,6 +363,7 @@ class NostrManager:
         # applied for that wallet. The relay pool drops a replayed event it has
         # seen before, so pairing with a wallet again reuses this.
         self._nwc_info = {}
+        self._nwc_info_order = []
 
         # Set when new relays are configured after the manager started; the
         # main loop picks them up and hot-adds them to the running relay pool.
@@ -1101,6 +1104,7 @@ class NostrManager:
             # A wallet seen before: its info event will not be delivered
             # again, so apply what it said last time.
             self._nwc_encryption = self._choose_nwc_encryption(cached[1])
+            self._remember_nwc_info(wallet_pubkey, cached[0], cached[1])
         self._nwc_configured = True
         self._relays_dirty = True
         if self.relay_manager is not None:
@@ -1314,14 +1318,16 @@ class NostrManager:
             # --- Periodic NWC polling ---
             if self._nwc_configured and now - self._last_nwc_poll >= self.NWC_POLL_SECONDS:
                 self._last_nwc_poll = now
+                repoll = self._nwc_repoll
                 self._start_nwc_poll(now)
 
-                if self._polls_since_last_event >= self.RELAY_SILENT_RECONNECT_THRESHOLD:
-                    await self._reconnect_relay()
-                    if not self.keep_running:
-                        break
+                if not repoll:
+                    if self._polls_since_last_event >= self.RELAY_SILENT_RECONNECT_THRESHOLD:
+                        await self._reconnect_relay()
+                        if not self.keep_running:
+                            break
 
-                self._polls_since_last_event += 1
+                    self._polls_since_last_event += 1
 
                 try:
                     self.nwc_fetch_balance()
@@ -1658,6 +1664,16 @@ class NostrManager:
         # replies are NWC_POLL_SECONDS overdue. Poll numbers, not clock
         # time, so a reply processed late still finds its own request.
         current_poll = getattr(self, "_nwc_poll_number", 0)
+        created_at = getattr(event, "created_at", None) or 0
+        sent_unix = getattr(self, "_nwc_poll_sent_unix", 0)
+        if sent_unix and created_at and created_at < sent_unix - self.NWC_CLOCK_SKEW_SECONDS:
+            earlier = [r[2] for r in sent if r[3] and r[2] < current_poll]
+            if not earlier:
+                return None
+            latest = max(earlier)
+            for i in range(len(sent)):
+                if sent[i][3] and sent[i][2] == latest:
+                    return sent.pop(i)[1]
         while sent and (not sent[0][3] or sent[0][2] < current_poll):
             sent.pop(0)
         if sent:
@@ -1709,6 +1725,7 @@ class NostrManager:
         """
         created_at = getattr(event, "created_at", None) or 0
         wallet = self._nwc_wallet_pubkey
+        self._polls_since_last_event = 0
         cached = self._nwc_info.get(wallet)
         if cached is not None and created_at < cached[0]:
             if __debug__:
@@ -1719,13 +1736,22 @@ class NostrManager:
             if len(tag) >= 2 and tag[0] == "encryption":
                 schemes = str(tag[1]).split()
                 break
-        if cached is None and len(self._nwc_info) >= 4:
-            self._nwc_info.pop(next(iter(self._nwc_info)))
-        self._nwc_info[wallet] = (created_at, schemes)
+        self._remember_nwc_info(wallet, created_at, schemes)
         wanted = self._choose_nwc_encryption(schemes)
         if wanted != self._nwc_encryption:
             logger.info("NostrManager: NWC wallet supports %s, using %s", schemes or ["nip04"], wanted)
             self._set_nwc_encryption(wanted, reason="info")
+
+    def _remember_nwc_info(self, wallet, created_at, schemes):
+        order = getattr(self, "_nwc_info_order", None)
+        if order is None:
+            order = self._nwc_info_order = []
+        if wallet in order:
+            order.remove(wallet)
+        order.append(wallet)
+        self._nwc_info[wallet] = (created_at, schemes)
+        while len(order) > 4:
+            self._nwc_info.pop(order.pop(0), None)
 
     def _start_nwc_poll(self, now):
         """Number the poll about to go out (see _nwc_take_request_scheme).
@@ -1740,6 +1766,7 @@ class NostrManager:
                 and now - self._nwc_poll_sent_at > self.NWC_REPLY_WINDOW_SECONDS):
             self._nwc_poll_number += 1
             self._nwc_poll_sent_at = now
+            self._nwc_poll_sent_unix = Event.epoch_seconds()
         self._nwc_repoll = False
 
     def _set_nwc_encryption(self, mode, poll_now=True, reason="reply"):
@@ -1796,6 +1823,8 @@ class NostrManager:
                 # Setting content first stops sign_event() from NIP-04
                 # encrypting it.
                 dm.content = nip44_encrypt(content, self._nwc_conversation_key)
+            except MemoryError as e:
+                logger.warning("NostrManager: NIP-44 encryption ran out of memory, sending this request as NIP-04: %s", e)
             except Exception as e:
                 # NIP-44 is broken on this build: never let that stop NWC.
                 logger.warning("NostrManager: NIP-44 encryption failed, using NIP-04: %s", e)
