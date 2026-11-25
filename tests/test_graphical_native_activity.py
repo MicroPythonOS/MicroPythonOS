@@ -494,6 +494,33 @@ class TestNativeActivity(unittest.TestCase):
             self.game.game_rect_to_panel(10, 20, 30, 40),
             (x, y, 30, 40))
 
+    def test_a_cropped_surface_maps_a_touch_to_the_pixel_it_shows(self):
+        # A 296x200 surface is the middle of a 320x200 frame (12 columns
+        # dropped at each edge). No stretch: the surface's left edge is game
+        # column 12 and its right edge is 307.
+        self.game._surface = _FakeSurface(width=296, height=200)
+        self.game._rotated = False
+        self.game._game_width , self.game._game_height = 320, 200
+        self.game._frame_window = (12, 0, 296, 200)
+        surface = self.game._surface
+        self.assertEqual(
+            self.game.to_game(surface._image_x, surface._image_y), (12, 0))
+        self.assertEqual(
+            self.game.to_game(surface._image_x + 295,
+                              surface._image_y + 199), (307, 199))
+        self.assertEqual(
+            self.game.to_game(surface._image_x + 148,
+                              surface._image_y + 100), (160, 100))
+        # ... and back, so an overlay lands where the picture is.
+        self.assertEqual(
+            self.game.game_to_panel(12, 0),
+            (surface._image_x, surface._image_y))
+        for point in ((12, 0), (160, 100), (307, 199)):
+            self.assertEqual(self.game.to_game(*self.game.game_to_panel(*point)),
+                             point)
+        self.assertEqual(self.game.game_rect_to_panel(12, 0, 296, 200),
+                         (surface._image_x, surface._image_y, 296, 200))
+
     def test_a_scaled_surface_maps_a_touch_into_the_engine_frame(self):
         # 240x150 shows the engine's 320x200 at three quarters, so a finger is
         # scaled up by 4/3 and the frame's edges land on the surface's edges.

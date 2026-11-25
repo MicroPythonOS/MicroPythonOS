@@ -120,6 +120,10 @@ class NativeActivity(Activity):
     # means the surface size is the frame size.
     _game_width = None
     _game_height = None
+    # The part of the frame the surface shows, when it is a crop of a
+    # fixed-size frame rather than the whole picture: (x, y, width, height) in
+    # frame coordinates. None means the surface maps onto the whole frame.
+    _frame_window = None
     _keys_sent = 0
     _sink = None
     _audio_buffer = None
@@ -262,9 +266,16 @@ class NativeActivity(Activity):
             # is; a 240x240 panel gets Doom's 320x200 at three quarters.
             self._game_width = None
             self._game_height = None
+            self._frame_window = None
             frame = getattr(engine, "frame_size", None) if engine else None
             if frame is not None:
                 self._game_width, self._game_height = frame
+            # An engine whose 320x200 frame is cropped to fit a narrower panel
+            # says which part of the frame the surface shows, so a touch maps
+            # to the pixel it is over instead of stretching across the frame.
+            window = getattr(engine, "frame_window", None) if engine else None
+            if window is not None:
+                self._frame_window = window
             started = self.start_engine(self._surface)
         except Exception as error:
             # The engine is the one part of such an app that can be missing: a
@@ -491,6 +502,13 @@ class NativeActivity(Activity):
         for finger, phase, x, y in touches.poll():
             self.on_touch_finger(finger, TOUCH_EVENTS[phase], x, y)
 
+    def _window(self):
+        """(x, y, width, height): the part of the frame the surface shows."""
+        if self._frame_window is not None:
+            return self._frame_window
+        width, height = self._game_frame()
+        return 0, 0, width, height
+
     def _game_frame(self):
         """The engine's own frame: the surface, unless the picture is scaled."""
         if self._game_width and self._game_height:
@@ -530,8 +548,9 @@ class NativeActivity(Activity):
         dy = y - surface._image_y
         game_width, game_height = self._game_frame()
         if not self._rotated:
-            return (self._into_frame(dx, surface.width, game_width),
-                    self._into_frame(dy, surface.height, game_height))
+            left, top, window_width, window_height = self._window()
+            return (left + self._into_frame(dx, surface.width, window_width),
+                    top + self._into_frame(dy, surface.height, window_height))
         return (self._into_frame(dy, surface.height, game_width),
                 self._into_frame((surface.width - 1) - dx,
                                  surface.width, game_height))
@@ -547,10 +566,11 @@ class NativeActivity(Activity):
         surface = self._surface
         game_width, game_height = self._game_frame()
         if not self._rotated:
+            left, top, window_width, window_height = self._window()
             return (surface._image_x
-                    + self._onto_panel(x, surface.width, game_width),
+                    + self._onto_panel(x - left, surface.width, window_width),
                     surface._image_y
-                    + self._onto_panel(y, surface.height, game_height))
+                    + self._onto_panel(y - top, surface.height, window_height))
         return (surface._image_x + surface.width - 1
                 - self._onto_panel(y, surface.width, game_height),
                 surface._image_y
@@ -565,10 +585,13 @@ class NativeActivity(Activity):
         surface = self._surface
         game_width, game_height = self._game_frame()
         if not self._rotated:
-            x0 = self._onto_panel(x, surface.width, game_width)
-            y0 = self._onto_panel(y, surface.height, game_height)
-            x1 = self._onto_panel(x + width - 1, surface.width, game_width)
-            y1 = self._onto_panel(y + height - 1, surface.height, game_height)
+            left, top, window_width, window_height = self._window()
+            x0 = self._onto_panel(x - left, surface.width, window_width)
+            y0 = self._onto_panel(y - top, surface.height, window_height)
+            x1 = self._onto_panel(x + width - 1 - left,
+                                  surface.width, window_width)
+            y1 = self._onto_panel(y + height - 1 - top,
+                                  surface.height, window_height)
             return (surface._image_x + x0, surface._image_y + y0,
                     x1 - x0 + 1, y1 - y0 + 1)
         top = self._onto_panel(x, surface.height, game_width)

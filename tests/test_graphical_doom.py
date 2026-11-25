@@ -310,18 +310,29 @@ class TestCoreEngine(unittest.TestCase):
         width, height = self.engine.surface_size(_FakeDisplay(320, 240))
         self.assertEqual((width, height), (doom.GAME_WIDTH, doom.GAME_HEIGHT))
 
-    def test_a_square_panel_gets_the_frame_scaled_to_three_quarters(self):
-        # Neither orientation fits 240x240, so the core samples Doom's own
-        # 320x200 into 240x150: same 4:3 picture, 45 px of panel left over.
-        width, height = self.engine.surface_size(_FakeDisplay(240, 240))
-        self.assertEqual((width, height), (240, 150))
+    def test_a_narrower_panel_gets_the_middle_of_the_frame(self):
+        # The fri3d 2024 is 296x240: neither orientation holds the frame, so
+        # the core keeps the full height and drops the outer 12 columns at each
+        # edge. Cropping keeps every remaining pixel sharp; a resample to
+        # 296x185 would blur the whole picture to save those 24 pixels.
+        width, height = self.engine.surface_size(_FakeDisplay(296, 240))
+        self.assertEqual((width, height), (296, 200))
+        self.assertEqual(self.engine.frame_window, (12, 0, 296, 200))
 
-    def test_a_panel_too_small_to_scale_says_so(self):
-        # Below half scale the text is unreadable, so refuse instead of drawing
-        # something nobody can use.
+    def test_a_square_panel_keeps_the_height_and_crops_the_sides(self):
+        width, height = self.engine.surface_size(_FakeDisplay(240, 240))
+        self.assertEqual((width, height), (240, 200))
+        self.assertEqual(self.engine.frame_window, (40, 0, 240, 200))
+
+    def test_a_short_panel_crops_the_rows_too(self):
+        width, height = self.engine.surface_size(_FakeDisplay(320, 180))
+        self.assertEqual((width, height), (320, 180))
+        self.assertEqual(self.engine.frame_window, (0, 10, 320, 180))
+
+    def test_a_panel_too_small_to_show_the_game_says_so(self):
         with self.assertRaises(RuntimeError) as ctx:
             self.engine.surface_size(_FakeDisplay(120, 120))
-        self.assertIn("320x200", str(ctx.exception))
+        self.assertIn("160x100", str(ctx.exception))
         self.assertIn("120x120", str(ctx.exception))
 
     def test_a_band_with_pixels_is_copied_and_flushed(self):

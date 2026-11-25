@@ -393,6 +393,9 @@ class _CoreEngine:
     name = "core"
     quit = False
     frame_size = (GAME_WIDTH, GAME_HEIGHT)
+    # (x, y, width, height) of the frame the surface shows, when the panel is
+    # too small for all of it. None means the whole frame is on screen.
+    frame_window = None
 
     def __init__(self):
         import mpos_core
@@ -409,22 +412,31 @@ class _CoreEngine:
     def surface_size(self, display):
         # A portrait panel cannot show Doom's landscape frame, so the core
         # rotates it into a 200x320 surface; a landscape panel takes the frame
-        # straight, which also keeps the touches unrotated. A panel too small
-        # for either gets the same landscape picture at the largest quarter
-        # scale that still fits (a 240x240 panel becomes 240x150): the core
-        # samples the frame instead of letterboxing it.
+        # straight, which also keeps the touches unrotated. A landscape panel
+        # narrower or shorter than the frame (the fri3d 2024 is 296x240) gets
+        # the middle of the picture at full resolution - the core drops the
+        # outer columns, 12 at each edge there - rather than a resampled
+        # frame. `frame_window` tells the touch map which part it is showing.
+        self.frame_window = None
         width = display.get_horizontal_resolution()
         height = display.get_vertical_resolution()
         if height > width:
             if GAME_HEIGHT <= width and GAME_WIDTH <= height:
                 return GAME_HEIGHT, GAME_WIDTH
-        elif GAME_WIDTH <= width and GAME_HEIGHT <= height:
+            raise RuntimeError(
+                "Doom needs a portrait screen of at least 200x320; "
+                "this panel is %dx%d" % (width, height))
+        if GAME_WIDTH <= width and GAME_HEIGHT <= height:
             return GAME_WIDTH, GAME_HEIGHT
-        quarter = min(width * 4 // GAME_WIDTH, height * 4 // GAME_HEIGHT)
-        if quarter >= 2:
-            return GAME_WIDTH * quarter // 4, GAME_HEIGHT * quarter // 4
+        if width >= 160 and height >= 100:
+            width = min(width, GAME_WIDTH)
+            height = min(height, GAME_HEIGHT)
+            self.frame_window = ((GAME_WIDTH - width) // 2,
+                                 (GAME_HEIGHT - height) // 2,
+                                 width, height)
+            return width, height
         raise RuntimeError(
-            "Doom needs a screen of at least 160x100 (or 320x200 unscaled); "
+            "Doom needs a screen of at least 160x100; "
             "this panel is %dx%d" % (width, height))
 
     def start(self, wad, surface):

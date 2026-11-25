@@ -191,17 +191,24 @@ static void convert_band(const mpos_core_abi_t *abi, uint16_t *dst,
     }
 }
 
-// A landscape panel takes the frame as it is: dst(x, y) = src(x, y). No
-// transpose and no palette indirection beyond the lookup, so this is the
-// cheaper of the two paths.
+// A landscape panel takes the frame as it is: dst(x, y) = src(x, y). A panel
+// narrower or shorter than the frame (the fri3d 2024 is 296x240) keeps the
+// middle and drops the outer columns/rows - 12 pixels at each edge there -
+// instead of resampling the whole picture. No transpose and no palette
+// indirection beyond the lookup, so this stays the cheaper of the paths.
 static void convert_band_direct(const mpos_core_abi_t *abi, uint16_t *dst,
                                 int dst_y0, int rows) {
     const uint8_t *src = (const uint8_t *)DG_ScreenBuffer;
     const int out_w = abi->frame_width;
+    const int out_h = abi->frame_height;
+    const int left = out_w < DOOMGENERIC_RESX
+        ? (DOOMGENERIC_RESX - out_w) / 2 : 0;
+    const int top = out_h < DOOMGENERIC_RESY
+        ? (DOOMGENERIC_RESY - out_h) / 2 : 0;
     for (int y = dst_y0; y < dst_y0 + rows; y++) {
-        const uint8_t *src_row = src + y * DOOMGENERIC_RESX;
+        const uint8_t *src_row = src + (y + top) * DOOMGENERIC_RESX + left;
         uint16_t *dst_row = dst + y * out_w;
-        for (int x = 0; x < DOOMGENERIC_RESX; x++) {
+        for (int x = 0; x < out_w; x++) {
             dst_row[x] = s_palette[src_row[x]];
         }
     }
@@ -248,11 +255,11 @@ static void present_frame(const mpos_core_abi_t *abi) {
     // and anything smaller is that frame scaled down.
     const int rotate = (abi->frame_width == DOOMGENERIC_RESY
                          && abi->frame_height == DOOMGENERIC_RESX);
+    // A surface that keeps the frame's height is cropped, not scaled: only a
+    // panel that cannot show a whole row loses the resample.
     const int scaled = !rotate
         && abi->frame_width <= DOOMGENERIC_RESX
-        && abi->frame_height <= DOOMGENERIC_RESY
-        && (abi->frame_width != DOOMGENERIC_RESX
-            || abi->frame_height != DOOMGENERIC_RESY);
+        && abi->frame_height < DOOMGENERIC_RESY;
     if (scaled) {
         for (int x = 0; x < abi->frame_width; x++) {
             s_xmap[x] = (uint16_t)((2 * x * DOOMGENERIC_RESX

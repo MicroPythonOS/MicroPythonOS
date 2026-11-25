@@ -160,5 +160,61 @@ class TestDuke3DButtons(unittest.TestCase):
              InputManager._drawer_open_cb) = saved
 
 
+class _FakeDisplay:
+    def __init__(self, width, height):
+        self._width = width
+        self._height = height
+
+    def get_horizontal_resolution(self):
+        return self._width
+
+    def get_vertical_resolution(self):
+        return self._height
+
+
+class _SurfaceEngine(duke3d._CoreEngine):
+    """The engine's surface rule without booting a core."""
+
+    def __init__(self):
+        pass
+
+
+class TestDuke3DSurfaceSize(unittest.TestCase):
+    """Which surface the core is given, and what a small panel gets."""
+
+    def _size(self, width, height):
+        return _SurfaceEngine().surface_size(_FakeDisplay(width, height))
+
+    def test_a_panel_that_holds_the_frame_gets_it_unscaled(self):
+        self.assertEqual(self._size(320, 240), (320, 200))
+        self.assertEqual(self._size(240, 320), (200, 320))
+
+    def test_a_narrower_panel_gets_the_middle_of_the_frame(self):
+        # The fri3d 2024 is 296x240: the 320x200 frame does not fit either way
+        # round, so the core keeps the full height and drops the outer 12
+        # columns at each edge. Cropping keeps every remaining pixel sharp.
+        engine = _SurfaceEngine()
+        self.assertEqual(engine.surface_size(_FakeDisplay(296, 240)),
+                         (296, 200))
+        self.assertEqual(engine.frame_window, (12, 0, 296, 200))
+        # The touch map still starts from the engine's own frame.
+        self.assertEqual(duke3d._CoreEngine.frame_size,
+                         (duke3d.GAME_WIDTH, duke3d.GAME_HEIGHT))
+
+    def test_a_square_panel_keeps_the_height_and_crops_the_sides(self):
+        engine = _SurfaceEngine()
+        self.assertEqual(engine.surface_size(_FakeDisplay(240, 240)),
+                         (240, 200))
+        self.assertEqual(engine.frame_window, (40, 0, 240, 200))
+        engine = _SurfaceEngine()
+        self.assertEqual(engine.surface_size(_FakeDisplay(480, 180)),
+                         (320, 180))
+        self.assertEqual(engine.frame_window, (0, 10, 320, 180))
+
+    def test_a_panel_too_small_to_show_the_game_says_so(self):
+        with self.assertRaises(RuntimeError):
+            self._size(128, 96)
+
+
 if __name__ == "__main__":
     unittest.main()

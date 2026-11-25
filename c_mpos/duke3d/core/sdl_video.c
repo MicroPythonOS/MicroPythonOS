@@ -274,14 +274,23 @@ void SDL_UpdateRect(SDL_Surface *screen, Sint32 x, Sint32 y, Sint32 w, Sint32 h)
     SDL_Flip(screen);
 }
 
-// A landscape panel takes the frame as it is: dst(x, y) = src(x, y).
+// A landscape panel takes the frame as it is: dst(x, y) = src(x, y). A panel
+// narrower or shorter than the frame keeps the middle of the picture and drops
+// the outer columns/rows - the fri3d 2024 is 296 wide, so 12 pixels go at each
+// edge - rather than resampling the whole frame to fit: every surviving pixel
+// stays sharp, and the app reports the same rectangle as `frame_window` so a
+// touch still lands on the pixel it is over.
 static void convert_band_direct(const mpos_core_abi_t *abi, uint16_t *dst,
                                 int y0, int rows) {
     const int out_w = abi->frame_width;
+    const int out_h = abi->frame_height;
+    const int left = out_w < SURFACE_WIDTH ? (SURFACE_WIDTH - out_w) / 2 : 0;
+    const int top = out_h < SURFACE_HEIGHT ? (SURFACE_HEIGHT - out_h) / 2 : 0;
     for (int y = y0; y < y0 + rows; y++) {
-        const uint8_t *src_row = s_pixels + (size_t)y * SURFACE_WIDTH;
+        const uint8_t *src_row = s_pixels
+            + (size_t)(y + top) * SURFACE_WIDTH + left;
         uint16_t *dst_row = dst + (size_t)y * out_w;
-        for (int x = 0; x < SURFACE_WIDTH && x < out_w; x++) {
+        for (int x = 0; x < out_w; x++) {
             dst_row[x] = s_palette565[src_row[x]];
         }
     }
@@ -331,8 +340,8 @@ int SDL_Flip(SDL_Surface *screen) {
         return 0;
     }
     // The host's surface says how to present it, exactly as the Doom core
-    // does: a 200x320 surface is the frame turned a quarter turn, a 320x200
-    // one is the engine's own landscape frame.
+    // does: a 200x320 surface is the frame turned a quarter turn, and anything
+    // else is the engine's landscape frame, cropped to the surface.
     const int rotate = (abi->frame_width == SURFACE_HEIGHT
                         && abi->frame_height == SURFACE_WIDTH);
     const int height = rotate

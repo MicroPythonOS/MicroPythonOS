@@ -332,6 +332,9 @@ class _CoreEngine:
     name = "core"
     quit = False
     frame_size = (GAME_WIDTH, GAME_HEIGHT)
+    # (x, y, width, height) of the frame the surface shows, when the panel is
+    # too narrow for all of it. None means the whole frame is on screen.
+    frame_window = None
 
     def __init__(self):
         import mpos_core
@@ -363,6 +366,7 @@ class _CoreEngine:
         # 200x320 surface. A landscape panel gets the frame as it is. This is
         # the same rule the Doom core uses, and NativeActivity's touch mapping
         # undoes the rotation for the game's own coordinates.
+        self.frame_window = None
         width = display.get_horizontal_resolution()
         height = display.get_vertical_resolution()
         if height > width:
@@ -371,13 +375,18 @@ class _CoreEngine:
         elif GAME_WIDTH <= width and GAME_HEIGHT <= height:
             return GAME_WIDTH, GAME_HEIGHT
         # A panel that cannot hold the frame either way (the fri3d 2024 is
-        # 296x240) gets the largest surface with the frame's own shape: the
-        # core samples its 320x200 frame down, so 296x240 becomes 296x185 and
-        # the picture fills the width instead of losing its right edge to a
-        # crop. `frame_size` keeps the touch map in the frame's coordinates.
-        scale = min(width * 1000 // GAME_WIDTH, height * 1000 // GAME_HEIGHT)
-        if scale >= 500:
-            return (GAME_WIDTH * scale // 1000, GAME_HEIGHT * scale // 1000)
+        # 296x240) gets the middle of the picture: the core drops the outer
+        # columns, 12 at each edge there, and the panel shows the full height.
+        # Cropping keeps every remaining pixel sharp; a resample would blur the
+        # whole picture to save those 12 pixels. `frame_window` tells the touch
+        # map which part of the frame the surface is showing.
+        if width >= 160 and height >= 100:
+            width = min(width, GAME_WIDTH)
+            height = min(height, GAME_HEIGHT)
+            self.frame_window = ((GAME_WIDTH - width) // 2,
+                                 (GAME_HEIGHT - height) // 2,
+                                 width, height)
+            return width, height
         raise RuntimeError(
             "Duke Nukem 3D needs a screen of at least 160x100; "
             "this panel is %dx%d" % (width, height))
