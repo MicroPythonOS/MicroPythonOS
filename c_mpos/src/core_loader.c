@@ -1204,7 +1204,9 @@ static const mp_arg_t start_task_args[] = {
     { MP_QSTR_asset_name, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
     { MP_QSTR_wad_path, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
     { MP_QSTR_config_dir, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
-    { MP_QSTR_expected_crc, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
+    // MP_ARG_INT would reject a CRC with the top bit set ("overflow converting
+    // long int to machine word"), which is a coin flip per rebuilt blob.
+    { MP_QSTR_expected_crc, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_INT(0)} },
     { MP_QSTR_affinity, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = MPOS_CORE_WORKER_CORE} },
     { MP_QSTR_surface, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
 };
@@ -1266,9 +1268,13 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
     }
 
     const char *label = mp_obj_str_get_str(parsed[ARG_label].u_obj);
+    uint32_t expected_crc = 0;
+    if (parsed[ARG_expected_crc].u_obj != mp_const_none) {
+        expected_crc = (uint32_t)mp_obj_get_int_truncated(
+            parsed[ARG_expected_crc].u_obj);
+    }
     core_attach(label, (size_t)parsed[ARG_offset].u_int,
-                (size_t)parsed[ARG_size].u_int,
-                (uint32_t)parsed[ARG_expected_crc].u_int);
+                (size_t)parsed[ARG_size].u_int, expected_crc);
 
     s_width = parsed[ARG_width].u_int;
     s_height = parsed[ARG_height].u_int;
