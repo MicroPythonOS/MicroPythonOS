@@ -800,12 +800,26 @@ static int try_loadtile_from_override_png(short tilenume)
 void setviewtotile(short tilenume, int32_t tileWidth, int32_t tileHeight)
 {
     int32_t i, j;
+    int32_t viewW = tileWidth;
+    int32_t viewH = tileHeight;
+
+    /* The off-screen view is drawn into arrays sized for the screen: lastx
+     * has MAXYDIM rows and uwall/dwall/swal/lwal MAXXDIM+1 columns. A mirror
+     * tile declared 128x400, or the 320-tall tilt/thumbnail view, is bigger,
+     * and drawing it indexed horizlookup2 past its table. Keep the tile's own
+     * dimensions and pixels but clamp the view to what those arrays hold. */
+    if (viewW > MAXYDIM)
+        viewW = MAXYDIM;
+    if (viewH > MAXXDIM)
+        viewH = MAXXDIM;
+    if (viewW >= MAXYLOOKUP)
+        viewW = MAXYLOOKUP - 1;
 
     /* DRAWROOMS TO TILE BACKUP&SET CODE */
     tiles[tilenume].dim.width = tileWidth;
     tiles[tilenume].dim.height = tileHeight;
-    bakxsiz[setviewcnt] = max(xdimen, tileWidth);
-    bakysiz[setviewcnt] = max(ydimen, tileHeight);
+    bakxsiz[setviewcnt] = max(xdimen, viewW);
+    bakysiz[setviewcnt] = max(ydimen, viewH);
     bakvidoption[setviewcnt] = vidoption;
     vidoption = 2;
     bakframeplace[setviewcnt] = frameplace;
@@ -816,12 +830,10 @@ void setviewtotile(short tilenume, int32_t tileWidth, int32_t tileHeight)
     bakwindowy2[setviewcnt] = windowy2;
     copybufbyte(&startumost[windowx1],&bakumost[windowx1],(windowx2-windowx1+1)*sizeof(bakumost[0]));
     copybufbyte(&startdmost[windowx1],&bakdmost[windowx1],(windowx2-windowx1+1)*sizeof(bakdmost[0]));
-    setview(0,0,tileHeight-1,tileWidth-1);
+    setview(0,0,viewH-1,viewW-1);
     setaspect(65536,65536);
     j = 0;
-    if (tileWidth >= MAXYLOOKUP)
-        tileWidth = MAXYLOOKUP - 1;
-    for(i=0; i<=tileWidth; i++) {
+    for(i=0; i<=viewW; i++) {
         ylookup[i] = j;
         j += tileHeight;
     }
