@@ -1109,6 +1109,37 @@ static void copy_path(char *dst, size_t size, mp_obj_t value) {
     dst[len] = '\0';
 }
 
+/* Print the core's log ring before it is freed. A start-up that ends in the
+ * engine's Error() only leaves the reason in that ring, and the caller cannot
+ * drain it after the failure, so put it on the console here. */
+static void dump_log_ring(void) {
+    if (s_log_ring == NULL) {
+        return;
+    }
+    for (;;) {
+        char line[MPOS_CORE_LOG_CHARS];
+        int have = 0;
+        portENTER_CRITICAL(&s_ring_lock);
+        if (s_log_head != s_log_tail) {
+            const char *src = s_log_ring
+                            + (size_t)(s_log_tail % MPOS_CORE_LOG_LINES) * MPOS_CORE_LOG_CHARS;
+            size_t i = 0;
+            while (src[i] != '\0' && i + 1 < MPOS_CORE_LOG_CHARS) {
+                line[i] = src[i];
+                i++;
+            }
+            line[i] = '\0';
+            s_log_tail++;
+            have = 1;
+        }
+        portEXIT_CRITICAL(&s_ring_lock);
+        if (!have) {
+            break;
+        }
+        mp_printf(&mp_plat_print, "core: %s\n", line);
+    }
+}
+
 static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
                                      mp_map_t *kw_args) {
     mp_arg_val_t parsed[MP_ARRAY_SIZE(start_task_args)];
@@ -1311,6 +1342,7 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
     xSemaphoreTake(s_task_ready, portMAX_DELAY);
     if (s_task_result != 0) {
         int result = s_task_result;
+        dump_log_ring();
         release_task_memory();
         core_release();
         mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("core init failed: %d"), result);

@@ -855,12 +855,12 @@ static void ceilscan (int32_t x1, int32_t x2, int32_t sectnum)
                     while (y1 < twall)
                         hline(x-1,++y1);
                     while (y1 > twall)
-                        lastx[y1--] = x;
+                        { if (y1 >= 0 && y1 <= MAXYDIM) lastx[y1] = x; y1--; }
                 }
                 while (y2 > bwall)
                     hline(x-1,--y2);
                 while (y2 < bwall)
-                    lastx[y2++] = x;
+                    { if (y2 >= 0 && y2 <= MAXYDIM) lastx[y2] = x; y2++; }
             }
             else
             {
@@ -913,10 +913,10 @@ static void ceilscan (int32_t x1, int32_t x2, int32_t sectnum)
             else
             {
                 while (y1 < twall) slowhline(x-1,++y1);
-                while (y1 > twall) lastx[y1--] = x;
+                while (y1 > twall) { if (y1 >= 0 && y1 <= MAXYDIM) lastx[y1] = x; y1--; }
             }
             while (y2 > bwall) slowhline(x-1,--y2);
-            while (y2 < bwall) lastx[y2++] = x;
+            while (y2 < bwall) { if (y2 >= 0 && y2 <= MAXYDIM) lastx[y2] = x; y2++; }
         }
         else
         {
@@ -1105,12 +1105,12 @@ static void florscan (int32_t x1, int32_t x2, int32_t sectnum)
                     while (y1 < twall)
                         hline(x-1,++y1);
                     while (y1 > twall)
-                        lastx[y1--] = x;
+                        { if (y1 >= 0 && y1 <= MAXYDIM) lastx[y1] = x; y1--; }
                 }
                 while (y2 > bwall)
                     hline(x-1,--y2);
                 while (y2 < bwall)
-                    lastx[y2++] = x;
+                    { if (y2 >= 0 && y2 <= MAXYDIM) lastx[y2] = x; y2++; }
             }
             else
             {
@@ -1166,12 +1166,12 @@ static void florscan (int32_t x1, int32_t x2, int32_t sectnum)
                 while (y1 < twall)
                     slowhline(x-1,++y1);
                 while (y1 > twall)
-                    lastx[y1--] = x;
+                    { if (y1 >= 0 && y1 <= MAXYDIM) lastx[y1] = x; y1--; }
             }
             while (y2 > bwall)
                 slowhline(x-1,--y2);
             while (y2 < bwall)
-                lastx[y2++] = x;
+                { if (y2 >= 0 && y2 <= MAXYDIM) lastx[y2] = x; y2++; }
         }
         else
         {
@@ -4186,7 +4186,7 @@ IRAM_ATTR static void  dorotatesprite (int32_t sx, int32_t sy, int32_t z, short 
                             } else
                                 rmhlineasm4(x-lastx[y1],(bx>>16)*tileHeight+(by>>16)+bufplc,0L,bx<<16,by<<16,ylookup[y1]+x+frameplace);
                         }
-                        while (y1 > ny1) lastx[y1--] = x;
+                        while (y1 > ny1) { if (y1 >= 0 && y1 <= MAXYDIM) lastx[y1] = x; y1--; }
                     }
                     while (y2 > ny2)
                     {
@@ -4205,7 +4205,7 @@ IRAM_ATTR static void  dorotatesprite (int32_t sx, int32_t sy, int32_t z, short 
                         } else
                             rmhlineasm4(x-lastx[y2],(bx>>16)*tileHeight+(by>>16)+bufplc,0L,bx<<16,by<<16,ylookup[y2]+x+frameplace);
                     }
-                    while (y2 < ny2) lastx[y2++] = x;
+                    while (y2 < ny2) { if (y2 >= 0 && y2 <= MAXYDIM) lastx[y2] = x; y2++; }
                 }
                 else
                 {
@@ -4822,10 +4822,10 @@ IRAM_ATTR static void ceilspritescan (int32_t x1, int32_t x2)
             else
             {
                 while (y1 < twall) ceilspritehline(x-1,++y1);
-                while (y1 > twall) lastx[y1--] = x;
+                while (y1 > twall) { if (y1 >= 0 && y1 <= MAXYDIM) lastx[y1] = x; y1--; }
             }
             while (y2 > bwall) ceilspritehline(x-1,--y2);
-            while (y2 < bwall) lastx[y2++] = x;
+            while (y2 < bwall) { if (y2 >= 0 && y2 <= MAXYDIM) lastx[y2] = x; y2++; }
         }
         else
         {
