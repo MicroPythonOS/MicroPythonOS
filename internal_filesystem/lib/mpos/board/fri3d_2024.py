@@ -127,99 +127,59 @@ def read_joystick_angle(threshold=0.1):
     angle_deg = (angle_deg + 360) % 360  # Normalize to [0, 360)
     return angle_deg
 
-# Repeat timing for navigation actions (same as LVGL indev timing for consistency)
-LONG_PRESS_TIME = const(400)
-LONG_PRESS_REPEAT_TIME = const(100)
-_last_key = None
-_next_repeat_at = 0
+# Every key the badge is sending right now.
+#
+# The face buttons, START/MENU and the joystick are independent inputs, so a
+# key that is down must not hide the others: firing with B has to leave the
+# stick working. The driver queues each press and release and reports the whole
+# held set, which is what a game with `key_state` needs.
+def keypad_state():
+    keys = []
 
-# Read callback
-# Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
-# that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
-def keypad_read_cb(indev, data):
-    global _last_key, _next_repeat_at
-    current_key = None
-
-    # Check buttons
     if btn_x.value() == 0:
-        current_key = lv.KEY.ESC
-    elif btn_y.value() == 0:
-        current_key = ord("Y")
-    elif btn_a.value() == 0:
-        current_key = lv.KEY.ENTER
-    elif btn_b.value() == 0:
-        current_key = ord("B")
-    elif btn_menu.value() == 0:
-        current_key = lv.KEY.HOME
-    elif btn_start.value() == 0:
-        current_key = lv.KEY.END
-    else:
-        # Check joystick
-        angle = read_joystick_angle(0.30) # 0.25-0.27 is right on the edge so 0.30 should be good
-        if angle:
-            if angle > 45 and angle < 135:
-                current_key = lv.KEY.RIGHT
-            elif angle > 135 and angle < 225:
-                current_key = lv.KEY.DOWN
-            elif angle > 225 and angle < 315:
-                current_key = lv.KEY.LEFT
-            elif angle < 45 or angle > 315:
-                current_key = lv.KEY.UP
-            else:
-                logger.warning("WARNING: unhandled joystick angle %s" % (angle))
+        keys.append(lv.KEY.ESC)
+    if btn_y.value() == 0:
+        keys.append(ord("Y"))
+    if btn_a.value() == 0:
+        keys.append(lv.KEY.ENTER)
+    if btn_b.value() == 0:
+        keys.append(ord("B"))
+    if btn_menu.value() == 0:
+        keys.append(lv.KEY.HOME)
+    if btn_start.value() == 0:
+        keys.append(lv.KEY.END)
 
-    data.continue_reading = False
-
-    if current_key is not None:
-        data.key = current_key
-        data.state = lv.INDEV_STATE.PRESSED
-        now = time.ticks_ms()
-
-        if current_key != _last_key:
-            _last_key = current_key
-            _next_repeat_at = now + LONG_PRESS_TIME
-            should_act = True
-        elif time.ticks_diff(now, _next_repeat_at) >= 0:
-            _next_repeat_at = now + LONG_PRESS_REPEAT_TIME
-            should_act = True
+    angle = read_joystick_angle(0.30) # 0.25-0.27 is right on the edge so 0.30 should be good
+    if angle is not None:
+        if angle > 45 and angle < 135:
+            keys.append(lv.KEY.RIGHT)
+        elif angle > 135 and angle < 225:
+            keys.append(lv.KEY.DOWN)
+        elif angle > 225 and angle < 315:
+            keys.append(lv.KEY.LEFT)
+        elif angle < 45 or angle > 315:
+            keys.append(lv.KEY.UP)
         else:
-            should_act = False
+            logger.warning("WARNING: unhandled joystick angle %s" % (angle))
 
-        if should_act:
-            if __debug__: logger.debug("key: %s" % (current_key))
-            if current_key == lv.KEY.ESC:
-                mpos.ui.back_screen()
-            elif current_key == lv.KEY.HOME:
-                from mpos.ui import topmenu as topmenu
-                topmenu.toggle_drawer()
-            elif current_key == lv.KEY.RIGHT:
-                mpos.ui.focus_direction.move_focus_direction(90)
-            elif current_key == lv.KEY.LEFT:
-                mpos.ui.focus_direction.move_focus_direction(270)
-            elif current_key == lv.KEY.UP:
-                mpos.ui.focus_direction.move_focus_direction(0)
-            elif current_key == lv.KEY.DOWN:
-                mpos.ui.focus_direction.move_focus_direction(180)
+    return keys
 
-        _last_key = current_key
-    else:
-        data.key = _last_key if _last_key is not None else lv.KEY.ENTER
-        data.state = lv.INDEV_STATE.RELEASED
-        _last_key = None
-        _next_repeat_at = 0
 
 group = lv.group_get_default()
 
-# Create and set up the input device
-indev = lv.indev_create()
-indev.set_type(lv.INDEV_TYPE.KEYPAD)
-indev.set_read_cb(keypad_read_cb)
-indev.set_group(group) # is this needed? maybe better to move the default group creation to main.py so it's available everywhere...
-disp = lv.display_get_default()
-indev.set_display(disp)  # different from display
+from drivers.indev.fri3d_2024_keypad import (
+    LONG_PRESS_REPEAT_TIME,
+    LONG_PRESS_TIME,
+    Fri3d2024Keypad,
+)
+
+# Warning: the read path runs several times per second, and continuous output
+# on the serial line breaks tools like mpremote uploading files over it.
+indev = Fri3d2024Keypad(keypad_state, group=group)
 indev.enable(True)
-indev.set_long_press_time(LONG_PRESS_TIME)
-indev.set_long_press_repeat_time(LONG_PRESS_REPEAT_TIME)
+# Leave LVGL's own long press (a widget's LONG_PRESSED) room before the
+# driver's first repeat at LONG_PRESS_TIME, which releases the key.
+indev.set_long_press_time(LONG_PRESS_TIME - LONG_PRESS_REPEAT_TIME)
 InputManager.register_indev(indev)
 
 from mpos import SDCardManager
