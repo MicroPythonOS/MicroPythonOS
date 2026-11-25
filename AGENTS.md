@@ -408,7 +408,9 @@ Full guide: `../docs/docs/apps/app-performance.md`. Load-bearing rules:
 
 Guide with the measurements: `../docs/docs/apps/native-apps.md`. Reference
 implementation: `c_mpos/breakout/` + `internal_filesystem/apps/com.micropythonos.breakout/`.
-Read this before writing another one.
+Read this before writing another one. App-specific case studies live in the
+app's own README and in `../docs/` (Duke: `c_mpos/duke3d/README.md`,
+`../docs/docs/apps/duke3d.md`); keep only the rules that transfer here.
 
 **Build**
 - Source in `c_mpos/<app>/`, Makefile includes `lvgl_micropython/lib/micropython/py/dynruntime.mk`, `ARCHES = x64 xtensawin`.
@@ -471,70 +473,41 @@ Read this before writing another one.
 - Doom is **one app, two engines** (`c_mpos/doom/`, `internal_filesystem/apps/com.micropythonos.doom/`): `_CoreEngine` starts the flash-resident core on `sys.platform == "esp32"`, `_NatmodEngine` imports `doom_x64.mpy` everywhere else (the xtensawin natmod is still built by `c_mpos/doom/Makefile` but no longer shipped: it cannot import on an S3). Everything above the engine is shared — surface sizing, pacing, touch zones, key mapping — because MPOS already unifies input (LVGL events) and output (`NativeDisplay`). A new engine goes behind the same seven methods (`surface_size`, `start`, `tick`, `key`, `resume`, `pause`, `stop`); don't duplicate the activity. `tick` means "advance and get this frame onto the surface, presenting bands", which is why the core can present from inside C while the natmod presents from Python. Only the core exports `audio_mix`, so the desktop build is silent (linking `core_sound.c` into the natmod is the step to take if that matters). The `.mpk` still carries `doom_x64.mpy` (360 KiB) for the desktop; a badge never imports it. See `../plans/native-doom-port-status.md`.
 - Engine ports are mostly a **writable-data** problem: a natmod has text/rodata/BSS but no data section and no `static` BSS, so every writable file-scope variable must become a non-static global with no initializer and its value set in an init call (`const` tables stay as they are). A core has a real BSS (the arena) but the same dataless rewrite is what keeps `.data` empty.
 
-**A second core: Duke Nukem 3D (`c_mpos/duke3d/`, app `com.micropythonos.duke3d`)**
-- It is the reference for a 1990s engine whose renderer is used as-is: worker
-  task (ABI 9), `NativeActivity` presentation, the compacted E1L1-4 GRP
-  inflated into a C-heap buffer (2.6 MB), a 1.9 MB arena and a 2.5 MB engine
-  heap. `c_mpos/duke3d/README.md` has the seams, `PERFORMANCE.md` the frames.
-- **An engine's off-screen views are a second size domain.** Duke's
-  `setviewtotile()` draws a mirror/tilt/thumbnail into a tile and sets the view
-  from the tile's dimensions: the shareware GRP declares a **128x400** mirror
-  and the tilt/thumbnail views ask for **320**. This port had `ylookup` at
-  `MAXYDIM+1` (241), `lastx` at `MAXYDIM` (240) and the per-column arrays at
-  `MAXXDIM+1` (321), so those views wrote/read past them into the engine's
-  globals (`ydim`, `xdim`, `tsprite`, then `globalhoriz`/`horizlookup2`) and
-  the next wall draw faulted in `hline`/`hlineasm4` - seen as
-  `LoadProhibited`, `LoadStoreError`, a rejected cache write, or a
-  divide-by-zero in `setaspect`, all one corruption. `ylookup` is now 1024
-  entries, the stores are bounded, and `setviewtotile()` clamps the view to
-  what the arrays hold. When porting an engine, audit every `setview`-like call
-  for a size that comes from an asset rather than the screen.
-- **`RG_PANIC` in this port was a log-only macro.** `allocache`'s "CACHE SPACE
-  ALL LOCKED UP"/"too many objects" path called `reportandexit` and then kept
-  going with an invalid best fit, writing past `cac[]`. It now `abort()`s (the
-  core's longjmp turns it into a clean quit with the reason logged), and
-  `allocache` recovers: clear stale locks (<200) and retry, then return NULL
-  and let `loadtile` give that one tile a **1x1 transparent stand-in**. A full
-  tile cache costs an invisible texture, not the app. Any port with a
-  `reportandexit`/`Error` macro must check whether it actually stops.
-- **A missing ART file is not a missing tile.** The compacted GRP has no
-  `tiles000.art`; the engine's fallback allocated the declared 128x400 (50 KB)
-  and handed the renderer a texture whose pixels were never loaded. It is now
-  1x1 transparent (dims and `picsiz` included). The GRP also carries PNG
-  overrides (`TILE0785.PNG`, ...) decoded by lodepng, and `loadpics` scans a
-  sparse ART set.
-- **The heap ladder and PSRAM fragmentation are the launch limit**, not a leak.
-  The engine needs three big blocks (GRP, arena, heap); repeated launches
-  shrink the heap from 2.5 MB to 512 KB because GC areas are never returned to
-  the IDF heap. Chunked GRP loads (512 KB buffers) let a 2.4 MB asset survive a
-  fragmented heap, and the core refuses a start below 768 KB with "restart the
-  badge".
-- **`tap_held()` is for state-sampled keys.** Duke's menu and next-weapon
-  actions read `KB_KeyDown` once a tic; `KeyHolds.tap()` (press and release in
-  one call) is invisible to them. `tap_held(code, 150)` keeps the key down for
-  one or two tics.
-- **Badge buttons are the action pad's labels**: joystick walk/turn, A fire,
-  B jump, X crouch (ESC, after `onBackPressed()` consumes the OS back), Y use,
-  START menu (END), MENU next weapon (HOME; `set_drawer_open_disabled()` while
-  playing). `NativeActivity.on_pointer()` forwards to `on_touch_finger(0, ...)`
-  and `CST816S.get_touches()` reports its one point, so one hook serves both
-  kinds of panel.
-- **Diagnostics that paid for themselves**: `/duke3d.log` rotates to
-  `/duke3d.prev.log` (a reset cannot close it), the first lines record
-  `machine.reset_cause()` and the PSRAM heap, the core logs
-  `engine/convert/present/wait`, tile decodes and heap free/largest every 5 s,
-  and the loader prints the core's log ring when start-up fails. A UART panic
-  dump plus the ELF (`xtensa-esp32-elf-addr2line -e
-  c_mpos/duke3d/build_core/duke_core.elf <addr>`) turns every "crash" into a
-  source line. `rst:0xc` is a panic/software reset, not a watchdog; this
-  build's TWDT does not check the idle tasks and does not panic.
-- A **sideloaded `.xip` on a nearly full filesystem defragments for minutes**
-  at first launch (1 MB free, a 570 KB extent). The AppStore install does that
-  at install time; for development, flash the blob into `retro-core` (0x710000)
-  and delete the app's `.xip`, and the app falls back to the partition.
-- **The start is occasionally `-11`-flaky right after a reset** (a fatal engine
-  start-up, not the game); relaunching after the OS settles works, and the
-  loader's ring dump names the reason when it is real.
+**A second core: Duke Nukem 3D (`c_mpos/duke3d/`, `com.micropythonos.duke3d`)**
+- Full case study: `c_mpos/duke3d/README.md` (renderer limits, allocator,
+  worker task) and `../docs/docs/apps/duke3d.md` (the app page). The upstream
+  tree has the same over-tall-view bug on its ESP32 profile; the analysis and
+  the patch to propose there are in `c_mpos/duke3d/UPSTREAM.md`.
+- **Off-screen views are a second size domain.** A `setview`-style call whose
+  size comes from an *asset* (a mirror tile declared 128x400, the 320-tall
+  tilt/thumbnail) can exceed every screen-sized table (`ylookup`, `lastx`,
+  `uwall`/`dwall`). Audit those calls in any engine: size the tables for the
+  largest view or clamp the view, and verify with a canary. Duke's corruption
+  surfaced as four different panics in `hline`/`hlineasm4`/`setaspect`; they
+  were one overflow.
+- **A `reportandexit`/`Error` macro must actually stop.** Duke's port had
+  `RG_PANIC` as a log call; its cache allocator then continued with an invalid
+  best fit and wrote past `cac[]`. It aborts now, and the allocator recovers:
+  clear stale locks and retry, then give that tile a 1x1 transparent stand-in.
+- **A missing ART file is not a missing tile**: give it a 1x1 transparent tile
+  (dimensions and `picsiz` included), not the declared 50 KB.
+- **The heap ladder and PSRAM fragmentation are the launch limit**, not a leak:
+  the engine needs GRP + arena + heap from the same PSRAM, repeated launches
+  shrink the heap because GC areas never return, so refuse a start below
+  768 KB with "restart the badge", and chunk a large asset when needed.
+- **`tap_held()` is for state-sampled keys** (a menu/next-weapon action reads
+  `KB_KeyDown` once a tic); `tap()` is for engines that act on the key event.
+- **Badge buttons:** the action pad's labels are the button map (joystick,
+  A/B/X/Y, START menu, MENU next weapon); `onBackPressed()` consumes the OS
+  back and `set_drawer_open_disabled()` keeps HOME out of the game.
+- **Diagnostics pay for themselves:** rotate the app log (a reset cannot close
+  it), log reset cause and heap at start, profile heap/tile-cache in the core,
+  and let the loader print the core's ring when a start fails. A UART panic
+  plus `addr2line -e c_mpos/duke3d/build_core/duke_core.elf` names the line;
+  `rst:0xc` is a panic, not a watchdog (this build's TWDT checks no idle task).
+- **A sideloaded `.xip` on a nearly full filesystem defragments for minutes**;
+  flash a development core to `retro-core` and drop the app's `.xip` instead.
+  The first start after a reset can be `-11`-flaky; a relaunch works.
 
 **Sound**
 - A piezo beep is a PWM channel whose frequency/duty are set per event and cleared by a deadline check every frame — never `AudioManager.player()`, which costs milliseconds and allocates.

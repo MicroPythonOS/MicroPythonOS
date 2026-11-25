@@ -181,6 +181,10 @@ Two more engine landmines:
   PNG overrides (`TILE0785.PNG`, ...) that `lodepng` decodes, and `loadpics`
   scans a sparse ART set.
 
+The upstream tree (`DukeNano3D/retro-go-for-DukeNano3D`, `components/duke3d/`)
+has the same over-tall-view bug on its ESP32 profile. `UPSTREAM.md` has the
+analysis, the reproduction and the patch to propose there.
+
 ## Audio
 
 The panels this targets (MaTouch, Waveshare) have no audio output. The engine
