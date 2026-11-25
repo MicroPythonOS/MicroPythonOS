@@ -7,6 +7,7 @@ progress, and the badge's joystick and buttons must send the action pad's own
 engine keys. The engine's own menu (START) is the way out.
 """
 
+import os
 import sys
 import time
 import unittest
@@ -160,6 +161,20 @@ class TestDuke3DButtons(unittest.TestCase):
              InputManager._drawer_open_cb) = saved
 
 
+class _FakeCore:
+    """Stands in for mpos_core's file_poll/file_reply handshake."""
+
+    def __init__(self, requests):
+        self.requests = list(requests)
+        self.replies = []
+
+    def file_poll(self):
+        return self.requests.pop(0) if self.requests else None
+
+    def file_reply(self, count, data=None):
+        self.replies.append((count, data))
+
+
 class _FakeDisplay:
     def __init__(self, width, height):
         self._width = width
@@ -214,6 +229,87 @@ class TestDuke3DSurfaceSize(unittest.TestCase):
     def test_a_panel_too_small_to_show_the_game_says_so(self):
         with self.assertRaises(RuntimeError):
             self._size(128, 96)
+
+
+class TestDuke3DHostFiles(unittest.TestCase):
+    """The engine's saves and config live on the host's filesystem.
+
+    The core runs on its own task and never enters MicroPython, so it hands a
+    file operation over (ABI 10) and the frame loop answers it.
+    """
+
+    DIR = "duke_files_test"
+    PREFS = DIR + "/com.micropythonos.duke3d"
+
+    def setUp(self):
+        try:
+            os.mkdir(self.DIR)
+        except OSError:
+            pass
+        try:
+            os.mkdir(self.PREFS)
+        except OSError:
+            pass
+        try:
+            os.mkdir(self.PREFS + "/duke3d")
+        except OSError:
+            pass
+        self.engine = _SurfaceEngine()
+        self.engine._config_dir = self.PREFS
+
+    def tearDown(self):
+        for name in ("duke3d.cfg", "duke3d/game0.sav"):
+            try:
+                os.remove(self.PREFS + "/" + name)
+            except OSError:
+                pass
+        try:
+            os.rmdir(self.PREFS + "/duke3d")
+        except OSError:
+            pass
+        try:
+            os.rmdir(self.PREFS)
+            os.rmdir(self.DIR)
+        except OSError:
+            pass
+
+    def _serve(self, *requests):
+        self.engine._core = _FakeCore(requests)
+        self.engine.serve_files()
+        return self.engine._core.replies[-1]
+
+    def test_the_engines_paths_land_in_the_apps_prefs(self):
+        self.assertEqual(self.engine._host_path("/config/duke3d.cfg"),
+                         self.PREFS + "/duke3d.cfg")
+        self.assertEqual(self.engine._host_path("/saves/duke3d/game0.sav"),
+                         self.PREFS + "/duke3d/game0.sav")
+
+    def test_a_save_is_written_and_read_back(self):
+        # The engine writes the version word first, then the blocks.
+        count, _data = self._serve((1, "/saves/duke3d/game0.sav", 0, 4, b"v119"))
+        self.assertEqual(count, 4)
+        count, _data = self._serve((1, "/saves/duke3d/game0.sav", 4, 3, b"abc"))
+        self.assertEqual(count, 3)
+        count, data = self._serve((0, "/saves/duke3d/game0.sav", 0, 16, None))
+        self.assertEqual((count, data), (7, b"v119abc"))
+        count, _data = self._serve((2, "/saves/duke3d/game0.sav", 0, 0, None))
+        self.assertEqual(count, 7)
+
+    def test_the_setup_file_is_written_too(self):
+        count, _data = self._serve((1, "/config/duke3d.cfg", 0, 5, b"hello"))
+        self.assertEqual(count, 5)
+        count, data = self._serve((0, "/config/duke3d.cfg", 1, 3, None))
+        self.assertEqual((count, data), (3, b"ell"))
+
+    def test_a_missing_file_is_reported_as_an_error(self):
+        count, data = self._serve((0, "/saves/duke3d/game1.sav", 0, 4, None))
+        self.assertEqual(count, -1)
+        self.assertIsNone(data)
+
+    def test_no_request_is_a_no_op(self):
+        self.engine._core = _FakeCore([])
+        self.engine.serve_files()
+        self.assertEqual(self.engine._core.replies, [])
 
 
 if __name__ == "__main__":

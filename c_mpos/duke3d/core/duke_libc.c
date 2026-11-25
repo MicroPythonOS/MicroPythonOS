@@ -676,6 +676,17 @@ static void clean_path(const char *path, char *out) {
     out[i] = '\0';
 }
 
+// Host files (ABI 10): the engine's config and savegames live on the host's
+// filesystem. The host serves a request from its own frame loop and this task
+// waits, because it must never enter the host's runtime itself.
+static int host_file(int op, const char *path, uint32_t offset, void *data,
+                     uint32_t len) {
+    if (s_abi == NULL || s_abi->version < 10 || s_abi->file_request == NULL) {
+        return -1;
+    }
+    return s_abi->file_request(s_abi->host, op, path, offset, len, data);
+}
+
 static core_file_t *file_open(const char *path, int writable) {
     if (s_abi == NULL || path == NULL) return NULL;
     if (strlen(path) >= CORE_FILE_PATH) return NULL;
@@ -685,6 +696,10 @@ static core_file_t *file_open(const char *path, int writable) {
         core_file_t *file = &s_files[i];
         if (file->used) continue;
         int size = writable ? 0 : s_abi->file_size(s_abi->host, clean);
+        if (!writable && size < 0) {
+            // Not the asset: a savegame, the engine's setup file.
+            size = host_file(MPOS_CORE_FILE_SIZE, clean, 0, NULL, 0);
+        }
         if (!writable && size < 0) return NULL;
         file->used = 1;
         file->writable = writable;
@@ -731,6 +746,10 @@ ssize_t read(int fd, void *buf, size_t count) {
     if (count > left) count = left;
     int got = s_abi->read_file(s_abi->host, file->path,
                                (uint32_t)file->offset, buf, (uint32_t)count);
+    if (got < 0) {
+        got = host_file(MPOS_CORE_FILE_READ, file->path,
+                        (uint32_t)file->offset, buf, (uint32_t)count);
+    }
     if (got <= 0) return got < 0 ? -1 : 0;
     file->offset += got;
     return got;
@@ -738,8 +757,13 @@ ssize_t read(int fd, void *buf, size_t count) {
 
 ssize_t write(int fd, const void *buf, size_t count) {
     core_file_t *file = file_for(fd);
-    (void)buf;
     if (file == NULL || !file->writable) return -1;
+    // A savegame goes to the host's filesystem, which only the host's task may
+    // touch: this hands the block over and waits for it to land. A host older
+    // than ABI 10 has no such callback, and the write is then only accounted
+    // for, which is what every previous build did.
+    host_file(MPOS_CORE_FILE_WRITE, file->path, (uint32_t)file->offset,
+              (void *)buf, (uint32_t)count);
     file->offset += (long)count;
     if (file->offset > file->size) file->size = file->offset;
     return (long)count;

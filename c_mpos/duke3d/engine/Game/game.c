@@ -7858,14 +7858,9 @@ static void apply_sound_overrides_from_def(void)
             if (def_parse_int_value(braceOpen, braceClose, "distance", &distance))
                 soundvo[soundId] = (short)distance;
 
-            RG_LOGD("duke3d.def: sound override applied id=%d file='%s' min=%d max=%d prio=%u type=%u dist=%d",
-                   soundId,
-                   sounds[soundId],
-                   (int)soundps[soundId],
-                   (int)soundpe[soundId],
-                   (unsigned)soundpr[soundId],
-                   (unsigned)soundm[soundId],
-                   (int)soundvo[soundId]);
+            // Per-entry logging is 30+ lines of start-up noise in a 48-line
+            // log ring, which then loses the line that matters; the count below
+            // says the same thing.
             overrideCount++;
 
             scan = braceClose + 1;
