@@ -93,6 +93,23 @@ class KeyHolds:
         self._send(code, True)
         self._send(code, False)
 
+    def tap_held(self, code, hold_ms=None):
+        """Press now, release after ``hold_ms`` (one engine tic by default).
+
+        The other half of :meth:`tap`. An engine that samples its keys once a
+        tic - Duke's menu and next-weapon actions read ``KB_KeyDown`` in
+        ``getinput`` - sees nothing at all when the press and the release
+        arrive in the same frame, because both are drained before the tic is
+        built. Keeping the key down for one tic makes the edge visible without
+        the repeat a plain :meth:`hold` would cause.
+        """
+        if hold_ms is None:
+            hold_ms = self.min_hold_ms
+        now = time.ticks_ms()
+        if code not in self._held:
+            self._send(code, True)
+        self._held[code] = [time.ticks_add(now, hold_ms), None, now]
+
     def release(self, code):
         if code in self._held:
             self._send(code, False)

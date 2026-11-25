@@ -244,6 +244,39 @@ class TestKeyHoldsState(unittest.TestCase):
         self.assertFalse(hold.is_held(1))
 
 
+class TestKeyHoldsTap(unittest.TestCase):
+    """A menu key has to survive the tic the engine samples it in.
+
+    ``tap()`` is for engines that act on the key *event*; an engine that reads
+    its key state once a tic (Duke's ``getinput``) sees nothing when the press
+    and the release are drained in the same frame.
+    """
+
+    def setUp(self):
+        self.keys = []
+        self.hold = KeyHolds(
+            lambda code, pressed: self.keys.append((code, pressed)))
+
+    def test_a_tap_survives_a_tick_and_then_releases(self):
+        self.hold.tap_held(9)
+        self.assertEqual(self.keys, [(9, True)])
+        self.hold.tick(time.ticks_ms())
+        self.assertTrue(self.hold.is_held(9), "the key must reach the engine tic")
+        self.hold.tick(time.ticks_add(time.ticks_ms(), self.hold.min_hold_ms + 1))
+        self.assertFalse(self.hold.is_held(9))
+        self.assertEqual(self.keys, [(9, True), (9, False)])
+
+    def test_a_tap_can_be_given_a_longer_hold(self):
+        self.hold.tap_held(9, hold_ms=500)
+        self.hold.tick(time.ticks_add(time.ticks_ms(), 100))
+        self.assertTrue(self.hold.is_held(9))
+
+    def test_an_event_tap_still_releases_at_once(self):
+        self.hold.tap(9)
+        self.assertEqual(self.keys, [(9, True), (9, False)])
+        self.assertFalse(self.hold.is_held(9))
+
+
 class FakeKeypad:
     def __init__(self, keys=()):
         self.keys = keys
