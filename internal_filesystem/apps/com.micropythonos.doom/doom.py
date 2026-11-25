@@ -692,6 +692,16 @@ class Doom(NativeActivity):
     # When the menu band went down, for the licenses long press.
     _menu_since = 0
 
+    def onBackPressed(self, screen):
+        """Keep the OS's back from ending a game in progress.
+
+        A fri3d 2024 badge sends its X button as ESC and its board driver also
+        calls ``back_screen()`` for it, so without this the X button would
+        close the game the first time it is pressed; the engine's own menu
+        (X or Y, then Quit) is the way out.
+        """
+        return True
+
     # -- engine -----------------------------------------------------------
 
     def make_engine(self):
