@@ -562,10 +562,26 @@ class Duke3D(NativeActivity):
     hint_ms = TOUCH_HINT_MS
     # The GT911 reports five points, so both thumbs get their own finger.
     touch_fingers = True
+    # The walking stick starts at the left edge and the action pad reaches the
+    # top one, so the OS's edge swipes would steal both: the same opt-out Doom
+    # makes, through the attribute the view reads for the foreground activity.
+    system_gestures_enabled = False
     # No audio output on the panels this engine targets; the core's mixer is a
     # silent stub (see c_mpos/duke3d/core/duke_audio.c).
     audio_rate = None
     screen_transition_ms = 0
+
+    def onBackPressed(self, screen):
+        """Keep the OS's back from ending a game in progress.
+
+        A badge maps its back key to ESC (the expander's X) and the desktop
+        uses Esc; either would close the activity and lose the level. The way
+        out is the engine's own menu (the START touch control), whose Quit sets
+        ``engine.quit`` and closes the activity through ``_leave()``. Returning
+        True consumes back for as long as this activity is foreground; no
+        global state has to be restored afterwards.
+        """
+        return True
 
     def onCreate(self):
         _debug("onCreate")
