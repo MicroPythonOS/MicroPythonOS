@@ -92,9 +92,15 @@ static int core_init(const mpos_core_abi_t *abi, const char *asset_name,
 
     // The engine's heap, outside the arena so its globals keep the addresses
     // they were linked at. Try the full size, then smaller: the tile cache
-    // adapts to whatever is left.
+    // adapts to whatever is left, so a fragmented PSRAM should cost texture
+    // reloads, not a launch. The ladder goes a long way down on purpose - on a
+    // board whose PSRAM is split into 2-3 MB blocks by the host's own heaps,
+    // 1.5 MB is often already too much after the arena and the GRP have taken
+    // a block each.
     static const uint32_t sizes[] = {HEAP_BYTES, 2560u * 1024u, 2048u * 1024u,
-                                     1536u * 1024u};
+                                     1536u * 1024u, 1024u * 1024u,
+                                     768u * 1024u, 640u * 1024u,
+                                     512u * 1024u};
     s_heap = NULL;
     for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
         s_heap = abi->alloc(abi->host, sizes[i]);

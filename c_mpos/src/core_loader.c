@@ -167,7 +167,13 @@ static size_t s_buffer_bytes;
 
 // The asset a worker core reads: an ordinary buffer the app allocated, served
 // by the loader's read_file so the engine never asks Python for a byte.
-static void *s_asset;
+// The asset, in one buffer or in several. A GRP is 2.4 MiB and a fragmented
+// heap may not have that in one piece; a handful of 512 KiB buffers is easy to
+// find, and a read that crosses a boundary costs one extra memcpy.
+#define MPOS_CORE_ASSET_CHUNKS 16
+static const uint8_t *s_asset_chunks[MPOS_CORE_ASSET_CHUNKS];
+static uint32_t s_asset_chunk_size[MPOS_CORE_ASSET_CHUNKS];
+static uint32_t s_asset_chunk_count;
 static uint32_t s_asset_size;
 static char s_asset_name[MPOS_CORE_ASSET_NAME];
 static char s_wad_path[MPOS_CORE_PATH_CHARS];
@@ -478,7 +484,7 @@ static int worker_poll_key(void *host, int *pressed) {
 static int worker_read_file(void *host, const char *path, uint32_t offset,
                             void *dst, uint32_t len) {
     (void)host;
-    if (s_asset == NULL || path == NULL || dst == NULL
+    if (s_asset_chunk_count == 0 || path == NULL || dst == NULL
             || strcmp(path, s_asset_name) != 0) {
         return -1;
     }
@@ -489,13 +495,30 @@ static int worker_read_file(void *host, const char *path, uint32_t offset,
     if (count > len) {
         count = len;
     }
-    memcpy(dst, (const uint8_t *)s_asset + offset, count);
-    return (int)count;
+    // Walk to the chunk that holds the first byte, then copy across as many
+    // chunks as the read needs.
+    uint32_t index = 0;
+    uint32_t skip = offset;
+    while (index < s_asset_chunk_count && skip >= s_asset_chunk_size[index]) {
+        skip -= s_asset_chunk_size[index];
+        index++;
+    }
+    uint32_t done = 0;
+    while (done < count && index < s_asset_chunk_count) {
+        uint32_t available = s_asset_chunk_size[index] - skip;
+        uint32_t take = (count - done) < available ? (count - done) : available;
+        memcpy((uint8_t *)dst + done, s_asset_chunks[index] + skip, take);
+        done += take;
+        skip = 0;
+        index++;
+    }
+    return (int)done;
 }
 
 static int worker_file_size(void *host, const char *path) {
     (void)host;
-    if (s_asset == NULL || path == NULL || strcmp(path, s_asset_name) != 0) {
+    if (s_asset_chunk_count == 0 || path == NULL
+            || strcmp(path, s_asset_name) != 0) {
         return -1;
     }
     return (int)s_asset_size;
@@ -1017,7 +1040,7 @@ static void release_task_memory(void) {
         s_task_exit = NULL;
     }
     s_buffer_bytes = 0;
-    s_asset = NULL;
+    s_asset_chunk_count = 0;
     s_asset_size = 0;
     s_asset_name[0] = '\0';
     s_wad_path[0] = '\0';
@@ -1130,16 +1153,38 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
                      MP_ERROR_TEXT("no memory for the core's input and log rings"));
     }
 
-    // The asset: an ordinary buffer the app allocated, sliced by the loader.
+    // The asset: the app's buffer (or a list of them, which is how an asset
+    // too big for one block is carried), sliced by the loader.
     if (parsed[ARG_asset].u_obj != mp_const_none) {
-        mp_buffer_info_t info;
-        if (!mp_get_buffer(parsed[ARG_asset].u_obj, &info, MP_BUFFER_READ)) {
-            release_task_memory();
-            core_release();
-            mp_raise_TypeError(MP_ERROR_TEXT("asset must be a buffer"));
+        size_t chunk_count = 0;
+        mp_obj_t *chunks = NULL;
+        mp_obj_t asset = parsed[ARG_asset].u_obj;
+        if (mp_obj_is_type(asset, &mp_type_list)
+                || mp_obj_is_type(asset, &mp_type_tuple)) {
+            mp_obj_get_array(asset, &chunk_count, &chunks);
+            if (chunk_count == 0 || chunk_count > MPOS_CORE_ASSET_CHUNKS) {
+                release_task_memory();
+                core_release();
+                mp_raise_ValueError(
+                    MP_ERROR_TEXT("asset needs 1 to 16 chunk buffers"));
+            }
+        } else {
+            chunk_count = 1;
+            chunks = &asset;
         }
-        s_asset = info.buf;
-        s_asset_size = (uint32_t)info.len;
+        s_asset_size = 0;
+        for (size_t i = 0; i < chunk_count; i++) {
+            mp_buffer_info_t info;
+            if (!mp_get_buffer(chunks[i], &info, MP_BUFFER_READ)) {
+                release_task_memory();
+                core_release();
+                mp_raise_TypeError(MP_ERROR_TEXT("asset must be a buffer"));
+            }
+            s_asset_chunks[i] = (const uint8_t *)info.buf;
+            s_asset_chunk_size[i] = (uint32_t)info.len;
+            s_asset_size += (uint32_t)info.len;
+        }
+        s_asset_chunk_count = (uint32_t)chunk_count;
         copy_path(s_asset_name, sizeof(s_asset_name), parsed[ARG_asset_name].u_obj);
         if (s_asset_name[0] == '\0') {
             release_task_memory();

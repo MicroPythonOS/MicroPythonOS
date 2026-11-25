@@ -1,6 +1,7 @@
 import unittest
 
-from mpos.zipasset import ZipAssetError, entries, entry_size, load
+from mpos.zipasset import (
+    ZipAssetError, entries, entry_size, load, load_chunks)
 
 FIXTURES = "../tests/zipasset"
 PAYLOAD = bytes((i * 13 + 7) & 0xFF for i in range(20000))
@@ -36,6 +37,45 @@ class TestZipAsset(unittest.TestCase):
         load(FIXTURES + "/asset_deflated.zip", progress=progress)
         self.assertEqual(seen[-1][0], len(PAYLOAD))
         self.assertEqual(seen[-1][1], len(PAYLOAD))
+
+    def test_loads_into_chunks(self):
+        # A 2.4 MiB asset will not always fit one contiguous block; the same
+        # data in chunks has to come out identical, including a read that
+        # crosses a chunk boundary.
+        chunks, size = load_chunks(FIXTURES + "/asset_deflated.zip",
+                                   chunk_size=4096)
+        self.assertEqual(size, len(PAYLOAD))
+        self.assertTrue(len(chunks) > 1, "the fixture has to span chunks")
+        self.assertEqual(b"".join(chunks), PAYLOAD)
+        self.assertTrue(all(len(c) == 4096 for c in chunks[:-1]),
+                        "every chunk but the last is full")
+
+    def test_chunks_can_be_allocated_by_the_caller(self):
+        sizes = []
+
+        def alloc(size):
+            sizes.append(size)
+            return bytearray(size)
+
+        chunks, size = load_chunks(FIXTURES + "/asset_stored.zip",
+                                   chunk_size=8192, alloc=alloc)
+        self.assertEqual(sum(sizes), len(PAYLOAD))
+        self.assertEqual(b"".join(chunks), PAYLOAD)
+
+    def test_a_chunked_load_fails_the_crc_like_a_whole_one(self):
+        with open(FIXTURES + "/asset_deflated.zip", "rb") as handle:
+            data = bytearray(handle.read())
+        # Corrupt the deflate payload, not the headers.
+        data[60] ^= 0xFF
+        broken = "/tmp/zipasset_broken.zip"
+        with open(broken, "wb") as handle:
+            handle.write(data)
+        try:
+            with self.assertRaises(ZipAssetError):
+                load_chunks(broken, chunk_size=4096)
+        finally:
+            import os
+            os.remove(broken)
 
     def test_loads_into_a_caller_supplied_buffer(self):
         # A host that keeps the asset in C-heap memory (mpos_core.buffer)

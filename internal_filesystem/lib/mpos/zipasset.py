@@ -193,3 +193,105 @@ def _read_deflated(archive, buffer, progress):
     if done != len(buffer):
         raise ZipAssetError("entry is shorter than its declared size (%d of %d)"
                             % (done, len(buffer)))
+
+
+def load_chunks(path, entry=None, progress=None, chunk_size=512 * 1024,
+                alloc=None):
+    """Inflate ``entry`` into a list of buffers and return ``(chunks, size)``.
+
+    The asset is one read-only blob read at random offsets, so it does not have
+    to live in one piece: five 512 KiB buffers are far easier to find in a
+    fragmented heap than one 2.5 MiB one, and a caller that reads it chunk by
+    chunk pays nothing measurable for it.
+
+    ``alloc(size)`` makes each chunk (the default is a ``bytearray``); a caller
+    that keeps the asset outside the GC passes ``mpos_core.buffer``. The last
+    chunk is short.
+    """
+    try:
+        with open(path, "rb") as archive:
+            wanted = _find(archive, entry)
+            if wanted is None:
+                raise ZipAssetError("%s: no entry %s" % (path, entry or "<first>"))
+            size = wanted["uncompressed_size"]
+            if size <= 0:
+                raise ZipAssetError("%s: entry %s has no declared size"
+                                    % (path, wanted["name"]))
+            if chunk_size <= 0:
+                raise ZipAssetError("chunk_size must be positive")
+            make = alloc if alloc is not None else bytearray
+            chunks = []
+            left = size
+            while left > 0:
+                want = chunk_size if left > chunk_size else left
+                chunks.append(make(want))
+                left -= want
+            if wanted["method"] == ZIP_STORED:
+                _read_stored_chunks(archive, chunks, progress)
+            elif wanted["method"] == ZIP_DEFLATED:
+                _read_deflated_chunks(archive, chunks, size, progress)
+            else:
+                raise ZipAssetError("%s: unsupported compression method %d"
+                                    % (path, wanted["method"]))
+    except ZipAssetError:
+        raise
+    except Exception as error:
+        raise ZipAssetError("%s: %s" % (path, error))
+
+    crc = 0
+    for chunk in chunks:
+        crc = binascii.crc32(chunk, crc) & 0xFFFFFFFF
+    if wanted["crc"] != 0 and crc != wanted["crc"]:
+        raise ZipAssetError("%s: %s failed its CRC (expected %08x, got %08x)"
+                            % (path, wanted["name"], wanted["crc"], crc))
+    return chunks, size
+
+
+def _read_stored_chunks(archive, chunks, progress):
+    done = 0
+    total = 0
+    for chunk in chunks:
+        total += len(chunk)
+    for chunk in chunks:
+        view = memoryview(chunk)
+        filled = 0
+        while filled < len(chunk):
+            piece = archive.read(min(_READ_CHUNK, len(chunk) - filled))
+            if not piece:
+                raise ZipAssetError("truncated entry")
+            view[filled:filled + len(piece)] = piece
+            filled += len(piece)
+            done += len(piece)
+            if progress is not None:
+                progress(done, total)
+
+
+def _read_deflated_chunks(archive, chunks, size, progress):
+    try:
+        import deflate
+    except ImportError:
+        raise ZipAssetError("this firmware cannot inflate assets")
+    stream = deflate.DeflateIO(archive, deflate.RAW, 15)
+    done = 0
+    try:
+        for chunk in chunks:
+            view = memoryview(chunk)
+            filled = 0
+            while filled < len(chunk):
+                count = stream.readinto(view[filled:])
+                if not count:
+                    break
+                filled += count
+                done += count
+            if filled < len(chunk):
+                break
+            if progress is not None:
+                progress(done, size)
+    finally:
+        try:
+            stream.close()
+        except Exception:
+            pass
+    if done != size:
+        raise ZipAssetError("entry is shorter than its declared size (%d of %d)"
+                            % (done, size))

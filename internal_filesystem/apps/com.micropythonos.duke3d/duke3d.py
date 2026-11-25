@@ -192,6 +192,7 @@ def _asset_buffer(size):
 
 
 def _free_asset_buffer(buffer):
+    """Release the GRP, whether it is one buffer or a list of chunks."""
     if buffer is None:
         return
     try:
@@ -201,10 +202,36 @@ def _free_asset_buffer(buffer):
     free = getattr(mpos_core, "buffer_free", None)
     if free is None:
         return
-    try:
-        free(buffer)
-    except Exception as error:
-        print("duke3d: cannot free the GRP buffer: %s" % (error,))
+    parts = buffer if isinstance(buffer, (list, tuple)) else (buffer,)
+    for part in parts:
+        try:
+            free(part)
+        except Exception as error:
+            print("duke3d: cannot free the GRP buffer: %s" % (error,))
+
+
+# 512 KiB chunks: a fragmented heap can find five of those where it cannot find
+# one 2.4 MiB block, which is what made a launch fail after the OS had grown.
+GRP_CHUNK = 512 * 1024
+
+
+def _asset_read(asset, offset, count):
+    """``count`` bytes of the asset at ``offset``, one buffer or many."""
+    if not isinstance(asset, (list, tuple)):
+        return asset[offset:offset + count]
+    out = bytearray()
+    for chunk in asset:
+        if offset >= len(chunk):
+            offset -= len(chunk)
+            continue
+        take = len(chunk) - offset
+        if take > count - len(out):
+            take = count - len(out)
+        out += chunk[offset:offset + take]
+        offset = 0
+        if len(out) >= count:
+            break
+    return out
 
 
 def prepare_grp(loading):
@@ -231,7 +258,14 @@ def prepare_grp(loading):
         buffer, size = zipasset.load(archive, progress=progress, buffer=buffer)
     except Exception:
         _free_asset_buffer(buffer)
-        raise
+        # One contiguous block is the fast path; when it does not fit, take the
+        # same asset in chunks rather than failing the launch.
+        try:
+            return zipasset.load_chunks(
+                archive, progress=progress, chunk_size=GRP_CHUNK,
+                alloc=_asset_buffer)
+        except Exception:
+            raise
     return buffer, size
 
 
@@ -481,7 +515,7 @@ class _CoreEngine:
             count = self._grp_size - offset
             if count > len(into):
                 count = len(into)
-            into[:count] = self._grp[offset:offset + count]
+            into[:count] = _asset_read(self._grp, offset, count)
             return count
         return -1
 
@@ -610,7 +644,10 @@ class Duke3D(NativeActivity):
         except Exception as error:
             print("duke3d: prepare failed: %s" % (error,))
             sys.print_exception(error)
-            self.show_message("Duke Nukem 3D cannot start:\n%s" % (error,))
+            self._release_grp()
+            self.show_message(
+                "Duke Nukem 3D cannot start.\n\n%s\n\n"
+                "Restart the badge, then launch it again." % (error,))
             return False
         self._loading("Starting the engine")
         self.engine.progress = self._extent_progress
@@ -619,10 +656,24 @@ class Duke3D(NativeActivity):
             self._overlay = TouchOverlay(self)
             self._overlay_until = time.ticks_add(time.ticks_ms(), 6000)
         except Exception as error:
+            # Do not leave the loading message on screen for ever, and do not
+            # keep 2.4 MB of GRP that nothing is going to read: say what went
+            # wrong and give the memory back, so leaving and retrying works.
             print("duke3d: engine start failed: %s" % (error,))
             sys.print_exception(error)
-            raise
+            self._release_grp()
+            self.show_message(
+                "Duke Nukem 3D could not start.\n\n%s\n\n"
+                "The engine needs a large block of free memory. Restart the "
+                "badge, then launch it again." % (error,))
+            return False
         return True
+
+    def _release_grp(self):
+        if self._grp is not None:
+            buffer, _size = self._grp
+            _free_asset_buffer(buffer)
+            self._grp = None
 
     def on_resumed(self):
         self._touch.release_all()
@@ -666,10 +717,7 @@ class Duke3D(NativeActivity):
         except Exception:
             pass
         super().onStop(screen)
-        if self._grp is not None:
-            buffer, _size = self._grp
-            _free_asset_buffer(buffer)
-            self._grp = None
+        self._release_grp()
         if _DEBUG_LOG is not None:
             try:
                 _DEBUG_LOG.close()
