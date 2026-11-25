@@ -131,7 +131,7 @@ void duke_platform_frame_presented(void) {
     }
     const uint32_t elapsed = now - s_profile_start_ms;
     if (elapsed >= 5000 && s_frames > 1) {
-        char line[120];
+        char line[168];
         snprintf(line, sizeof(line),
                  "duke: %u frames in %u ms (%.1f fps), engine %.1f, convert %.1f, present %.1f, wait %.1f",
                  (unsigned)s_frames, (unsigned)elapsed,
@@ -143,7 +143,9 @@ void duke_platform_frame_presented(void) {
         int decodes = mpos_duke_tile_decodes;
         mpos_duke_tile_decodes = 0;
         snprintf(line + strlen(line), sizeof(line) - strlen(line),
-                 ", tile decodes %d", decodes);
+                 ", tile decodes %d, heap %u/%u KB", decodes,
+                 (unsigned)(mpos_heap_free() / 1024),
+                 (unsigned)(mpos_heap_largest() / 1024));
         s_abi->log(s_abi->host, line);
         s_frames = 0;
         s_present_ms = 0;

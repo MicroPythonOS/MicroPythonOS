@@ -8,6 +8,7 @@ engine keys. The engine's own menu (START) is the way out.
 """
 
 import sys
+import time
 import unittest
 
 import lvgl as lv
@@ -109,14 +110,34 @@ class TestDuke3DButtons(unittest.TestCase):
                              "wrong engine key for %r" % (key,))
 
     def test_start_is_the_menu_and_menu_is_next_weapon(self):
-        # Both are event-driven, so they tap instead of holding: a held menu
-        # key would open and close the engine's menu ten times a second.
+        # Both are sampled by the engine once a tic, so the press has to stay
+        # down for at least one tic; the release comes from the frame loop.
         self.activity.on_key_event(lv.KEY.END)
-        self.activity.on_key_event(lv.KEY.HOME)
+        self.assertEqual(self.engine.keys, [(duke3d.KEY_MENU, True)])
+        self.activity.holds.tick(
+            time.ticks_add(time.ticks_ms(), duke3d.MENU_TAP_MS + 1))
         self.assertEqual(self.engine.keys, [
-            (duke3d.KEY_MENU, True), (duke3d.KEY_MENU, False),
-            (duke3d.KEY_WEAPON, True), (duke3d.KEY_WEAPON, False),
-        ])
+            (duke3d.KEY_MENU, True), (duke3d.KEY_MENU, False)])
+        del self.engine.keys[:]
+
+        self.activity.on_key_event(lv.KEY.HOME)
+        self.assertEqual(self.engine.keys, [(duke3d.KEY_WEAPON, True)])
+        self.activity.holds.tick(
+            time.ticks_add(time.ticks_ms(), duke3d.MENU_TAP_MS + 1))
+        self.assertEqual(self.engine.keys, [
+            (duke3d.KEY_WEAPON, True), (duke3d.KEY_WEAPON, False)])
+
+    def test_the_touch_pad_taps_a_menu_key_through_the_held_tap(self):
+        # The pad's START/MENU cells have the same problem as the physical
+        # buttons: press and release in one frame is invisible to the engine.
+        tapped = []
+        sent = []
+        touch = duke3d.DukeTouch(
+            lambda code, pressed: sent.append((code, pressed)),
+            tap=lambda code: tapped.append(code))
+        touch.pressed(0, 200, 180)  # the START cell: bottom row, left
+        self.assertEqual(tapped, [duke3d.KEY_MENU])
+        self.assertEqual(sent, [])
 
     def test_the_menu_button_does_not_open_the_os_drawer(self):
         activity = duke3d.Duke3D()

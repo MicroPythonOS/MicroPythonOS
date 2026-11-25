@@ -68,8 +68,11 @@ SELFTEST_PATH = "/duke3d_selftest"
 ON_TASK_PATH = "/duke3d_on_task"
 # A run's log, on the device's filesystem. The console is a serial port that
 # nobody is reading while the badge is held in a hand, so the one place a
-# post-mortem can be found is here. Truncated at every start.
+# post-mortem can be found is here. The previous run's log is kept as
+# ``DEBUG_LOG_PREV_PATH``: a crash cannot close this one, and launching the app
+# again must not erase the evidence.
 DEBUG_LOG_PATH = "/duke3d.log"
+DEBUG_LOG_PREV_PATH = "/duke3d.prev.log"
 
 _DEBUG_LOG = None
 
@@ -85,13 +88,37 @@ def _debug(text):
 
 
 def _open_debug_log():
-    """Open the run log unbuffered, so a probe can read it while it is open."""
+    """Open a fresh run log, keeping the previous one for a post-mortem."""
+    try:
+        os.remove(DEBUG_LOG_PREV_PATH)
+    except OSError:
+        pass
+    try:
+        os.rename(DEBUG_LOG_PATH, DEBUG_LOG_PREV_PATH)
+    except OSError:
+        pass
     for kwargs in ({"buffering": 0}, {}):
         try:
             return open(DEBUG_LOG_PATH, "w", **kwargs)
         except Exception:
             continue
     return None
+
+
+def _log_run_start():
+    """What the previous boot ended in, and how much memory this one has."""
+    try:
+        import machine
+        _debug("run: reset cause %s" % (machine.reset_cause(),))
+    except Exception:
+        pass
+    try:
+        import esp32
+        heaps = esp32.idf_heap_info(esp32.HEAP_DATA)
+        biggest = max(heaps, key=lambda heap: heap[0])
+        _debug("run: free %d, largest block %d" % (biggest[1], biggest[2]))
+    except Exception:
+        pass
 
 GAME_WIDTH = 320
 GAME_HEIGHT = 200
@@ -120,6 +147,12 @@ GRP_ZIP_NAME = "E1L1-4_compromise.grp.zip"
 
 HINT_TEXT = "Hold sideways: left is walk/turn, right is the action pad"
 TOUCH_HINT_MS = 8000
+
+# A menu key is sampled by the engine once a tic. A busy frame can stretch the
+# presenter's frame past the default one-tic hold, so keep the key down long
+# enough for the next tic to see it; the engine clears ESC after it acts, and a
+# weapon switch keeps weapon_pos away from 0, so neither repeats.
+MENU_TAP_MS = 150
 
 # The engine's task. Core 0 is the one the MicroPython task (core 1) leaves
 # alone; see c_mpos/duke3d/PERFORMANCE.md for what the two cores cost each
@@ -636,15 +669,20 @@ class Duke3D(NativeActivity):
         elif key in (ord("Y"), ord("y")):
             self.holds.hold(KEY_USE, key)
         elif key == lv.KEY.END:
-            self.holds.tap(KEY_MENU)
+            # The engine samples its menu key once a tic: press and release in
+            # one frame would cancel out before it reads the key.
+            self.holds.tap_held(KEY_MENU, MENU_TAP_MS)
         elif key == lv.KEY.HOME:
-            self.holds.tap(KEY_WEAPON)
+            self.holds.tap_held(KEY_WEAPON, MENU_TAP_MS)
 
     def onCreate(self):
         _debug("onCreate")
         # These are created before the base class can deliver a touch or ask
-        # for an engine.
-        self._touch = DukeTouch(self.key)
+        # for an engine. The tap callback is looked up at call time: the key
+        # holds it needs are created by the base class's onCreate().
+        self._touch = DukeTouch(
+            self.key,
+            lambda code: self.holds.tap_held(code, MENU_TAP_MS))
         self._overlay = None
         self._overlay_until = 0
         self._grp = None
@@ -714,6 +752,7 @@ class Duke3D(NativeActivity):
     def start_engine(self, surface):
         global _DEBUG_LOG
         _DEBUG_LOG = _open_debug_log()
+        _log_run_start()
         # A collect cannot hand a heap *area* back to the IDF heap, so it will
         # not make room for the engine's own blocks. It does stop the Python
         # side from growing: a large allocation triggers a new GC area, and

@@ -66,11 +66,16 @@ def button_rect(column, row):
 class DukeTouch:
     """Fingers -> engine keys, with one owner per stick direction and button."""
 
-    def __init__(self, send):
+    def __init__(self, send, tap=None):
         self._send = send
+        self._tap = tap if tap is not None else self._tap_at_once
         self._fingers = {}
         self._owners = {}
         self.last = None
+
+    def _tap_at_once(self, code):
+        self._send(code, True)
+        self._send(code, False)
 
     def pressed(self, finger, x, y):
         state = self._fingers.get(finger)
@@ -91,8 +96,9 @@ class DukeTouch:
                 if hold:
                     self._send(key, True)
                 else:
-                    self._send(key, True)
-                    self._send(key, False)
+                    # A menu key is sampled by the engine once a tic, so it
+                    # cannot be pressed and released in the same frame.
+                    self._tap(key)
                 self.last = label
                 return label
         return None
