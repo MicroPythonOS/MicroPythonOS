@@ -633,16 +633,23 @@ class _CoreEngine:
             if op == 0:
                 with open(real, "rb") as handle:
                     handle.seek(offset)
-                    count = handle.readinto(buffer)
+                    got = handle.readinto(buffer)
+                count = 0 if got is None else got
             elif op == 1:
                 # offset 0 is a new file; later offsets append into the one the
                 # engine just created.
-                with open(real, "wb" if offset == 0 else "r+b") as handle:
-                    handle.seek(offset)
-                    count = handle.write(buffer)
+                if buffer is None:
+                    count = 0
+                else:
+                    with open(real, "wb" if offset == 0 else "r+b") as handle:
+                        handle.seek(offset)
+                        count = handle.write(buffer)
             else:
                 count = os.stat(real)[6]
-        except OSError as error:
+        except Exception as error:
+            # Whatever goes wrong here must still answer the core: it is
+            # blocked until this returns, and a request that is never answered
+            # costs the engine its 10 s timeout and a corrupt save.
             _debug("file %s failed: %r" % (path, error))
             count = -1
         reply(count)

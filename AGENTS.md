@@ -492,6 +492,35 @@ app's own README and in `../docs/` (Duke: `c_mpos/duke3d/README.md`,
   clear stale locks and retry, then give that tile a 1x1 transparent stand-in.
 - **A missing ART file is not a missing tile**: give it a 1x1 transparent tile
   (dimensions and `picsiz` included), not the declared 50 KB.
+- **An ART entry that cannot be *read* is cosmetic too.** The compacted GRP
+  lists tiles it does not hold; `loadtile()` used to `RG_PANIC` on the short
+  read, so one image ended the launch (`core init failed: -11`, which the app
+  reported as a hang at "Loading..."). Zero the whole tile and carry on - a
+  *partial* read must not be kept, or the sky shows as red/orange stripes.
+- **A worker core cannot touch the filesystem, so the host serves it (ABI 10).**
+  The core publishes `file_request(read/write/size)` and blocks (10 s cap); the
+  activity answers from its frame loop through `mpos_core.file_poll()` /
+  `file_reply()` and maps the engine's virtual paths (`/config`, `/saves`)
+  under the app's prefs. Give the core's own buffer to Python **by reference**
+  (`mp_obj_new_bytearray_by_ref`) and use `write()` / `readinto()`: a copy of a
+  100 KB block grows the GC heap by an *area* that is never returned, which is
+  ~1 MB of PSRAM lost per save and enough to stop the next engine from starting.
+  Requests made during `init()` answer -1 at once (the frame loop does not
+  exist yet), so a config file read at start-up must be preloaded if it matters.
+- **The core loader's log ring must keep the newest lines.** It dropped the new
+  line when full, so 36 lines of start-up chatter ate the error that explained a
+  failed launch; a full ring now overwrites the oldest. `expected_crc` must be
+  parsed as a 32-bit value too: `MP_ARG_INT` rejects a CRC with the top bit set
+  (`overflow converting long int to machine word`) and a rebuilt blob then
+  cannot start at all.
+- **Driving a game's menus from a script is an attract-demo problem.** Duke
+  ignores keys while a demo plays; ESC only opens the menu when a key is already
+  waiting as the level is entered, or after the demo ends. Reading the screen is
+  easier than guessing: dump the engine's own surface (`activity._surface.buffer`)
+  to a file and copy it back (pause the activity first, or `mpremote` cannot
+  enter the raw REPL while the engine renders), or photograph the panel with
+  `scripts/mpos_screen_camera.py`. On the fri3d the USB CDC stops accepting
+  writes while an engine runs; the MaTouch's UART REPL does not.
 - **The heap ladder and PSRAM fragmentation are the launch limit**, not a leak:
   the engine needs GRP + arena + heap from the same PSRAM, repeated launches
   shrink the heap because GC areas never return, so refuse a start below

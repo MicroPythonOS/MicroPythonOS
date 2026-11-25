@@ -992,10 +992,12 @@ void loadtile(short tilenume)
                 RG_LOGW("loadtile: tile %d read %d of %d bytes; drawing it black",
                         (int)tilenume, (int)got, (int)tileFilesize);
             }
-            if (got < 0) {
-                got = 0;
-            }
-            memset(ptr + got, 0, (size_t)(tileFilesize - got));
+            // Zero the *whole* tile: a partial read leaves the bytes it did
+            // manage (row fragments) on screen - the fri3d 2024 showed the sky
+            // as red/orange horizontal stripes until this. Black is what the
+            // palette's index 0 is, and it reads as a night sky.
+            memset(ptr, 0, (size_t)tileFilesize);
+            got = tileFilesize;
             duke_platform_idle();
         }
         faketimerhandler();
