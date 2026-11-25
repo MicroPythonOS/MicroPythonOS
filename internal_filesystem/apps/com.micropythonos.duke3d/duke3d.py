@@ -636,6 +636,15 @@ class Duke3D(NativeActivity):
     def start_engine(self, surface):
         global _DEBUG_LOG
         _DEBUG_LOG = _open_debug_log()
+        # A collect cannot hand a heap *area* back to the IDF heap, so it will
+        # not make room for the engine's own blocks. It does stop the Python
+        # side from growing: a large allocation triggers a new GC area, and
+        # every area is another PSRAM chunk that splits the free space further.
+        try:
+            import gc
+            gc.collect()
+        except Exception:
+            pass
         _debug("start: surface %dx%d in %d-row bands"
                % (surface.width, surface.height, surface.rows_per_band))
         self._loading("Unpacking Duke3D data 0%")
