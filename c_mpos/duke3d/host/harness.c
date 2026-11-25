@@ -23,10 +23,13 @@
 int duke_engine_main(int argc, char **argv);
 int duke_run_frame(void);
 
-#define WIDTH 320
-#define HEIGHT 200
+// The surface the harness presents. 320x200 is the frame as it is; a smaller
+// size is the picture sampled down (the fri3d 2024's 296x185), which is how the
+// scaled path is checked without a badge.
+static int s_width = 320;
+static int s_height = 200;
 
-static uint16_t s_frame[WIDTH * HEIGHT];
+static uint16_t s_frame[320 * 200];
 static uint32_t s_now;
 static uint32_t s_frames;
 static int s_dump_at;
@@ -125,8 +128,8 @@ static void dump_ppm(const char *path) {
     if (file == NULL) {
         return;
     }
-    fprintf(file, "P6\n%d %d\n255\n", WIDTH, HEIGHT);
-    for (int i = 0; i < WIDTH * HEIGHT; i++) {
+    fprintf(file, "P6\n%d %d\n255\n", s_width, s_height);
+    for (int i = 0; i < s_width * s_height; i++) {
         const uint16_t p = s_frame[i];
         const unsigned char rgb[3] = {
             (unsigned char)(((p >> 11) & 0x1F) * 255 / 31),
@@ -145,6 +148,14 @@ int main(int argc, char **argv) {
     }
     s_dump_at = frames;
     s_dump_path = argc > 2 ? argv[2] : "frame.ppm";
+    if (argc > 3) {
+        int w = 0, h = 0;
+        if (sscanf(argv[3], "%dx%d", &w, &h) == 2 && w > 0 && h > 0
+                && w <= 320 && h <= 200) {
+            s_width = w;
+            s_height = h;
+        }
+    }
 
     static mpos_core_abi_t abi;
     abi.version = MPOS_CORE_ABI_VERSION;
@@ -157,8 +168,8 @@ int main(int argc, char **argv) {
     abi.alloc = core_alloc;
     abi.dealloc = core_dealloc;
     abi.log = log_line;
-    abi.frame_width = WIDTH;
-    abi.frame_height = HEIGHT;
+    abi.frame_width = s_width;
+    abi.frame_height = s_height;
     abi.frame = s_frame;
     abi.band_rows = 45;
 
