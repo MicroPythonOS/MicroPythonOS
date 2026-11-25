@@ -442,8 +442,9 @@ class AppDetail(Activity):
         label_text = self.install_label.get_text()
         if label_text == self.action_label_install:
             if not download_url:
-                if __debug__: logger.debug("no download_url yet, ignoring")
-                TaskManager.create_task(self.fetch_and_set_app_details())
+                if __debug__: logger.debug("no download_url yet")
+                if getattr(self, "_details_error", False) and not getattr(self, "_details_loading", False):
+                    TaskManager.create_task(self.fetch_and_set_app_details())
                 return
             if __debug__: logger.debug("starting install task")
             self._action_in_progress = True

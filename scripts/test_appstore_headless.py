@@ -8,7 +8,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from mpos_controller import _build_test_code
 
-TESTS = ("update_flow", "async_refresh", "uninstall_refresh", "list_build", "ratings", "install_safety", "owner_lifecycle", "builtin_source")
+TESTS = (
+    "test_appstore_update_flow.py",
+    "test_appstore_async_refresh.py",
+    "test_appstore_uninstall_refresh.py",
+    "test_appstore_list_build.py",
+    "test_appstore_ratings.py",
+    "test_appstore_install_safety.py",
+    "test_appstore_owner_lifecycle.py",
+    "test_appstore_builtin_source.py",
+    "test_graphical_appstore_install_button.py",
+)
 HEADER = """import micropython
 micropython.opt_level(0)
 import sys
@@ -31,8 +41,7 @@ DownloadManager.download_url = _no_live_request
 def run(binary, output):
     output.mkdir(parents=True, exist_ok=True)
     results = []
-    for name in TESTS:
-        filename = "test_appstore_" + name + ".py"
+    for filename in TESTS:
         code = output / ("headless_" + filename)
         code.write_text(HEADER + _build_test_code(str(ROOT / "tests" / filename)), encoding="utf-8")
         try:
