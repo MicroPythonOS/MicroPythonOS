@@ -83,6 +83,10 @@ def _debug(text):
         return
     try:
         _DEBUG_LOG.write("%s\n" % (text,))
+        # A buffered write survives an exception in RAM but not a reset: the
+        # point of this file is the run that ended in one, so it has to be on
+        # the filesystem before the next line is produced.
+        _DEBUG_LOG.flush()
     except Exception:
         pass
 
@@ -366,8 +370,16 @@ class _CoreEngine:
                 return GAME_HEIGHT, GAME_WIDTH
         elif GAME_WIDTH <= width and GAME_HEIGHT <= height:
             return GAME_WIDTH, GAME_HEIGHT
+        # A panel that cannot hold the frame either way (the fri3d 2024 is
+        # 296x240) gets the largest surface with the frame's own shape: the
+        # core samples its 320x200 frame down, so 296x240 becomes 296x185 and
+        # the picture fills the width instead of losing its right edge to a
+        # crop. `frame_size` keeps the touch map in the frame's coordinates.
+        scale = min(width * 1000 // GAME_WIDTH, height * 1000 // GAME_HEIGHT)
+        if scale >= 500:
+            return (GAME_WIDTH * scale // 1000, GAME_HEIGHT * scale // 1000)
         raise RuntimeError(
-            "Duke Nukem 3D needs a screen of at least 200x320 or 320x200; "
+            "Duke Nukem 3D needs a screen of at least 160x100; "
             "this panel is %dx%d" % (width, height))
 
     def start(self, grp, surface):
