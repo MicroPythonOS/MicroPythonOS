@@ -9,6 +9,7 @@ This table tracks board definitions from `internal_filesystem/lib/mpos/board/`.
 | `fri3d_2024.py`                                      | Fri3d Camp 2024 badge                           | Thomas Farstrike         | @ThomasFarstrike | @ThomasF7e    |
 | `fri3d_2026.py`                                      | Fri3d Camp 2026 badge                           | Thomas Farstrike         | @ThomasFarstrike | @ThomasF7e    |
 | `lilygo_t_display_s3.py`                             | LilyGO T-Display S3                             | Thomas Farstrike         | @ThomasFarstrike | @ThomasF7e    |
+| `lilygo_t_deck.py`                                   | LilyGO T-Deck (ESP32-S3, N16R8)                 | doesnm                   | @anotherdoesnm    | Unknown       |
 | `lilygo_t_hmi.py`                                    | LilyGO T-HMI                                    | Rivair Sabino dos Santos | @Revers-BR       | Unknown       |
 | `lilygo_t_watch_s3_plus.py`                          | LilyGO T-Watch S3 Plus                          | Thomas Farstrike         | @ThomasFarstrike | @ThomasF7e    |
 | `linux.py`                                           | Linux / macOS SDL target                        | Thomas Farstrike         | @ThomasFarstrike | @ThomasF7e    |
