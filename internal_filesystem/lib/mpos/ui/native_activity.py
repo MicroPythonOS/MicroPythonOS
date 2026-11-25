@@ -35,6 +35,7 @@ portrait panel; the native module cannot, so on such a panel the surface is the
 engine's own and the picture is letterboxed sideways.
 """
 
+import os
 import time
 
 import lvgl as lv
@@ -167,6 +168,7 @@ class NativeActivity(Activity):
         if not self._started:
             self._started = True
             self._begin_session()
+        self._log_memory("start")
         if self.error is not None or self._surface is None:
             return
         if self.engine is not None:
@@ -220,6 +222,31 @@ class NativeActivity(Activity):
         self.engine = None
         self._started = False
         self._ready = False
+        self._log_memory("stop")
+
+    def _log_memory(self, tag):
+        """One line per session start/stop in /mpos_mem.log.
+
+        A native engine takes several MB of PSRAM in a few big blocks, so what
+        it gives back at stop decides whether the *next* app can start. The
+        per-app numbers are the only way to see which session kept a block: the
+        console is gone by the time anyone looks. Kept small and truncated when
+        it grows, because it is written on every launch.
+        """
+        try:
+            import esp32
+            heaps = esp32.idf_heap_info(esp32.HEAP_DATA)
+            biggest = max(heaps, key=lambda heap: heap[0])
+            try:
+                size = os.stat("/mpos_mem.log")[6]
+            except OSError:
+                size = 0
+            mode = "w" if size > 8192 else "a"
+            with open("/mpos_mem.log", mode) as log:
+                log.write("%s %s free %d largest %d\n"
+                          % (tag, self.who(), biggest[1], biggest[2]))
+        except Exception:
+            pass
 
     def _keypad_state(self, active):
         """Turn the keypads' typing repeats off (or back on) for this activity.
