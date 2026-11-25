@@ -215,7 +215,9 @@ int32_t pageoffset, ydim16, qsetmode = 0;
 int32_t startposx, startposy, startposz;
 int16_t startang, startsectnum;
 int16_t pointhighlight, linehighlight, highlightcnt;
-EXT_RAM_BSS_ATTR static int32_t lastx[MAXYDIM];
+/* One past the last row: the scan loops store at y2 == dmost, which is
+ * windowy2+1, and a full-height view reaches MAXYDIM. */
+EXT_RAM_BSS_ATTR static int32_t lastx[MAXYDIM + 1];
 uint8_t  paletteloaded = 0;
 
 #define FASTPALGRIDSIZ 8
