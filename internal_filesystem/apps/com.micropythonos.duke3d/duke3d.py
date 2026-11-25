@@ -127,6 +127,34 @@ def _log_run_start():
 GAME_WIDTH = 320
 GAME_HEIGHT = 200
 
+
+def _surface_for_display(display):
+    """(width, height, frame_window) for a display.
+
+    A portrait panel gets the frame turned a quarter turn (200x320); a
+    landscape panel gets it as it is. A panel that cannot hold it either way
+    (the fri3d 2024 is 296x240) gets the middle of the picture: the engine
+    drops the outer columns and `frame_window` tells the touch map which part
+    is shown. Cropping keeps every remaining pixel sharp; a resample would blur
+    the whole picture to save those 12 pixels.
+    """
+    width = display.get_horizontal_resolution()
+    height = display.get_vertical_resolution()
+    if height > width:
+        if GAME_HEIGHT <= width and GAME_WIDTH <= height:
+            return GAME_HEIGHT, GAME_WIDTH, None
+    elif GAME_WIDTH <= width and GAME_HEIGHT <= height:
+        return GAME_WIDTH, GAME_HEIGHT, None
+    if width >= 160 and height >= 100:
+        width = min(width, GAME_WIDTH)
+        height = min(height, GAME_HEIGHT)
+        return (width, height,
+                ((GAME_WIDTH - width) // 2, (GAME_HEIGHT - height) // 2,
+                 width, height))
+    raise RuntimeError(
+        "Duke Nukem 3D needs a screen of at least 160x100; "
+        "this panel is %dx%d" % (width, height))
+
 # Where the engine comes from. An installed app carries ``esp32s3.xip`` and the
 # loader turns it into a contiguous littlefs2e extent inside the filesystem
 # partition. A development badge can instead have the same blob flashed into
@@ -148,6 +176,17 @@ WORKER_TARGET_FPS = 60
 # and the core's read callback answers from the inflated buffer.
 GRP_NAME = "duke3d.grp"
 GRP_ZIP_NAME = "E1L1-4_compromise.grp.zip"
+
+# A real GRP wins over the bundled compacted episode. A badge can hold a full
+# one on its SD card (the compacted shareware episode is the default), and a
+# desktop can point at one with the intent's "grp" extra so a large Atomic GRP
+# is tested without copying it into the package.
+GRP_FILE_CANDIDATES = (
+    "/sdcard/duke3d.grp",
+    "/sdcard/duke3d/duke3d.grp",
+    "/duke3d.grp",
+    "duke3d.grp",
+)
 
 HINT_TEXT = "Hold sideways: left is walk/turn, right is the action pad"
 TOUCH_HINT_MS = 8000
@@ -202,6 +241,10 @@ def engine_candidates():
         chip = mpos_platform.soc()
         if chip is not None:
             names.append(chip + ".xip")
+        arch_query = getattr(mpos_platform, "natmod_arch", None)
+        arch = arch_query() if arch_query is not None else None
+        if arch is not None:
+            names.append("module_" + arch + ".mpy")
     return names
 
 
@@ -283,8 +326,78 @@ def _asset_read(asset, offset, count):
     return out
 
 
-def prepare_grp(loading):
-    """The inflated GRP, as (buffer, size); raises when it cannot be read."""
+def find_grp(intent=None):
+    """A real GRP path, or None. An intent's "grp" extra wins."""
+    if sys.platform == "esp32":
+        # A worker core serves its asset from a C-side buffer and cannot call
+        # back into Python for a file during its start-up. The on-task test
+        # switch (/duke3d_on_task) is the only mode that can read one.
+        try:
+            os.stat(ON_TASK_PATH)
+        except OSError:
+            return None
+    if intent is not None:
+        try:
+            extra = intent.extras.get("grp") if hasattr(intent, "extras") else None
+        except Exception:
+            extra = None
+        if extra:
+            path = _absolute(extra)
+            try:
+                open(path, "rb").close()
+                return path
+            except OSError:
+                pass
+    for path in GRP_FILE_CANDIDATES:
+        if path.startswith("/sdcard/"):
+            try:
+                from mpos import SDCardManager
+                if not SDCardManager.mounted:
+                    continue
+            except Exception:
+                continue
+        try:
+            path = _absolute(path)
+            open(path, "rb").close()
+            return path
+        except OSError:
+            continue
+    path = _absolute(_app_directory() + "/" + GRP_NAME)
+    try:
+        open(path, "rb").close()
+        return path
+    except OSError:
+        return None
+
+
+def prepare_grp(loading, intent=None):
+    """The GRP as (buffer, size) or (path, size); raises when it is missing."""
+    path = find_grp(intent)
+    if path is not None:
+        size = os.stat(path)[6]
+        loading("Loading %s" % (path.rsplit("/", 1)[-1],), 1, 1)
+        if sys.platform != "esp32":
+            # A desktop has the RAM and no SD-card read path of its own: read
+            # the file once so the engine's thousands of lump reads never
+            # cross back into Python. A badge serves it from the file.
+            try:
+                buffer = bytearray(size)
+            except MemoryError:
+                # A 44 MB Atomic GRP needs a larger desktop heap
+                # (MPOSController(heapsize="128M")); the file path still works,
+                # just with a Python call per lump read.
+                return path, size
+            with open(path, "rb") as handle:
+                done = 0
+                while done < size:
+                    got = handle.readinto(memoryview(buffer)[done:])
+                    if not got:
+                        break
+                    done += got
+                    loading("Loading %s" % (path.rsplit("/", 1)[-1],),
+                            done, size)
+            return buffer, done
+        return path, size
     archive = _absolute(_app_directory() + "/" + GRP_ZIP_NAME)
     try:
         open(archive, "rb").close()
@@ -341,6 +454,7 @@ class _CoreEngine:
         self._core = mpos_core
         self._surface = None
         self._grp = None
+        self._grp_path = None
         self._grp_size = 0
         self._keys = []
         self._io_count = 0
@@ -362,38 +476,28 @@ class _CoreEngine:
 
     def surface_size(self, display):
         # A portrait panel (240x320 logical, the badge held sideways) cannot
-        # show the 320x200 frame untransposed, so the core turns it into a
+        # show the 320x200 frame untransposed, so the engine turns it into a
         # 200x320 surface. A landscape panel gets the frame as it is. This is
         # the same rule the Doom core uses, and NativeActivity's touch mapping
         # undoes the rotation for the game's own coordinates.
-        self.frame_window = None
-        width = display.get_horizontal_resolution()
-        height = display.get_vertical_resolution()
-        if height > width:
-            if GAME_HEIGHT <= width and GAME_WIDTH <= height:
-                return GAME_HEIGHT, GAME_WIDTH
-        elif GAME_WIDTH <= width and GAME_HEIGHT <= height:
-            return GAME_WIDTH, GAME_HEIGHT
-        # A panel that cannot hold the frame either way (the fri3d 2024 is
-        # 296x240) gets the middle of the picture: the core drops the outer
-        # columns, 12 at each edge there, and the panel shows the full height.
-        # Cropping keeps every remaining pixel sharp; a resample would blur the
-        # whole picture to save those 12 pixels. `frame_window` tells the touch
-        # map which part of the frame the surface is showing.
-        if width >= 160 and height >= 100:
-            width = min(width, GAME_WIDTH)
-            height = min(height, GAME_HEIGHT)
-            self.frame_window = ((GAME_WIDTH - width) // 2,
-                                 (GAME_HEIGHT - height) // 2,
-                                 width, height)
-            return width, height
-        raise RuntimeError(
-            "Duke Nukem 3D needs a screen of at least 160x100; "
-            "this panel is %dx%d" % (width, height))
+        width, height, self.frame_window = _surface_for_display(display)
+        return width, height
 
     def start(self, grp, surface):
         self._surface = surface
         self._grp, self._grp_size = grp
+        self._grp_path = None
+        if isinstance(self._grp, str):
+            # A real GRP on storage: the engine reads it through this side's
+            # file callback, so keep the buffer path empty.
+            self._grp_path = self._grp
+            self._grp = None
+            # The worker loader serves its own asset buffer from C and cannot
+            # call back into Python for a file, so this asset forces the
+            # on-task engine (which is also the only one that can read it).
+            if self._worker:
+                print("duke3d: external GRP, running the engine on the MicroPython task")
+                self._worker = False
         self.quit = False
         try:
             self._core.stop()
@@ -499,6 +603,7 @@ class _CoreEngine:
         except Exception:
             pass
         self._grp = None
+        self._grp_path = None
         self._grp_size = 0
         self._keys = []
         self._io_count = 0
@@ -580,16 +685,30 @@ class _CoreEngine:
         # The core yields to the scheduler itself (a sentinel through the log
         # callback, handled in C by the loader); sleeping from here would
         # re-enter MicroPython on a deep engine stack.
-        if path == GRP_NAME and self._grp is not None and offset < self._grp_size:
-            count = self._grp_size - offset
-            if count > len(into):
-                count = len(into)
-            into[:count] = _asset_read(self._grp, offset, count)
-            return count
+        if path == GRP_NAME:
+            if self._grp_path is not None:
+                try:
+                    with open(self._grp_path, "rb") as handle:
+                        handle.seek(offset)
+                        got = handle.readinto(into)
+                    return 0 if got is None else got
+                except Exception:
+                    return -1
+            if self._grp is not None and offset < self._grp_size:
+                count = self._grp_size - offset
+                if count > len(into):
+                    count = len(into)
+                into[:count] = _asset_read(self._grp, offset, count)
+                return count
         return -1
 
     def _file_size(self, path):
         if path == GRP_NAME:
+            if self._grp_path is not None:
+                try:
+                    return os.stat(self._grp_path)[6]
+                except OSError:
+                    return -1
             return self._grp_size
         return -1
 
@@ -684,8 +803,130 @@ class _CoreEngine:
             del tail[0]
 
 
+class _NatmodEngine:
+    """The engine as a MicroPython native module (desktop).
+
+    Same engine, same platform shims, no MMU window: the module is ordinary C
+    linked against MicroPython, so a desktop gets the same game with no
+    bootloader and no flash partition. Everything above the adapter is shared
+    with the core: the activity owns the surface, the pacing and the controls.
+    """
+
+    name = "natmod"
+    frame_size = (GAME_WIDTH, GAME_HEIGHT)
+    frame_window = None
+    # The core can run on a task of its own; a plain module runs on the
+    # MicroPython task.
+    _worker = False
+
+    def __init__(self):
+        _path, name = find_engine()
+        if name is None:
+            raise RuntimeError(
+                "Duke3D's engine is not installed; reinstall Duke Nukem 3D")
+        if not name.startswith("module_") or not name.endswith(".mpy"):
+            raise RuntimeError("Duke3D has no native module for this platform")
+        self._duke = __import__(name[:-4])
+        self._surface = None
+        # The module holds the callback in C, which the collector does not
+        # trace: keep the bound method alive here for as long as it is set.
+        self._present = None
+        self._config_dir = None
+        self._grp = None
+        self.quit = False
+
+    def surface_size(self, display):
+        width, height, self.frame_window = _surface_for_display(display)
+        return width, height
+
+    def start(self, grp, surface):
+        buffer, size = grp
+        if isinstance(buffer, (list, tuple)):
+            # The chunked inflate is for a fragmented badge heap; a desktop has
+            # one block, but accept both rather than failing the launch.
+            joined = bytearray()
+            for chunk in buffer:
+                joined.extend(chunk)
+            buffer = joined
+            size = len(joined)
+        self._surface = surface
+        self._grp = (buffer, size)
+        self._config_dir = _absolute(PREFS_DIR)
+        _makedirs(self._config_dir)
+        # The engine's save directory, one level under the app's prefs.
+        _makedirs(self._config_dir + "/duke3d")
+        self.quit = False
+        self._present = self._present_band
+        self._duke.surface(surface.buffer, surface.width, surface.height,
+                          surface.rows_per_band, self._present)
+        try:
+            self._duke.start(buffer, GRP_NAME, self._config_dir)
+        except SystemExit:
+            # Error()/exit() during the engine's start-up: it is not going to
+            # run, and the app has to say so rather than show a black screen.
+            raise RuntimeError(
+                "the Duke3D engine stopped during start-up (see the console)")
+
+    def resume(self):
+        pass
+
+    def pause(self):
+        pass
+
+    def tick(self, now):
+        try:
+            self._duke.tick(now)
+        except SystemExit:
+            # The engine's quit menu (or a fatal error) ended the frame. The
+            # host owns the activity, so this is how it asks to be closed.
+            self.quit = True
+        if self._duke.quit_requested():
+            self.quit = True
+
+    def audio_mix(self, buffer):
+        pass
+
+    def key(self, code, pressed):
+        self._duke.key(code, pressed)
+
+    def stop(self):
+        try:
+            self._duke.surface(None, 0, 0, 0, None)
+        except Exception:
+            pass
+        try:
+            self._duke.stop()
+        except Exception:
+            pass
+        self._present = None
+        self._surface = None
+        self._grp = None
+        self._config_dir = None
+
+    def _present_band(self, y, rows):
+        """A display band is ready in the surface the engine drew into."""
+        if self._surface is None or not self._surface._active:
+            return
+        self._surface.invalidate_band(y // self._surface.rows_per_band)
+        # One LVGL pass for the whole frame, not one per band: a pass is a full
+        # layout/draw cycle and five of them is most of the present time.
+        if y + rows < self._surface.height:
+            return
+        self._surface.flush()
+
+
+def _make_engine():
+    """The engine this host can run, or a RuntimeError saying why not."""
+    if mpos_platform is None:
+        raise RuntimeError(
+            "Duke Nukem 3D needs a newer MicroPythonOS (mpos.platform is missing)")
+    if sys.platform == "esp32":
+        return _CoreEngine()
+    return _NatmodEngine()
+
+
 class Duke3D(NativeActivity):
-    """One activity, one engine: the flash-resident core."""
+    """One activity, one engine: the core on a badge, the module on a desktop."""
 
     target_fps = TARGET_FPS
     hint_text = HINT_TEXT
@@ -807,7 +1048,7 @@ class Duke3D(NativeActivity):
             self._loading("Preparing the engine in storage... %d%%" % percent)
 
     def make_engine(self):
-        return _CoreEngine()
+        return _make_engine()
 
     def onResume(self, screen):
         _debug("onResume enter")
@@ -848,7 +1089,8 @@ class Duke3D(NativeActivity):
                % (surface.width, surface.height, surface.rows_per_band))
         self._loading("Unpacking Duke3D data 0%")
         try:
-            self._grp = prepare_grp(self._loading)
+            self._grp = prepare_grp(
+                self._loading, getattr(self, "intent", None))
         except Exception as error:
             print("duke3d: prepare failed: %s" % (error,))
             sys.print_exception(error)
@@ -882,7 +1124,8 @@ class Duke3D(NativeActivity):
     def _release_grp(self):
         if self._grp is not None:
             buffer, _size = self._grp
-            _free_asset_buffer(buffer)
+            if not isinstance(buffer, str):
+                _free_asset_buffer(buffer)
             self._grp = None
 
     def on_resumed(self):
