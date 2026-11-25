@@ -142,10 +142,15 @@ void duke_platform_frame_presented(void) {
                  (double)s_wait_ms / (double)s_frames);
         int decodes = mpos_duke_tile_decodes;
         mpos_duke_tile_decodes = 0;
+#if defined(MPOS_CORE) && !defined(MPOS_HOST)
         snprintf(line + strlen(line), sizeof(line) - strlen(line),
                  ", tile decodes %d, heap %u/%u KB", decodes,
                  (unsigned)(mpos_heap_free() / 1024),
                  (unsigned)(mpos_heap_largest() / 1024));
+#else
+        snprintf(line + strlen(line), sizeof(line) - strlen(line),
+                 ", tile decodes %d", decodes);
+#endif
         s_abi->log(s_abi->host, line);
         s_frames = 0;
         s_present_ms = 0;

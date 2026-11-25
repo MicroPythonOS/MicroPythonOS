@@ -97,6 +97,15 @@ void initcache(uint8_t* dacachestart, int32_t dacachesize)
 	cacnum = 1;
 }
 
+/* Is this pointer (and the whole block) inside the tile cache? A stale
+ * handle that points somewhere else must never be memset through: the write
+ * lands in the engine's globals and the next draw faults on the wreckage. */
+int cache_contains(uint8_t *ptr, int32_t size)
+{
+    if (ptr == NULL || size <= 0) return 0;
+    return ptr >= cachestart && ptr + size <= cachestart + cachesize;
+}
+
 void allocache (uint8_t** newhandle, int32_t newbytes, uint8_t  *newlockptr)
 {
 	int32_t i, z, zz, bestz=0, daval, bestval, besto=0, o1, o2, sucklen, suckz;

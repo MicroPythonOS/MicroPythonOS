@@ -912,27 +912,34 @@ void loadtile(short tilenume)
         artfil = TCkopen4load(artfilename,0);
 
         if (artfil == -1){
-            RG_LOGW("loadtile: missing artfile '%s' (or PNG override) for tile %d (w=%d h=%d); synthesizing transparent fallback",
+            RG_LOGW("loadtile: missing artfile '%s' (or PNG override) for tile %d (w=%d h=%d); drawing it invisible",
                     artfilename, (int)tilenume,
                     (int)tiles[tilenume].dim.width,
                     (int)tiles[tilenume].dim.height);
 
             artfilnum = -1;  // Prevent subsequent tiles from using stale -1 handle
 
-            if (tiles[tilenume].data == NULL)
-            {
+            /* The tile is not in the compacted GRP. Allocating its declared
+             * size (some are 128x400, 50 KB each) for a texture that has no
+             * pixels is both wasteful in a small cache and fragile: the
+             * renderer's texture mapping then walks a tile whose real art was
+             * never loaded. A single transparent pixel keeps every consumer
+             * on a valid tile and draws nothing, which is what a missing art
+             * file should look like. */
+            if (tiles[tilenume].data == NULL
+                    || !cache_contains(tiles[tilenume].data, 1)) {
+                tiles[tilenume].data = NULL;
+                tiles[tilenume].dim.width = 1;
+                tiles[tilenume].dim.height = 1;
+                picsiz[tilenume] = (uint8_t)(1 | (1 << 4));
                 tiles[tilenume].lock = 199;
-                allocache(&tiles[tilenume].data, tileFilesize, (uint8_t  *) &tiles[tilenume].lock);
+                allocache(&tiles[tilenume].data, 1, (uint8_t  *) &tiles[tilenume].lock);
             }
-
-            if (tiles[tilenume].data != NULL)
-            {
-                memset(tiles[tilenume].data, 255, (size_t)tileFilesize);
-            }
-            else
-            {
-                RG_LOGW("loadtile: tile %d fallback alloc failed (%" PRId32 " bytes), leaving tile empty",
-                        (int)tilenume, tileFilesize);
+            if (tiles[tilenume].data != NULL) {
+                tiles[tilenume].data[0] = 255;
+            } else {
+                RG_LOGW("loadtile: tile %d fallback alloc failed, leaving it empty",
+                        (int)tilenume);
             }
             return;
         }

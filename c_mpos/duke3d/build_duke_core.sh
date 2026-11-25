@@ -33,7 +33,7 @@ CFLAGS="$CFLAGS -ffunction-sections -fdata-sections -mtext-section-literals"
 CFLAGS="$CFLAGS -DMPOS_CORE -DCONFIG_IDF_TARGET_ESP32S3 -DCONFIG_IDF_TARGET_ESP32 -DLINUX -D_DEFAULT_SOURCE"
 CFLAGS="$CFLAGS -Icore -Iengine/Game -Iengine/Engine -Iengine/SDL -Iaudiolib"
 CFLAGS="$CFLAGS -I../doom -I../doom/core"
-CFLAGS="$CFLAGS -w"
+CFLAGS="$CFLAGS -w ${DUKE_EXTRA_CFLAGS:-}"
 # GCC 14 promoted pointer/int conversions to errors; this is 1990s C that the
 # original ESP-IDF build demotes too.
 CFLAGS="$CFLAGS -Wno-error=int-conversion -Wno-error=incompatible-pointer-types"

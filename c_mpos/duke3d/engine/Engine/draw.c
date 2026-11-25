@@ -9,6 +9,7 @@
 #include "platform.h"
 #include "build.h"
 #include "draw.h"
+#include "rg_system.h"
 
 #pragma GCC optimize("O3")
 
@@ -400,37 +401,44 @@ void setupvlineasm(int32_t i1)
 }
 
 //FCS This is used to fill the inside of a wall (so it draws VERTICAL column, always).
-IRAM_ATTR void vlineasm4(int32_t columnIndex, intptr_t framebuffer)
+IRAM_ATTR void vlineasm4(int32_t numPixels, intptr_t framebuffer)
 {
+    extern uint8_t *frameoffset;
+    int i;
 
-	if (!RENDER_DRAW_WALL_INSIDE)
-		return ;
-
+    if (!RENDER_DRAW_WALL_INSIDE)
+        return;
+    /* The callers pass the number of rows and the address of the first one.
+     * The old loop derived its length from ylookup[columnIndex], which is
+     * only the row count when the index is a row; a span that started or
+     * ended outside the view made it walk the pointer until it wrapped and
+     * write millions of rows past the screen. Refuse such a span instead. */
+    if (numPixels <= 0 || numPixels > ydim)
+        return;
     {
-        int i;
-        uint32_t temp;
-        
-        uintptr_t index = (framebuffer + ylookup[columnIndex]);
-        uint8_t  *dest= (uint8_t *)(-ylookup[columnIndex]);
-        //uint8_t  *dest= (uint8_t *)framebuffer;
-        
-        //uint32_t index = 0;
-        do {
-            for (i = 0; i < 4; i++)
-            {
-				
-        	    temp = ((uint32_t)vplce[i]) >> mach3_al;
-        	    temp = (((uint8_t *)(bufplce[i]))[temp]);
-                
-				if (PIXEL_ALLOWED())
-        			dest[index+i] = palookupoffse [i] [temp];
-                
-	            vplce[i] += vince[i];
+        uint8_t *base = frameoffset;
+        uint8_t *dest = (uint8_t *)framebuffer;
+        uint8_t *end = base + (size_t)bytesperline * (size_t)ydim;
+        if (dest < base || dest >= end) {
+            static int bogus_spans;
+            if (bogus_spans < 4) {
+                bogus_spans++;
+                RG_LOGW("vlineasm4: span %d at %p outside %p..%p",
+                        (int)numPixels, dest, base, end);
             }
-            dest += bytesperline;
-        } while (((uint32_t)dest - bytesperline) < ((uint32_t)dest));
+            return;
+        }
+        for (; numPixels > 0; numPixels--, dest += bytesperline) {
+            for (i = 0; i < 4; i++) {
+                uint32_t temp = ((uint32_t)vplce[i]) >> mach3_al;
+                temp = ((uint8_t *)(bufplce[i]))[temp];
+                if (PIXEL_ALLOWED())
+                    dest[i] = palookupoffse[i][temp];
+                vplce[i] += vince[i];
+            }
+        }
     }
-} 
+}
 
 
 void setupmvlineasm(int32_t i1)
@@ -440,31 +448,41 @@ void setupmvlineasm(int32_t i1)
 } 
 
 
-IRAM_ATTR void mvlineasm4(int32_t column, intptr_t framebufferOffset)
+IRAM_ATTR void mvlineasm4(int32_t numPixels, intptr_t framebufferOffset)
 {
+    extern uint8_t *frameoffset;
     int i;
-    uint32_t temp;
-    uintptr_t index = (framebufferOffset + ylookup[column]);
-    uint8_t  *dest = (uint8_t *)(-ylookup[column]);
 
-    do {
-
-        for (i = 0; i < 4; i++)
-        {
-			
-	      temp = ((uint32_t)vplce[i]) >> machmv;
-	      temp = (((uint8_t *)(bufplce[i]))[temp]);
-	      if (temp != 255)
-		  {
-			  if (PIXEL_ALLOWED())
-				dest[index+i] = palookupoffse[i][temp];
-		  }
-	      vplce[i] += vince[i];
+    if (!RENDER_DRAW_WALL_INSIDE)
+        return;
+    if (numPixels <= 0 || numPixels > ydim)
+        return;
+    {
+        uint8_t *base = frameoffset;
+        uint8_t *dest = (uint8_t *)framebufferOffset;
+        uint8_t *end = base + (size_t)bytesperline * (size_t)ydim;
+        if (dest < base || dest >= end) {
+            static int bogus_spans;
+            if (bogus_spans < 4) {
+                bogus_spans++;
+                RG_LOGW("mvlineasm4: span %d at %p outside %p..%p",
+                        (int)numPixels, dest, base, end);
+            }
+            return;
         }
-        dest += bytesperline;
-
-    } while (((uint32_t)dest - bytesperline) < ((uint32_t)dest));
-} 
+        for (; numPixels > 0; numPixels--, dest += bytesperline) {
+            for (i = 0; i < 4; i++) {
+                uint32_t temp = ((uint32_t)vplce[i]) >> machmv;
+                temp = ((uint8_t *)(bufplce[i]))[temp];
+                if (temp != 255) {
+                    if (PIXEL_ALLOWED())
+                        dest[i] = palookupoffse[i][temp];
+                }
+                vplce[i] += vince[i];
+            }
+        }
+    }
+}
 /* END ---------------  WALLS RENDERING METHOD (USED TO BE HIGHLY OPTIMIZED ASSEMBLY) ----------------------------*/
 
 

@@ -8684,7 +8684,13 @@ int main(int argc,char  **argv)
          * is L1 (the game's own menu and level_file_names use that order). */
         ud.warp_on = 1;
         ud.m_volume_number = ud.volume_number = 0;
+#ifdef DUKE_START_LEVEL
+        /* Test builds only: the level a plain launch starts at (0 = E1L1), so
+         * a level that needs no roof puzzle to leave can be scripted. */
+        ud.m_level_number = ud.level_number = DUKE_START_LEVEL;
+#else
         ud.m_level_number = ud.level_number = 0;
+#endif
         ud.m_player_skill = ud.player_skill = 2;
     }
 #endif
