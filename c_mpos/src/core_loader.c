@@ -575,42 +575,34 @@ static mp_obj_t mpos_core_file_poll(void) {
     if (!s_file_pending) {
         return mp_const_none;
     }
-    // A write hands the bytes over; a read or a size request carries none.
-    mp_obj_t payload = mp_const_none;
-    if (s_file_op == MPOS_CORE_FILE_WRITE && s_file_data != NULL && s_file_len > 0) {
-        payload = mp_obj_new_bytes((const byte *)s_file_data, s_file_len);
+    // The buffer is the core's own memory, wrapped without a copy: a save
+    // hands over blocks of 100 KB and more, and a Python copy of each would
+    // grow the GC heap by an area that is never given back - which is 1 MB of
+    // PSRAM lost per save on a board where the next engine needs it.
+    mp_obj_t buffer = mp_const_none;
+    if (s_file_op != MPOS_CORE_FILE_SIZE && s_file_data != NULL && s_file_len > 0) {
+        buffer = mp_obj_new_bytearray_by_ref(s_file_len, s_file_data);
     }
     mp_obj_t items[5] = {
         mp_obj_new_int(s_file_op),
         mp_obj_new_str(s_file_path, strlen(s_file_path)),
         mp_obj_new_int_from_uint(s_file_offset),
         mp_obj_new_int_from_uint(s_file_len),
-        payload,
+        buffer,
     };
     return mp_obj_new_tuple(5, items);
 }
 
-static mp_obj_t mpos_core_file_reply(size_t n_args, const mp_obj_t *args) {
-    int count = mp_obj_get_int(args[0]);
-    mp_obj_t payload = n_args > 1 ? args[1] : mp_const_none;
-    if (s_file_pending && s_file_op == MPOS_CORE_FILE_READ
-            && payload != mp_const_none && s_file_data != NULL) {
-        mp_buffer_info_t info;
-        mp_get_buffer_raise(payload, &info, MP_BUFFER_READ);
-        uint32_t copy = info.len < s_file_len ? info.len : s_file_len;
-        memcpy(s_file_data, info.buf, copy);
-        if (count > (int)copy) {
-            count = (int)copy;
-        }
-    }
-    s_file_result = count;
+static mp_obj_t mpos_core_file_reply(mp_obj_t count_in) {
+    // A read has already been written into the buffer the request carried
+    // (readinto), so there is nothing to copy here.
+    s_file_result = mp_obj_get_int(count_in);
     if (s_file_done != NULL) {
         xSemaphoreGive(s_file_done);
     }
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mpos_core_file_reply_obj, 1, 2,
-                                           mpos_core_file_reply);
+static MP_DEFINE_CONST_FUN_OBJ_1(mpos_core_file_reply_obj, mpos_core_file_reply);
 
 static void log_push(const char *line) {
     if (s_log_ring == NULL || line == NULL) {

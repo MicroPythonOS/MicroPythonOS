@@ -974,16 +974,34 @@ void loadtile(short tilenume)
 
         if (ptr == NULL) {
             printf("loadtile: %d, ptr is NULL after successful allocache?!\n", (int)tilenume);
-            RG_PANIC("Tile pointer is NULL!");
+            make_tile_invisible(tilenume);
+            return;
         }
 
-        // printf("loadtile: %d, reading %d bytes to %p\n", tilenume, tileFilesize, ptr);
-        if (kread(artfil,ptr,tileFilesize) != tileFilesize) {
-            printf("loadtile: %d, kread FAILED! Expected %"PRId32" bytes\n", (int)tilenume, tileFilesize);
-            RG_PANIC("Tile read failed!");
+        // A tile whose bytes cannot be read is a *cosmetic* problem: the
+        // compacted GRP has a sparse ART set, so an entry can be listed with
+        // more bytes than the file holds. Panicking here ended the whole
+        // launch over one image, and on a board with a small engine heap that
+        // is exactly what happened at level entry. Black is survivable; the
+        // log names the tile.
+        int32_t got = kread(artfil,ptr,tileFilesize);
+        if (got != tileFilesize) {
+            static int32_t warned;
+            if (warned < 8) {
+                warned++;
+                RG_LOGW("loadtile: tile %d read %d of %d bytes; drawing it black",
+                        (int)tilenume, (int)got, (int)tileFilesize);
+            }
+            if (got < 0) {
+                got = 0;
+            }
+            memset(ptr + got, 0, (size_t)(tileFilesize - got));
+            duke_platform_idle();
         }
         faketimerhandler();
-        artfilplc = tilefileoffs[tilenume]+tileFilesize;
+        // Track where the file really is: after a short read the next tile's
+        // seek is relative to this.
+        artfilplc = tilefileoffs[tilenume] + (got > 0 ? got : 0);
     }
 }
 

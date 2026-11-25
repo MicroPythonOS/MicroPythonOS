@@ -622,29 +622,30 @@ class _CoreEngine:
         request = poll()
         if request is None:
             return
-        op, path, offset, length, payload = request
+        # `buffer` is the core's own memory, wrapped without a copy: a save
+        # moves blocks of 100 KB and more, and copying them here would grow the
+        # GC heap by an area that is never handed back (1 MB of PSRAM per save
+        # on a board where the next engine needs every block).
+        op, path, offset, length, buffer = request
         count = -1
-        data = None
         try:
             real = self._host_path(path)
             if op == 0:
                 with open(real, "rb") as handle:
                     handle.seek(offset)
-                    data = handle.read(length)
-                count = len(data)
+                    count = handle.readinto(buffer)
             elif op == 1:
                 # offset 0 is a new file; later offsets append into the one the
                 # engine just created.
                 with open(real, "wb" if offset == 0 else "r+b") as handle:
                     handle.seek(offset)
-                    count = handle.write(payload)
+                    count = handle.write(buffer)
             else:
                 count = os.stat(real)[6]
         except OSError as error:
             _debug("file %s failed: %r" % (path, error))
             count = -1
-            data = None
-        reply(count, data)
+        reply(count)
 
     def _log(self, line):
         # The "\x01yield" sentinel is consumed in C by the core loader before

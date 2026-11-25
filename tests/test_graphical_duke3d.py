@@ -171,8 +171,8 @@ class _FakeCore:
     def file_poll(self):
         return self.requests.pop(0) if self.requests else None
 
-    def file_reply(self, count, data=None):
-        self.replies.append((count, data))
+    def file_reply(self, count):
+        self.replies.append(count)
 
 
 class _FakeDisplay:
@@ -285,26 +285,24 @@ class TestDuke3DHostFiles(unittest.TestCase):
                          self.PREFS + "/duke3d/game0.sav")
 
     def test_a_save_is_written_and_read_back(self):
-        # The engine writes the version word first, then the blocks.
-        count, _data = self._serve((1, "/saves/duke3d/game0.sav", 0, 4, b"v119"))
-        self.assertEqual(count, 4)
-        count, _data = self._serve((1, "/saves/duke3d/game0.sav", 4, 3, b"abc"))
-        self.assertEqual(count, 3)
-        count, data = self._serve((0, "/saves/duke3d/game0.sav", 0, 16, None))
-        self.assertEqual((count, data), (7, b"v119abc"))
-        count, _data = self._serve((2, "/saves/duke3d/game0.sav", 0, 0, None))
-        self.assertEqual(count, 7)
+        # The engine writes the version word first, then the blocks. The buffer
+        # is the core's own, so a read lands in it (readinto), no copy.
+        self.assertEqual(self._serve((1, "/saves/duke3d/game0.sav", 0, 4, b"v119")), 4)
+        self.assertEqual(self._serve((1, "/saves/duke3d/game0.sav", 4, 3, b"abc")), 3)
+        buffer = bytearray(16)
+        self.assertEqual(self._serve((0, "/saves/duke3d/game0.sav", 0, 16, buffer)), 7)
+        self.assertEqual(bytes(buffer[:7]), b"v119abc")
+        self.assertEqual(self._serve((2, "/saves/duke3d/game0.sav", 0, 0, None)), 7)
 
     def test_the_setup_file_is_written_too(self):
-        count, _data = self._serve((1, "/config/duke3d.cfg", 0, 5, b"hello"))
-        self.assertEqual(count, 5)
-        count, data = self._serve((0, "/config/duke3d.cfg", 1, 3, None))
-        self.assertEqual((count, data), (3, b"ell"))
+        self.assertEqual(self._serve((1, "/config/duke3d.cfg", 0, 5, b"hello")), 5)
+        buffer = bytearray(3)
+        self.assertEqual(self._serve((0, "/config/duke3d.cfg", 1, 3, buffer)), 3)
+        self.assertEqual(bytes(buffer), b"ell")
 
     def test_a_missing_file_is_reported_as_an_error(self):
-        count, data = self._serve((0, "/saves/duke3d/game1.sav", 0, 4, None))
-        self.assertEqual(count, -1)
-        self.assertIsNone(data)
+        buffer = bytearray(4)
+        self.assertEqual(self._serve((0, "/saves/duke3d/game1.sav", 0, 4, buffer)), -1)
 
     def test_no_request_is_a_no_op(self):
         self.engine._core = _FakeCore([])
