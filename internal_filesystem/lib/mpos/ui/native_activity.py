@@ -308,14 +308,24 @@ class NativeActivity(Activity):
         """A keyboard or keypad key (an ``lv.KEY`` value)."""
 
     def on_pointer(self, event_code, x, y):
-        """PRESSED / PRESSING / RELEASED at a panel point."""
+        """PRESSED / PRESSING / RELEASED at a panel point.
+
+        This is the single-point path: a panel that reports only one position
+        (the fri3d's CST816S, or the desktop mouse) arrives here, because it has
+        no finger list for the poller to read. Forwarding it as finger 0 means
+        an activity has to implement only ``on_touch_finger()`` to work on both
+        kinds of panel, instead of silently getting no input on one of them.
+        An activity with its own single-point handling overrides this.
+        """
+        self.on_touch_finger(0, event_code, x, y)
 
     def on_touch_finger(self, finger, event_code, x, y):
-        """One finger of a multi-point panel, when ``touch_fingers`` is set.
+        """One finger of a panel, when ``touch_fingers`` is set.
 
         ``finger`` stays the same while it is down, so an activity can keep a
         control state per thumb. The points are the same logical panel
-        coordinates ``on_pointer()`` gets.
+        coordinates ``on_pointer()`` gets. A single-point panel reports one
+        finger, numbered 0.
         """
 
     # -- frame loop -------------------------------------------------------

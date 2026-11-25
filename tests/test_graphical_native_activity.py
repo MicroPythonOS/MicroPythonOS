@@ -402,6 +402,32 @@ class TestNativeActivity(unittest.TestCase):
         game._next_frame_ms = 0
         game._drawframe()
 
+    def test_single_point_input_reaches_an_activity_that_only_handles_fingers(self):
+        # A panel with no finger list (the fri3d's CST816S, the desktop mouse)
+        # arrives through LVGL's pointer events. The base class forwards those
+        # as finger 0, so an app that implements only on_touch_finger() is
+        # playable on both kinds of panel instead of getting no input on one.
+        # (_Game overrides on_pointer, so this uses an activity that does not.)
+        class _FingerOnly(NativeActivity):
+            touch_fingers = True
+
+            def __init__(self):
+                super().__init__()
+                self.fingers = []
+
+            def on_touch_finger(self, finger, event_code, x, y):
+                self.fingers.append((finger, event_code, x, y))
+
+        game = _FingerOnly()
+        for code in (lv.EVENT.PRESSED, lv.EVENT.PRESSING, lv.EVENT.RELEASED):
+            game.on_pointer(code, 120, 40)
+        self.assertEqual(
+            [(phase, x, y) for finger, phase, x, y in game.fingers],
+            [(lv.EVENT.PRESSED, 120, 40), (lv.EVENT.PRESSING, 120, 40),
+             (lv.EVENT.RELEASED, 120, 40)])
+        self.assertEqual({finger for finger, _, _, _ in game.fingers}, {0},
+                         "a single-point panel must not invent fingers")
+
     def test_a_multi_point_panel_delivers_every_finger_to_the_app(self):
         game, panel = self._multi_game([(None, 30, 100), (None, 220, 180)])
         self._step(game)

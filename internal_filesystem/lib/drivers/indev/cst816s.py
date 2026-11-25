@@ -179,6 +179,9 @@ class CST816S(pointer_framework.PointerDriver):
         self._tx_mv = memoryview(self._tx_buf)
         self._rx_buf = bytearray(1)
         self._rx_mv = memoryview(self._rx_buf)
+        # The one point this controller can report, in raw coordinates, filled
+        # in by _get_coords() and read back by get_touches().
+        self._touches = []
 
         self._device = device
 
@@ -292,6 +295,7 @@ class CST816S(pointer_framework.PointerDriver):
     def _get_coords(self):
         self._read_reg(_FingerNum)
         if self._rx_buf[0] == 0:
+            self._touches = []
             return None
 
         self._read_reg(_XposH)
@@ -304,4 +308,23 @@ class CST816S(pointer_framework.PointerDriver):
         self._read_reg(_YposL)
         y |= self._rx_buf[0]
 
+        self._touches = [(0, x, y)]
         return self.PRESSED, x, y
+
+    def get_touches(self):
+        """The point this panel reports, in the shape the poller expects.
+
+        The CST816S is single-touch: it has a finger count and one position, so
+        the list holds one entry while a finger is down and none otherwise.
+        Answering with a list anyway is what lets an activity use the same
+        ``on_touch_finger()`` path here and on a five-point panel, instead of
+        needing a second, single-point handler that is easy to forget.
+        """
+        points = []
+        for _, x, y in self._touches:
+            logical_x, logical_y = self._calc_coords(x, y)
+            points.append((0, logical_x, logical_y))
+        return points
+
+    def get_touch_count(self):
+        return len(self._touches)
