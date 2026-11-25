@@ -39,6 +39,10 @@ int duke_run_frame(void);
 // a smaller heap is still playable (just with more tile reloads).
 #define HEAP_BYTES (3u * 1024u * 1024u)
 
+/* The smallest engine heap worth starting with. A level's textures do not fit
+ * below this, and the engine's cache allocator then fails inside a frame. */
+#define HEAP_MIN_BYTES (768u * 1024u)
+
 // The linker's writable-image symbols: .data's initial bytes live in the
 // mapped data region at core_data_init_src, and are copied to __data_start
 // before any C code that might read an initialised global runs.
@@ -111,6 +115,17 @@ static int core_init(const mpos_core_abi_t *abi, const char *asset_name,
     }
     if (s_heap == NULL) {
         return -10;
+    }
+    /* Below this the tile cache cannot hold a level's textures, and the
+     * engine's own allocator starts refusing work in mid-frame. A fragmented
+     * board is better told to reboot than left to fail in the renderer. */
+    if (s_heap_bytes < HEAP_MIN_BYTES) {
+        char line[96];
+        snprintf(line, sizeof(line),
+                 "core: heap %u KB is too small (need %u KB); restart the badge",
+                 (unsigned)(s_heap_bytes / 1024), (unsigned)(HEAP_MIN_BYTES / 1024));
+        abi->log(abi->host, line);
+        return -12;
     }
     mpos_heap_init(s_heap, s_heap_bytes);
     {

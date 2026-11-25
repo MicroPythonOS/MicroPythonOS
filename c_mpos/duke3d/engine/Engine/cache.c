@@ -119,11 +119,13 @@ void allocache (uint8_t** newhandle, int32_t newbytes, uint8_t  *newlockptr)
 		printf("Cachesize: %"PRId32"\n",cachesize);
 		printf("*Newhandle: 0x%x, Newbytes: %"PRId32", *Newlock: %d\n",(unsigned int)newhandle,newbytes,*newlockptr);
 		reportandexit("BUFFER TOO BIG TO FIT IN CACHE!\n");
+		return;
 	}
 
 	if (*newlockptr == 0)
 	{
 		reportandexit("ALLOCACHE CALLED WITH LOCK OF 0!\n");
+		return;
 	}
 
 		/* Find best place */
@@ -150,8 +152,10 @@ void allocache (uint8_t** newhandle, int32_t newbytes, uint8_t  *newlockptr)
 
 	/*printf("%ld %ld %ld\n",besto,newbytes,*newlockptr);*/
 
-	if (bestval == 0x7fffffff)
+	if (bestval == 0x7fffffff) {
 		reportandexit("CACHE SPACE ALL LOCKED UP!\n");
+		return;
+	}
 
 		/* Suck things out */
 	for(sucklen=-newbytes,suckz=bestz;sucklen<0;sucklen+=cac[suckz++].leng)
@@ -184,7 +188,7 @@ void allocache (uint8_t** newhandle, int32_t newbytes, uint8_t  *newlockptr)
 	bestz++;
 	if (bestz == cacnum)
 	{
-		cacnum++; if (cacnum > MAXCACHEOBJECTS) reportandexit("Too many objects in cache! (cacnum > MAXCACHEOBJECTS)\n");
+		cacnum++; if (cacnum > MAXCACHEOBJECTS) { reportandexit("Too many objects in cache! (cacnum > MAXCACHEOBJECTS)\n"); return; }
 		cac[bestz].leng = sucklen;
 		cac[bestz].lock = &zerochar;
 		return;
@@ -192,7 +196,7 @@ void allocache (uint8_t** newhandle, int32_t newbytes, uint8_t  *newlockptr)
 
 	if (*cac[bestz].lock == 0) { cac[bestz].leng += sucklen; return; }
 
-	cacnum++; if (cacnum > MAXCACHEOBJECTS) reportandexit("Too many objects in cache! (cacnum > MAXCACHEOBJECTS)\n");
+	cacnum++; if (cacnum > MAXCACHEOBJECTS) { reportandexit("Too many objects in cache! (cacnum > MAXCACHEOBJECTS)\n"); return; }
 	for(z=cacnum-1;z>bestz;z--) cac[z] = cac[z-1];
 	cac[bestz].leng = sucklen;
 	cac[bestz].lock = &zerochar;

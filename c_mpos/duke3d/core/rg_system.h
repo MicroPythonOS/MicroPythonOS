@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 /* Allocation flags: the core has one heap, so they are only hints. */
 #define MEM_SLOW 0x0
@@ -76,7 +77,12 @@ typedef enum {
 #define RG_LOGI(...) mpos_duke_log(__VA_ARGS__)
 #define RG_LOGD(...) mpos_duke_log(__VA_ARGS__)
 #define RG_LOGV(...) mpos_duke_log(__VA_ARGS__)
-#define RG_PANIC(...) mpos_duke_log(__VA_ARGS__)
+/* A panic has to end the engine. This used to be only a log, so the
+ * cache's "CACHE SPACE ALL LOCKED UP" path kept allocating with an invalid
+ * best-fit and wrote past its bookkeeping, corrupting the arena; the renderer
+ * then faulted a few frames later. abort() reaches the core's longjmp and
+ * leaves a clean quit with the reason in the log. */
+#define RG_PANIC(...) do { mpos_duke_log(__VA_ARGS__); abort(); } while (0)
 #define ESP_LOGV(tag, ...) do { (void)(tag); } while (0)
 #define ESP_LOGD(tag, ...) do { (void)(tag); } while (0)
 
