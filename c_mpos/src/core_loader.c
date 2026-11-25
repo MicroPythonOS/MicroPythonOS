@@ -616,7 +616,18 @@ static void core_task_main(void *arg) {
         }
     }
     xSemaphoreGive(s_task_exit);
-    vTaskDelete(NULL);
+    // Park instead of deleting itself. The task was created with the IDF's
+    // *WithCaps* helper, which builds it with static allocation (the stack in
+    // PSRAM for an engine on a fragmented board) and expects
+    // vTaskDeleteWithCaps() to free both buffers. A self-deleting task hands
+    // the stack to the idle task's termination list, which frees a dynamic
+    // task's stack but nothing for a static one - so every session leaked 48
+    // KiB of PSRAM *in the middle of the engine's heap*, splitting the free
+    // space in two. One Duke launch was enough to drop the largest block from
+    // 7.2 MB to 4.5 MB, and the next engine then had to start with 768 KB.
+    for (;;) {
+        vTaskSuspend(NULL);
+    }
 }
 
 // -- module functions --------------------------------------------------------
@@ -997,11 +1008,15 @@ static void stop_task(void) {
     }
     if (xSemaphoreTake(s_task_exit, pdMS_TO_TICKS(3000)) != pdTRUE) {
         // A core that will not return from a tick cannot be left running over
-        // memory the host is about to hand back. Killing it leaks whatever it
-        // held, which beats the alternative of it executing unmapped code.
+        // memory the host is about to hand back; suspend and delete it. Its
+        // stack is the *static* buffer the WithCaps helper allocated, so this
+        // is also the call that gives 48 KiB back to PSRAM.
         printf("mpos_core: worker did not stop, deleting it\n");
-        vTaskDelete(s_task);
     }
+    // The worker parks itself after signalling, so it is suspended here; the
+    // WithCaps delete frees the PSRAM stack and the TCB with it. Without this
+    // the block stays allocated inside the free region it split.
+    vTaskDeleteWithCaps(s_task);
     s_task = NULL;
     s_task_stop = 0;
 }

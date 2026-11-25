@@ -642,6 +642,18 @@ class NativeActivity(Activity):
         self._clear_hint()
         self.hint = self._add_label(text)
         self._hint_until = 0
+        # A failed start leaves no frame loop behind (it is only registered
+        # when the engine is ready), and the launch progress may have been the
+        # last thing painted: without this the screen keeps showing
+        # "Loading ..." and the reason never appears.
+        self._repaint()
+
+    def _repaint(self):
+        """Paint now: the launch/failure path has no frame loop yet."""
+        try:
+            lv.refr_now(None)
+        except Exception as error:
+            print("%s: cannot repaint: %s" % (self.who(), error))
 
     def set_message(self, text):
         """Replace the standing message's text, reusing its label.

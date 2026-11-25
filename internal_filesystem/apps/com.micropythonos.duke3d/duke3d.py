@@ -732,12 +732,9 @@ class Duke3D(NativeActivity):
         if total:
             text = "%s %d%%" % (text, done * 100 // total)
         self.set_message(text)
-        try:
-            # The binding takes the display explicitly; without it nothing is
-            # repainted until the engine's first frame.
-            lv.refr_now(None)
-        except Exception as error:
-            print("duke3d: cannot repaint the launch message: %s" % (error,))
+        # The binding takes the display explicitly; without it nothing is
+        # repainted until the engine's first frame.
+        self._repaint()
 
     def _extent_progress(self, phase, percent):
         if phase == extent.PHASE_SPACE or percent <= 0:
@@ -791,6 +788,7 @@ class Duke3D(NativeActivity):
         except Exception as error:
             print("duke3d: prepare failed: %s" % (error,))
             sys.print_exception(error)
+            _debug("prepare failed: %r" % (error,))
             self._release_grp()
             self.show_message(
                 "Duke Nukem 3D cannot start.\n\n%s\n\n"
@@ -808,6 +806,7 @@ class Duke3D(NativeActivity):
             # wrong and give the memory back, so leaving and retrying works.
             print("duke3d: engine start failed: %s" % (error,))
             sys.print_exception(error)
+            _debug("engine start failed: %r" % (error,))
             self._release_grp()
             self.show_message(
                 "Duke Nukem 3D could not start.\n\n%s\n\n"
