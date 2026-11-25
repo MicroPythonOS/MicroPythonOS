@@ -15,7 +15,7 @@ cd "$mydir"
 build=build_host
 mkdir -p "$build"
 
-CFLAGS="-O2 -g -std=gnu99 -DMPOS_CORE -DCONFIG_IDF_TARGET_ESP32S3 -DCONFIG_IDF_TARGET_ESP32 -DLINUX -D_DEFAULT_SOURCE -DMPOS_HOST -ffunction-sections -fdata-sections"
+CFLAGS="-O2 -g -std=gnu99 -DMPOS_CORE -DMPOS_NATMOD -DCONFIG_IDF_TARGET_ESP32S3 -DCONFIG_IDF_TARGET_ESP32 -DLINUX -D_DEFAULT_SOURCE -DMPOS_HOST -ffunction-sections -fdata-sections"
 CFLAGS="$CFLAGS -Icore -Iengine/Game -Iengine/Engine -Iengine/SDL -Iaudiolib -Ihost -I../doom -I../doom/core"
 CFLAGS="$CFLAGS -Wno-int-conversion -Wno-incompatible-pointer-types -w ${DUKE_EXTRA_CFLAGS:-}"
 

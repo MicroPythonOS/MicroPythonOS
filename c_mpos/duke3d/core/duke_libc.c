@@ -112,6 +112,15 @@ size_t mpos_heap_largest(void) {
             largest = block->size;
         }
     }
+#ifdef MPOS_NATMOD
+    /* tiles.c sizes its cache from this. On a desktop the heap is large, and
+     * letting the cache take all of it leaves nothing for an Atomic map's
+     * sectors/sprites, which then fails in the level loader. 1.5 MB is the
+     * cache the host harness settles on; the rest stays available. */
+    if (largest > 1536u * 1024u) {
+        largest = 1536u * 1024u;
+    }
+#endif
     return largest;
 }
 

@@ -37,4 +37,10 @@ int duke_platform_running(void);
 // button confirm in a menu.
 int duke_in_menu(void);
 
+// The native-module host can hand the GRP over as one contiguous buffer, so
+// the engine's archive can be memory-backed instead of doing 64 KB read
+// allocations through the ABI. NULL when the asset is a file.
+extern const uint8_t *mpos_duke_asset_data;
+extern uint32_t mpos_duke_asset_size;
+
 #endif

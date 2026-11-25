@@ -23,6 +23,10 @@
 static const mpos_core_abi_t *s_abi;
 static int s_running;
 
+// Set by natmod.c before the engine boots; empty for a file asset.
+const uint8_t *mpos_duke_asset_data;
+uint32_t mpos_duke_asset_size;
+
 static uint32_t s_frames;
 static uint32_t s_present_ms;
 static uint32_t s_convert_ms;

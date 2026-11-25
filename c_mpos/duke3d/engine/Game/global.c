@@ -159,7 +159,14 @@ uint8_t  playerreadyflag[MAXPLAYERS],ready2send;
 uint8_t  playerquitflag[MAXPLAYERS];
 int32_t vel, svel, angvel, horiz, ototalclock, respawnactortime=768, respawnitemtime=768, groupfile;
 
+#ifdef MPOS_NATMOD
+/* A 64-bit host cannot keep pointers in the script's 32-bit words. The array
+ * is mapped below 4 GB at start-up (natmod.c), so the engine's existing
+ * (int32_t)scriptptr addresses remain valid. */
+int32_t * script;
+#else
 EXT_RAM_BSS_ATTR int32_t script[MAXSCRIPTSIZE];
+#endif
 int32_t *scriptptr,*insptr,*labelcode,labelcnt;
 EXT_RAM_BSS_ATTR int32_t *actorscrptr[MAXTILES];
 int32_t *parsing_actor;

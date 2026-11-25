@@ -8334,7 +8334,17 @@ static int load_duke3d_groupfile(void)
     /* The GRP is an asset the activity loaded into a host buffer (2.6 MB for
      * the compacted shareware maps); it is served by the core's open()/read()
      * through the ABI, so there is no directory to scan and nothing to unzip
-     * in C. */
+     * in C. A contiguous native-module buffer is handed to the archive
+     * directly: a 44 MB Atomic GRP would otherwise exhaust the read buffers. */
+#ifdef MPOS_NATMOD
+    if (mpos_duke_asset_data != NULL
+            && initgroupfile_from_memory("duke3d.grp", mpos_duke_asset_data,
+                                         (int32_t)mpos_duke_asset_size) != -1)
+    {
+        detect_and_set_confilename();
+        return true;
+    }
+#endif
     if (initgroupfile("duke3d.grp") != -1)
     {
         detect_and_set_confilename();

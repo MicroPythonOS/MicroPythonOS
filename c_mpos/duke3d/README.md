@@ -193,6 +193,52 @@ still calls `FX_*`/`MUSIC_*`, so `duke_audio.c` provides them as stubs and
 synthesising the engine's 8-bit samples through the host's mixer is a separate
 step; it is not on the load path.
 
+## Desktop native module
+
+The same engine also builds as an ordinary MicroPython native module for x64,
+so gameplay, textures, keys and save/load can be tested without a badge:
+
+```
+./scripts/build_duke_app.sh --desktop     # module_x64.mpy
+./scripts/build_duke_app.sh               # module + esp32s3.xip
+```
+
+`natmod.c` fills a normal `mpos_core_abi_t` with MicroPython calls instead of
+the core loader: `io.open` for files, `m_malloc`/`m_realloc` for the engine
+heap, the REPL's `mp_print_t` for `log()`, and a Python callback for the band
+present. The SDL video/event/system shims and `duke_platform.c` are shared with
+the core, so the two builds differ only in how they reach the host.
+
+Two x64-specific rules are load-bearing:
+
+* **Pointers have to stay below 4 GB.** The Build renderer and the CON script
+  keep addresses in 32-bit words (`(int32_t)FP_OFF(...)`, `labelcode [...] =
+  (int32_t)scriptptr`). The module therefore maps its CON script and its engine
+  heap with `MAP_32BIT`, and `patches/micropython_natmod_bss_low32.patch` maps
+  the native module's BSS/rodata below 4 GB too (it falls back to the heap when
+  that fails; the Doom module does not care either way). With those in place
+  every truncated address is still a valid one.
+* **`-Wa,-mrelax-relocations=no`.** mpy_ld understands `R_X86_64_GOTPCREL` but
+  not the linker-relaxable `R_X86_64_GOTPCRELX` (41). Keeping the assembler
+  from emitting the relaxed form avoids patching the linker.
+
+`tools/prepare.py` runs `tools/dataless.py` over the engine and the shims to
+produce `gen/` (no data section, no static BSS), including the generated
+`duke_init_all_data()` that copies initialised values into BSS at boot.
+
+Save/load goes to `prefs/com.micropythonos.duke3d/{duke3d,config}` on both
+hosts. `get_save_path()` passes a copy of its path to `rg_dirname()` - the
+retro-go shim truncates the string in place, so the old code handed `fopen()`
+the directory instead of the file. `save_slot(n)`/`load_slot(n)` are exposed by
+the native module for the automated test; they call the engine's own
+`saveplayer`/`loadplayer`.
+
+A desktop can point at a full or Atomic GRP with the intent's `"grp"` extra;
+`tests/test_graphical_duke3d_desktop.py` boots the bundled compacted GRP, ticks
+it, and round-trips a save. On a badge an external GRP is only read in the
+on-task test mode (`/duke3d_on_task`): the worker loader serves its asset from a
+C buffer and cannot call back into Python for a file during start-up.
+
 ## Build and install
 
 ```

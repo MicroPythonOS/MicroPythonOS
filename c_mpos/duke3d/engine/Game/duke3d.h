@@ -283,7 +283,11 @@ extern EXTERN_ATTR SAMPLE Sound[ NUM_SOUNDS ];
 extern EXTERN_ATTR SOUNDOWNER SoundOwner[NUM_SOUNDS][4];
 extern uint8_t  playerreadyflag[MAXPLAYERS],playerquitflag[MAXPLAYERS];
 extern EXTERN_ATTR char  sounds[NUM_SOUNDS][14];
+#ifdef MPOS_NATMOD
+extern int32_t *script;
+#else
 extern EXTERN_ATTR int32_t script[MAXSCRIPTSIZE];
+#endif
 extern int32_t *scriptptr,*insptr,*labelcode,labelcnt;
 extern char  *label,*textptr,error,warning;
 extern uint8_t killit_flag;

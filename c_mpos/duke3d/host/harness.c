@@ -15,6 +15,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/mman.h>
+
+// engine/Game/duke3d.h: the CON script, a pointer on a 64-bit host.
+#define MAXSCRIPTSIZE 20460
+extern int32_t *script;
 
 #include "../../core_abi.h"
 #include "../core/duke_platform.h"
@@ -173,6 +178,14 @@ int main(int argc, char **argv) {
     abi.frame = s_frame;
     abi.band_rows = 45;
 
+    // The script stores 32-bit addresses; keep it below 4 GB on x64.
+    script = (int32_t *)mmap(NULL, MAXSCRIPTSIZE * sizeof(int32_t),
+                             PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
+    if (script == MAP_FAILED) {
+        fprintf(stderr, "harness: cannot map the script below 4 GB\n");
+        return 1;
+    }
     duke_platform_init(&abi);
 
     char *engine_argv[] = {(char *)"duke3d", NULL};

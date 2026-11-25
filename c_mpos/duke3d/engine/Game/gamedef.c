@@ -1551,7 +1551,7 @@ void loadefs(char  *filenam, char  *mptr, int readfromGRP)
 {
     int32_t fs = 0, fp = 0;
 
-	memset(script, 0, sizeof(script));
+	memset(script, 0, MAXSCRIPTSIZE * sizeof(int32_t));
 
 	// FIX_00071: do not ask for internal default con if
 	// external con or internal con is buggy

@@ -1,2 +1,6 @@
 build_core/
 build_host/
+build_*/
+gen/
+*.mpy
+.mpy_ld_cache/

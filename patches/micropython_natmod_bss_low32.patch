@@ -1,0 +1,41 @@
+diff --git a/py/persistentcode.c b/py/persistentcode.c
+index b12c1007..643bfbf0 100644
+--- a/py/persistentcode.c
++++ b/py/persistentcode.c
+@@ -29,6 +29,13 @@
+ #include <string.h>
+ #include <assert.h>
+ 
++#if defined(__x86_64__) && defined(__linux__)
++#include <sys/mman.h>
++#ifndef MAP_32BIT
++#define MAP_32BIT 0x40
++#endif
++#endif
++
+ #include "py/reader.h"
+ #include "py/nativeglue.h"
+ #include "py/persistentcode.h"
+@@ -366,7 +373,21 @@ static mp_raw_code_t *load_raw_code(mp_reader_t *reader, mp_module_context_t *co
+ 
+         if (rodata_size + bss_size != 0) {
+             bss_size = (uintptr_t)MP_ALIGN(bss_size, sizeof(uintptr_t));
+-            uint8_t *data = m_new0(uint8_t, bss_size + rodata_size);
++            uint8_t *data;
++            #if defined(__x86_64__) && defined(__linux__)
++            // Duke3D's Build renderer keeps addresses in 32-bit words (the
++            // script, palette and lookup tables). On a 64-bit host the module
++            // BSS/rodata has to live below 4 GB or every one of those casts
++            // truncates. Fall back to the heap when the low map fails.
++            data = mmap(NULL, bss_size + rodata_size,
++                        PROT_READ | PROT_WRITE,
++                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
++            if (data == MAP_FAILED) {
++                data = m_new0(uint8_t, bss_size + rodata_size);
++            }
++            #else
++            data = m_new0(uint8_t, bss_size + rodata_size);
++            #endif
+             bss = data;
+             rodata = bss + bss_size;
+             if (native_scope_flags & MP_SCOPE_FLAG_VIPERRODATA) {

@@ -275,6 +275,12 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patch
 echo "Applying 24 KiB MicroPython task stack patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/micropython_task_stack_24k.patch
 
+# A native module's BSS/rodata has to be addressable with 32 bits for engines
+# that keep pointers in 32-bit words (Duke3D's Build renderer). On x86_64 the
+# unix port maps it below 4 GB and falls back to the heap when that fails.
+echo "Applying natmod low-32-bit BSS patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/micropython_natmod_bss_low32.patch
+
 echo "Applying lvgl_micropython/lib/lvgl bmp scaling fix patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropython/lib_lvgl_lv_bmp.c.patch
 

@@ -5,6 +5,7 @@ Frameworks:
 - `mpos_core.start_task()`: a core can run on a FreeRTOS task of its own (ABI 9), with C-only services for input, its asset and its log, and a two-buffer frame hand-off to the activity. A Duke-sized engine then needs 48 KiB on that task instead of 48 KiB on the MicroPython task, which is back to 24 KiB
 - `NativeDisplay`: `add_buffer()` / `select_buffer()` show whichever of a device's buffers is finished
 - `mpos.ui.native_input.KeyHolds.tap_held()`: a key that an engine samples once a tic stays down for one tic; `tap()` only suits engines that act on the key event itself
+- native modules on x64: the loader maps the module's BSS/rodata below 4 GB (falling back to the heap), so an engine that keeps addresses in 32-bit words (Duke3D's Build renderer) works as a desktop module
 
 0.23.0
 ======

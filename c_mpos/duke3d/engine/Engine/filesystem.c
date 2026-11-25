@@ -1018,7 +1018,14 @@ const char *get_save_path(const char *filename)
     } else {
         snprintf(path, sizeof(path), RG_BASE_PATH_SAVES "/duke3d/%s", filename);
     }
-    rg_storage_mkdir(rg_dirname(path));
+    /* rg_dirname() truncates the string it is given, and `path` is what the
+     * caller saves to: make the directory from a copy or the save writes to
+     * the directory itself. */
+    {
+        char dirname_copy[1024];
+        snprintf(dirname_copy, sizeof(dirname_copy), "%s", path);
+        rg_storage_mkdir(rg_dirname(dirname_copy));
+    }
     return path;
 }
 
