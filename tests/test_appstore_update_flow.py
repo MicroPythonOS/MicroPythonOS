@@ -15,6 +15,9 @@ import unittest
 
 sys.path.insert(0, "builtin/apps/com.micropythonos.appstore")
 
+import appstore as appstore_module
+import store_source as store_source_module
+
 # ---------------------------------------------------------------------------
 # LVGL constants (available even when display is uninitialised)
 # ---------------------------------------------------------------------------
@@ -59,7 +62,7 @@ class MockPrefs:
         self._data = {}
 
     def get_string(self, key, default=None):
-        return self._data.get(key, default)
+        return "badgehub" if key == "store_source" else self._data.get(key, default)
 
     def edit(self):
         return self
@@ -256,6 +259,8 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
 
         orig_sp = appstore_core.SharedPreferences
         appstore_core.SharedPreferences = MockPrefs
+        self._source_prefs = store_source_module.SharedPreferences
+        store_source_module.SharedPreferences = MockPrefs
 
         notify_calls = []
         cancel_calls = []
@@ -291,6 +296,7 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
         import mpos
         ctx["appstore_core"].ConnectivityManager = ctx["orig_cm"]
         ctx["appstore_core"].SharedPreferences = ctx["orig_sp"]
+        store_source_module.SharedPreferences = self._source_prefs
         mpos.NotificationManager.notify = ctx["orig_notify"]
         mpos.NotificationManager.cancel = ctx["orig_cancel"]
         ctx["appstore_core"].AppUpdateManager._instance = None
@@ -762,16 +768,17 @@ class TestAppUpdateRunAll(unittest.TestCase):
         from appstore import AppStore
 
         self._orig_refresh = mpos.AppManager.refresh_apps
-        self._orig_dl = mpos.AppManager.download_and_install_package
+        self._orig_dl = appstore_module.install_package
         self.refresh_calls = []
         self.install_calls = []
 
         mpos.AppManager.refresh_apps = lambda: self.refresh_calls.append(True)
 
-        async def _fake_dl(url, fullname, **kwargs):
+        async def _fake_dl(app_data, **kwargs):
+            url, fullname = app_data["download_url"], app_data["fullname"]
             self.install_calls.append((url, fullname))
 
-        mpos.AppManager.download_and_install_package = _fake_dl
+        appstore_module.install_package = _fake_dl
 
         store = AppStore()
         store.prefs = MockPrefs(None)
@@ -787,7 +794,7 @@ class TestAppUpdateRunAll(unittest.TestCase):
     def tearDown(self):
         import mpos
         mpos.AppManager.refresh_apps = getattr(self, "_orig_refresh", lambda: None)
-        mpos.AppManager.download_and_install_package = getattr(self, "_orig_dl", lambda *a, **kw: None)
+        appstore_module.install_package = getattr(self, "_orig_dl", lambda *a, **kw: None)
 
     def test_run_update_all_installs_each_app_in_order(self):
         store = self._make_store()
@@ -818,7 +825,7 @@ class TestAppUpdateRunAll(unittest.TestCase):
     def test_run_update_all_skips_apps_without_download_url(self):
         store = self._make_store()
         apps = [
-            {"fullname": "com.test.a", "name": "AppA"},
+            {"fullname": "com.test.a", "name": "AppA", "_store_source": "badgehub"},
         ]
         import asyncio
         loop = asyncio.get_event_loop()
@@ -830,7 +837,7 @@ class TestAppUpdateRunAll(unittest.TestCase):
 
         store = self._make_store()
         apps = [
-            {"fullname": "com.test.alpha", "name": "Alpha"},
+            {"fullname": "com.test.alpha", "name": "Alpha", "_store_source": "badgehub"},
         ]
         orig_dl = dm.DownloadManager.download_url
 
@@ -864,16 +871,17 @@ class TestAppUpdateRunAll(unittest.TestCase):
         import mpos
 
         store = self._make_store()
-        mpos.AppManager.download_and_install_package = self._orig_dl
+        appstore_module.install_package = self._orig_dl
         fail_calls = []
 
-        async def _fail_first(url, fullname, **kwargs):
+        async def _fail_first(app_data, **kwargs):
+            url, fullname = app_data["download_url"], app_data["fullname"]
             fail_calls.append(fullname)
             if fullname == "com.test.a":
                 raise OSError("download failed")
             self.install_calls.append((url, fullname))
 
-        mpos.AppManager.download_and_install_package = _fail_first
+        appstore_module.install_package = _fail_first
 
         apps = [
             {"fullname": "com.test.a", "name": "AppA", "download_url": "http://x/a.mpk"},
@@ -887,7 +895,7 @@ class TestAppUpdateRunAll(unittest.TestCase):
             self.assertEqual(self.install_calls[0][1], "com.test.b")
             self.assertIn("com.test.a", fail_calls)
         finally:
-            mpos.AppManager.download_and_install_package = self._orig_dl
+            appstore_module.install_package = self._orig_dl
 
     def test_run_update_all_disables_button_during_update(self):
         import mpos
@@ -895,10 +903,10 @@ class TestAppUpdateRunAll(unittest.TestCase):
         store = self._make_store()
         button_states_during = []
 
-        async def _capture_state(url, fullname, **kwargs):
+        async def _capture_state(app_data, **kwargs):
             button_states_during.append(bool(store.update_all_button._states))
 
-        mpos.AppManager.download_and_install_package = _capture_state
+        appstore_module.install_package = _capture_state
         try:
             apps = [
                 {"fullname": "com.test.a", "name": "AppA", "download_url": "http://x/a.mpk"},
@@ -909,18 +917,18 @@ class TestAppUpdateRunAll(unittest.TestCase):
             self.assertTrue(button_states_during, "button should be disabled during install")
             self.assertTrue(button_states_during[0], "button._states should be non-empty (disabled)")
         finally:
-            mpos.AppManager.download_and_install_package = self._orig_dl
+            appstore_module.install_package = self._orig_dl
 
     def test_run_update_all_handles_out_of_space(self):
         import mpos
 
         store = self._make_store()
-        mpos.AppManager.download_and_install_package = self._orig_dl
+        appstore_module.install_package = self._orig_dl
 
-        async def _fail_space(url, fullname, **kwargs):
+        async def _fail_space(app_data, **kwargs):
             raise OSError("Not enough free space available")
 
-        mpos.AppManager.download_and_install_package = _fail_space
+        appstore_module.install_package = _fail_space
 
         apps = [
             {"fullname": "com.test.a", "name": "AppA", "download_url": "http://x/a.mpk"},
@@ -934,7 +942,7 @@ class TestAppUpdateRunAll(unittest.TestCase):
             # label should show space error
             self.assertIn("Not enough space", store.update_all_label._text)
         finally:
-            mpos.AppManager.download_and_install_package = self._orig_dl
+            appstore_module.install_package = self._orig_dl
 
 
 # ---------------------------------------------------------------------------
@@ -955,6 +963,8 @@ class TestAppUpdateRunAllClearsUpdatableApps(unittest.TestCase):
 
         self._orig_sp = appstore_core.SharedPreferences
         appstore_core.SharedPreferences = MockPrefs
+        self._source_prefs = store_source_module.SharedPreferences
+        store_source_module.SharedPreferences = MockPrefs
 
         notify_calls = []
         cancel_calls = []
@@ -972,13 +982,14 @@ class TestAppUpdateRunAllClearsUpdatableApps(unittest.TestCase):
         self._notify_calls = notify_calls
         self._cancel_calls = cancel_calls
 
-        self._orig_dl = mpos.AppManager.download_and_install_package
+        self._orig_dl = appstore_module.install_package
         self._install_calls = []
 
-        async def _fake_dl(url, fullname, **kwargs):
+        async def _fake_dl(app_data, **kwargs):
+            url, fullname = app_data["download_url"], app_data["fullname"]
             self._install_calls.append((url, fullname))
 
-        mpos.AppManager.download_and_install_package = _fake_dl
+        appstore_module.install_package = _fake_dl
 
         self._orig_refresh = mpos.AppManager.refresh_apps
         self._refresh_calls = []
@@ -1000,7 +1011,7 @@ class TestAppUpdateRunAllClearsUpdatableApps(unittest.TestCase):
         import mpos
         import appstore_core
 
-        mpos.AppManager.download_and_install_package = self._orig_dl
+        appstore_module.install_package = self._orig_dl
         mpos.AppManager.refresh_apps = self._orig_refresh
         mpos.TaskManager.create_task = self._orig_create_task
         mpos.NotificationManager.notify = self._orig_notify
@@ -1008,6 +1019,7 @@ class TestAppUpdateRunAllClearsUpdatableApps(unittest.TestCase):
 
         appstore_core.ConnectivityManager = self._orig_cm
         appstore_core.SharedPreferences = self._orig_sp
+        store_source_module.SharedPreferences = self._source_prefs
         appstore_core.AppUpdateManager._instance = None
         MockConnectivityManager.reset_instance()
 
@@ -1242,12 +1254,13 @@ class TestAppStorePreAutoCheck(unittest.TestCase):
         _MockAUM.reset_instance()
 
         self._install_calls = []
-        self._orig_dl_install = mpos.AppManager.download_and_install_package
+        self._orig_dl_install = appstore_module.install_package
 
-        async def _fake_install(url, fullname, **kwargs):
+        async def _fake_install(app_data, **kwargs):
+            url, fullname = app_data["download_url"], app_data["fullname"]
             self._install_calls.append((url, fullname))
 
-        mpos.AppManager.download_and_install_package = _fake_install
+        appstore_module.install_package = _fake_install
 
         self._tasks_created = []
         self._orig_create_task = mpos.TaskManager.create_task
@@ -1271,7 +1284,7 @@ class TestAppStorePreAutoCheck(unittest.TestCase):
         import appstore_core
         appstore_core.AppUpdateManager = self._orig_aum
         _MockAUM.reset_instance()
-        mpos.AppManager.download_and_install_package = self._orig_dl_install
+        appstore_module.install_package = self._orig_dl_install
         mpos.TaskManager.create_task = self._orig_create_task
         mpos.AppManager.refresh_apps = self._orig_refresh
         mpos.AppManager.is_update_available = self._orig_iav
@@ -1362,7 +1375,7 @@ class TestAppStorePreAutoCheck(unittest.TestCase):
         from appstore_core import AppUpdateState
         aum = _MockAUM.get_instance()
         aum.updatable_apps = [
-            {"fullname": "com.test.a", "name": "AppA"},
+            {"fullname": "com.test.a", "name": "AppA", "_store_source": "badgehub"},
             {"fullname": "com.test.b", "name": "AppB"},
         ]
         aum.current_state = AppUpdateState.UPDATES_AVAILABLE
@@ -1729,6 +1742,8 @@ class TestAppUpdateNotificationsSetting(unittest.TestCase):
 
         orig_sp = appstore_core.SharedPreferences
         appstore_core.SharedPreferences = prefs_cls
+        self._source_prefs = store_source_module.SharedPreferences
+        store_source_module.SharedPreferences = prefs_cls
 
         notify_calls = []
         cancel_calls = []
@@ -1764,6 +1779,7 @@ class TestAppUpdateNotificationsSetting(unittest.TestCase):
         import mpos
         ctx["appstore_core"].ConnectivityManager = ctx["orig_cm"]
         ctx["appstore_core"].SharedPreferences = ctx["orig_sp"]
+        store_source_module.SharedPreferences = self._source_prefs
         mpos.NotificationManager.notify = ctx["orig_notify"]
         mpos.NotificationManager.cancel = ctx["orig_cancel"]
         ctx["appstore_core"].AppUpdateManager._instance = None
