@@ -202,7 +202,13 @@ EXTERN uint8_t  vidoption;
 EXTERN int32_t xdim, ydim, numpages;
 
 // Fast way to retrive the start of a column in the framebuffer, given a screenspace X coordinate.
-EXTERN FAST_RAM_ATTR int32_t ylookup[MAXYDIM+1];
+/* Row offsets for the screen, rebuilt by setviewback() and setviewtotile()
+ * as well. A tile view is as tall as the tile (the compacted GRP declares
+ * 128x400 textures, and the save thumbnail asks for 320), so the table must
+ * cover the largest tile dimension, not only MAXYDIM: writing past it lands
+ * in ydim/xdim/tsprite and corrupts the renderer. */
+#define MAXYLOOKUP 1024
+EXTERN FAST_RAM_ATTR int32_t ylookup[MAXYLOOKUP];
 
 EXTERN int32_t yxaspect, viewingrange;
 

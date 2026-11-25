@@ -109,51 +109,83 @@ int cache_contains(uint8_t *ptr, int32_t size)
 void allocache (uint8_t** newhandle, int32_t newbytes, uint8_t  *newlockptr)
 {
 	int32_t i, z, zz, bestz=0, daval, bestval, besto=0, o1, o2, sucklen, suckz;
+	int attempt;
 
-    // printf("allocache: newbytes=%"PRId32", lock=%d\n", newbytes, *newlockptr);
+    /* On failure this leaves *newhandle NULL. Callers (loadtile) then give
+     * the tile a 1x1 transparent stand-in, so a full cache costs one
+     * invisible texture instead of the whole frame or the app. */
+    *newhandle = NULL;
 
 	newbytes = (newbytes + 15) & ~15; // Align size to 16 bytes
 
 	if ((uint32_t)newbytes > (uint32_t)cachesize)
 	{
-		printf("Cachesize: %"PRId32"\n",cachesize);
-		printf("*Newhandle: 0x%x, Newbytes: %"PRId32", *Newlock: %d\n",(unsigned int)newhandle,newbytes,*newlockptr);
-		reportandexit("BUFFER TOO BIG TO FIT IN CACHE!\n");
+		static int too_big_logged;
+		if (too_big_logged < 4) {
+			too_big_logged++;
+			RG_LOGW("allocache: %d bytes do not fit a %d byte cache; using a fallback tile",
+			        (int)newbytes, (int)cachesize);
+		}
 		return;
 	}
 
 	if (*newlockptr == 0)
 	{
-		reportandexit("ALLOCACHE CALLED WITH LOCK OF 0!\n");
+		RG_LOGW("allocache: called with a lock of 0");
 		return;
 	}
 
-		/* Find best place */
-	bestval = 0x7fffffff; o1 = cachesize;
-	for(z=cacnum-1;z>=0;z--)
+		/* Find best place; if every block is locked, clear the stale locks
+		 * once and look again. */
+	bestval = 0x7fffffff;
+	for (attempt = 0; attempt < 2; attempt++)
 	{
-		o1 -= cac[z].leng;
-		o2 = o1+newbytes; if (o2 > cachesize) continue;
+		bestval = 0x7fffffff; o1 = cachesize;
+		for(z=cacnum-1;z>=0;z--)
+		{
+			o1 -= cac[z].leng;
+			o2 = o1+newbytes; if (o2 > cachesize) continue;
 
-		daval = 0;
-		for(i=o1,zz=z;i<o2;i+=cac[zz++].leng)
-		{
-			if (*cac[zz].lock == 0) continue;
-			if (*cac[zz].lock >= 200) { daval = 0x7fffffff; break; }
-			daval += (int32_t ) mulscale32(cac[zz].leng+65536,lockrecip[*cac[zz].lock]);
-			if (daval >= bestval) break;
+			daval = 0;
+			for(i=o1,zz=z;i<o2;i+=cac[zz++].leng)
+			{
+				if (*cac[zz].lock == 0) continue;
+				if (*cac[zz].lock >= 200) { daval = 0x7fffffff; break; }
+				daval += (int32_t ) mulscale32(cac[zz].leng+65536,lockrecip[*cac[zz].lock]);
+				if (daval >= bestval) break;
+			}
+			if (daval < bestval)
+			{
+				bestval = daval; besto = o1; bestz = z;
+				if (bestval == 0) break;
+			}
 		}
-		if (daval < bestval)
+		if (bestval != 0x7fffffff) break;
+		if (attempt == 1) break;
+
 		{
-			bestval = daval; besto = o1; bestz = z;
-			if (bestval == 0) break;
+			int unlocked = 0;
+			for (z = 0; z < cacnum; z++)
+			{
+				if (cac[z].lock != NULL && *cac[z].lock > 0 && *cac[z].lock < 200)
+				{
+					*cac[z].lock = 0;
+					unlocked++;
+				}
+			}
+			if (unlocked == 0) break;
+			RG_LOGW("allocache: cache was fully locked, unlocked %d stale blocks for %d bytes",
+			        unlocked, (int)newbytes);
 		}
 	}
 
-	/*printf("%ld %ld %ld\n",besto,newbytes,*newlockptr);*/
-
 	if (bestval == 0x7fffffff) {
-		reportandexit("CACHE SPACE ALL LOCKED UP!\n");
+		static int locked_logged;
+		if (locked_logged < 4) {
+			locked_logged++;
+			RG_LOGW("allocache: no evictable block for %d bytes (cache %d); using a fallback tile",
+			        (int)newbytes, (int)cachesize);
+		}
 		return;
 	}
 
@@ -166,7 +198,7 @@ void allocache (uint8_t** newhandle, int32_t newbytes, uint8_t  *newlockptr)
         }
 		if (*cac[suckz].lock) {
             if (cac[suckz].hand == NULL) {
-                RG_LOGE("allocache: block %"PRId32" has lock but hand is NULL!", suckz);
+                RG_LOGE("allocache: block %"PRId32 " has lock but hand is NULL!", suckz);
             } else {
                 *cac[suckz].hand = 0;
             }
@@ -182,13 +214,18 @@ void allocache (uint8_t** newhandle, int32_t newbytes, uint8_t  *newlockptr)
 	cac[bestz].lock = newlockptr;
 	cachecount++;
 
-		/* Add new empty block if necessary */
+		/* Add new empty block if necessary. If the object table is full the
+		 * allocation itself stands; only the free tail is lost. */
 	if (sucklen <= 0) return;
 
 	bestz++;
 	if (bestz == cacnum)
 	{
-		cacnum++; if (cacnum > MAXCACHEOBJECTS) { reportandexit("Too many objects in cache! (cacnum > MAXCACHEOBJECTS)\n"); return; }
+		if (cacnum + 1 > MAXCACHEOBJECTS) {
+			RG_LOGW("allocache: object table full, dropping the free tail");
+			return;
+		}
+		cacnum++;
 		cac[bestz].leng = sucklen;
 		cac[bestz].lock = &zerochar;
 		return;
@@ -196,7 +233,11 @@ void allocache (uint8_t** newhandle, int32_t newbytes, uint8_t  *newlockptr)
 
 	if (*cac[bestz].lock == 0) { cac[bestz].leng += sucklen; return; }
 
-	cacnum++; if (cacnum > MAXCACHEOBJECTS) { reportandexit("Too many objects in cache! (cacnum > MAXCACHEOBJECTS)\n"); return; }
+	if (cacnum + 1 > MAXCACHEOBJECTS) {
+		RG_LOGW("allocache: object table full, dropping the free tail");
+		return;
+	}
+	cacnum++;
 	for(z=cacnum-1;z>bestz;z--) cac[z] = cac[z-1];
 	cac[bestz].leng = sucklen;
 	cac[bestz].lock = &zerochar;

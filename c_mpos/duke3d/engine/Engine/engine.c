@@ -1242,6 +1242,8 @@ IRAM_ATTR static void wallscan(int32_t x1, int32_t x2,
         return;
 
     TILE_MakeAvailable(globalpicnum);
+    if (tiles[globalpicnum].data == NULL)
+        return;  /* no room and no fallback: skip the wall, do not draw through NULL */
 
     xnice = (pow2long[picsiz[globalpicnum]&15] == tileWidth);
     if (xnice)
@@ -1430,6 +1432,8 @@ IRAM_ATTR static void maskwallscan(int32_t x1, int32_t x2,
         return;
 
     TILE_MakeAvailable(globalpicnum);
+    if (tiles[globalpicnum].data == NULL)
+        return;  /* no room and no fallback: skip the wall, do not draw through NULL */
 
     startx = x1;
 
@@ -9109,6 +9113,7 @@ void setviewback(void)
         k = bakxsiz[0];
     else
         k = max(bakxsiz[setviewcnt-1],bakxsiz[setviewcnt]);
+    if (k >= MAXYLOOKUP) k = MAXYLOOKUP - 1;
     j = 0;
     for(i=0; i<=k; i++) ylookup[i] = j, j += bytesperline;
     setBytesPerLine(bytesperline);

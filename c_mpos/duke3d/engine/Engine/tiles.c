@@ -819,6 +819,8 @@ void setviewtotile(short tilenume, int32_t tileWidth, int32_t tileHeight)
     setview(0,0,tileHeight-1,tileWidth-1);
     setaspect(65536,65536);
     j = 0;
+    if (tileWidth >= MAXYLOOKUP)
+        tileWidth = MAXYLOOKUP - 1;
     for(i=0; i<=tileWidth; i++) {
         ylookup[i] = j;
         j += tileHeight;
@@ -880,6 +882,23 @@ IRAM_ATTR void setgotpic(int32_t tilenume)
 
 
 
+/* Give a tile whose art cannot be loaded (missing from the GRP, or no room in
+ * the cache) a valid one-pixel transparent texture. Every consumer then has a
+ * tile it can sample, the wall/floor draws nothing, and the engine keeps
+ * running; the real pixels are tried again when the tile is next needed. */
+static void make_tile_invisible(short tilenume)
+{
+    tiles[tilenume].data = NULL;
+    tiles[tilenume].dim.width = 1;
+    tiles[tilenume].dim.height = 1;
+    picsiz[tilenume] = (uint8_t)(1 | (1 << 4));
+    tiles[tilenume].lock = 199;
+    allocache(&tiles[tilenume].data, 1, (uint8_t  *) &tiles[tilenume].lock);
+    if (tiles[tilenume].data != NULL) {
+        tiles[tilenume].data[0] = 255;
+    }
+}
+
 void loadtile(short tilenume)
 {
     uint8_t  *ptr;
@@ -919,28 +938,7 @@ void loadtile(short tilenume)
 
             artfilnum = -1;  // Prevent subsequent tiles from using stale -1 handle
 
-            /* The tile is not in the compacted GRP. Allocating its declared
-             * size (some are 128x400, 50 KB each) for a texture that has no
-             * pixels is both wasteful in a small cache and fragile: the
-             * renderer's texture mapping then walks a tile whose real art was
-             * never loaded. A single transparent pixel keeps every consumer
-             * on a valid tile and draws nothing, which is what a missing art
-             * file should look like. */
-            if (tiles[tilenume].data == NULL
-                    || !cache_contains(tiles[tilenume].data, 1)) {
-                tiles[tilenume].data = NULL;
-                tiles[tilenume].dim.width = 1;
-                tiles[tilenume].dim.height = 1;
-                picsiz[tilenume] = (uint8_t)(1 | (1 << 4));
-                tiles[tilenume].lock = 199;
-                allocache(&tiles[tilenume].data, 1, (uint8_t  *) &tiles[tilenume].lock);
-            }
-            if (tiles[tilenume].data != NULL) {
-                tiles[tilenume].data[0] = 255;
-            } else {
-                RG_LOGW("loadtile: tile %d fallback alloc failed, leaving it empty",
-                        (int)tilenume);
-            }
+            make_tile_invisible(tilenume);
             return;
         }
 
@@ -952,8 +950,10 @@ void loadtile(short tilenume)
         // printf("loadtile: %d, sizing %d, calling allocache\n", tilenume, tileFilesize);
         allocache(&tiles[tilenume].data,tileFilesize,(uint8_t  *) &tiles[tilenume].lock);
         if (tiles[tilenume].data == NULL) {
-            printf("loadtile: %d, allocache FAILED! tileFilesize=%"PRId32"\n", (int)tilenume, tileFilesize);
-            RG_PANIC("Tile allocation failed!");
+            RG_LOGW("loadtile: no cache room for tile %d (%d bytes); using a transparent tile",
+                    (int)tilenume, (int)tileFilesize);
+            make_tile_invisible(tilenume);
+            return;
         }
 
         if (artfilplc != tilefileoffs[tilenume])
