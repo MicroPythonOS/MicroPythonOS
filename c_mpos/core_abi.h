@@ -59,7 +59,7 @@
 
 #include <stdint.h>
 
-#define MPOS_CORE_ABI_VERSION 9
+#define MPOS_CORE_ABI_VERSION 10
 /* Oldest entry table this loader still runs. Everything added since is
  * appended to both structs, so a core built against an older header keeps
  * working: it never reads the fields it does not know about. A blob is refused
@@ -170,7 +170,27 @@ typedef struct mpos_core_abi {
      */
     void (*frame_ready)(void *host);
     void (*yield)(void *host);
+
+    /*
+     * ABI 10, for an engine whose config and savegames live on the host's
+     * filesystem.
+     *
+     * file_request(host, op, path, offset, len, data): ask the host to read,
+     *     write or size a file and wait for its answer. `op` is
+     *     MPOS_CORE_FILE_READ / _WRITE / _SIZE. Returns the bytes transferred
+     *     (or the size), or -1. The call blocks, so the host has to serve it
+     *     from its frame loop: a worker-task core must never enter the host's
+     *     runtime, and the host's filesystem is the runtime's. NULL means the
+     *     host cannot store files (an older firmware), and a core then falls
+     *     back to read_file()/file_size(), which only serve the asset.
+     */
+    int (*file_request)(void *host, int op, const char *path,
+                        uint32_t offset, uint32_t len, void *data);
 } mpos_core_abi_t;
+
+#define MPOS_CORE_FILE_READ 0
+#define MPOS_CORE_FILE_WRITE 1
+#define MPOS_CORE_FILE_SIZE 2
 
 /*
  * Entry table. A core blob places this at offset 0 of the partition region it

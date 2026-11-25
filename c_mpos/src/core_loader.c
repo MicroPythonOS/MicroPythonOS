@@ -524,14 +524,108 @@ static int worker_file_size(void *host, const char *path) {
     return (int)s_asset_size;
 }
 
+// -- host files (ABI 10) ------------------------------------------------------
+//
+// The engine's config and savegames live on the host's filesystem, which is
+// MicroPython's littlefs: only the host's own task may touch it, and this task
+// must never enter that runtime. So a request is published here, the worker
+// blocks, and the host answers from its frame loop through
+// mpos_core.file_poll() / file_reply(). One request at a time is all a core
+// needs - a save is a menu action, not a streaming workload.
+
+#define MPOS_CORE_FILE_TIMEOUT_MS 10000
+#define MPOS_CORE_FILE_PATH 96
+
+static SemaphoreHandle_t s_file_done;
+static volatile int s_file_pending;
+static volatile int s_file_ready;
+static int s_file_op;
+static char s_file_path[MPOS_CORE_FILE_PATH];
+static uint32_t s_file_offset;
+static uint32_t s_file_len;
+static void *s_file_data;
+static volatile int s_file_result;
+
+static int host_file_request(void *host, int op, const char *path,
+                             uint32_t offset, uint32_t len, void *data) {
+    (void)host;
+    if (s_file_done == NULL || !s_file_ready || s_file_pending
+            || path == NULL || strlen(path) >= MPOS_CORE_FILE_PATH) {
+        // Start-up reads (the engine's setup file) arrive before the host's
+        // frame loop exists; answering at once keeps init from stalling for the
+        // whole timeout just to find out the file is not there.
+        return -1;
+    }
+    s_file_op = op;
+    strcpy(s_file_path, path);
+    s_file_offset = offset;
+    s_file_len = len;
+    s_file_data = data;
+    s_file_result = -1;
+    s_file_pending = 1;
+    if (xSemaphoreTake(s_file_done, pdMS_TO_TICKS(MPOS_CORE_FILE_TIMEOUT_MS)) != pdTRUE) {
+        s_file_pending = 0;
+        return -1;
+    }
+    s_file_pending = 0;
+    return s_file_result;
+}
+
+static mp_obj_t mpos_core_file_poll(void) {
+    if (!s_file_pending) {
+        return mp_const_none;
+    }
+    // A write hands the bytes over; a read or a size request carries none.
+    mp_obj_t payload = mp_const_none;
+    if (s_file_op == MPOS_CORE_FILE_WRITE && s_file_data != NULL && s_file_len > 0) {
+        payload = mp_obj_new_bytes((const byte *)s_file_data, s_file_len);
+    }
+    mp_obj_t items[5] = {
+        mp_obj_new_int(s_file_op),
+        mp_obj_new_str(s_file_path, strlen(s_file_path)),
+        mp_obj_new_int_from_uint(s_file_offset),
+        mp_obj_new_int_from_uint(s_file_len),
+        payload,
+    };
+    return mp_obj_new_tuple(5, items);
+}
+
+static mp_obj_t mpos_core_file_reply(size_t n_args, const mp_obj_t *args) {
+    int count = mp_obj_get_int(args[0]);
+    mp_obj_t payload = n_args > 1 ? args[1] : mp_const_none;
+    if (s_file_pending && s_file_op == MPOS_CORE_FILE_READ
+            && payload != mp_const_none && s_file_data != NULL) {
+        mp_buffer_info_t info;
+        mp_get_buffer_raise(payload, &info, MP_BUFFER_READ);
+        uint32_t copy = info.len < s_file_len ? info.len : s_file_len;
+        memcpy(s_file_data, info.buf, copy);
+        if (count > (int)copy) {
+            count = (int)copy;
+        }
+    }
+    s_file_result = count;
+    if (s_file_done != NULL) {
+        xSemaphoreGive(s_file_done);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mpos_core_file_reply_obj, 1, 2,
+                                           mpos_core_file_reply);
+
 static void log_push(const char *line) {
     if (s_log_ring == NULL || line == NULL) {
         return;
     }
     portENTER_CRITICAL(&s_ring_lock);
     if (s_log_head - s_log_tail >= MPOS_CORE_LOG_LINES) {
+        // A full ring must keep the *newest* lines: the one that is worth
+        // anything after a failure is the last one (a crash reason, not the
+        // 36th sound override of the start-up). Dropping the new line instead
+        // threw the reason away exactly when the ring filled up at start-up.
+        s_log_tail++;
         s_log_lost++;
-    } else {
+    }
+    {
         char *dst = s_log_ring
                   + (size_t)(s_log_head % MPOS_CORE_LOG_LINES) * MPOS_CORE_LOG_CHARS;
         size_t i = 0;
@@ -1054,6 +1148,12 @@ static void release_task_memory(void) {
         vSemaphoreDelete(s_task_exit);
         s_task_exit = NULL;
     }
+    s_file_ready = 0;
+    s_file_pending = 0;
+    if (s_file_done != NULL) {
+        vSemaphoreDelete(s_file_done);
+        s_file_done = NULL;
+    }
     s_buffer_bytes = 0;
     s_asset_chunk_count = 0;
     s_asset_size = 0;
@@ -1192,7 +1292,11 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
         s_log_ring = heap_caps_malloc(MPOS_CORE_LOG_LINES * MPOS_CORE_LOG_CHARS,
                                       MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     }
-    if (s_key_code == NULL || s_key_pressed == NULL || s_log_ring == NULL) {
+    if (s_file_done == NULL) {
+        s_file_done = xSemaphoreCreateBinary();
+    }
+    if (s_key_code == NULL || s_key_pressed == NULL || s_log_ring == NULL
+            || s_file_done == NULL) {
         release_task_memory();
         core_release();
         mp_raise_msg(&mp_type_MemoryError,
@@ -1314,6 +1418,7 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
     s_abi.palette = worker_palette;
     s_abi.poll_key = worker_poll_key;
     s_abi.read_file = worker_read_file;
+    s_abi.file_request = host_file_request;
     s_abi.file_size = worker_file_size;
     s_abi.log = worker_log;
     s_abi.frame = s_buffers[s_back_buffer];
@@ -1355,6 +1460,10 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
     // Block until the core has finished its start-up (or failed): the caller
     // shows a progress message, and nothing may tick before init returned.
     xSemaphoreTake(s_task_ready, portMAX_DELAY);
+    // From here the host's frame loop runs, so it can answer file requests.
+    if (s_file_done != NULL) {
+        s_file_ready = 1;
+    }
     if (s_task_result != 0) {
         int result = s_task_result;
         dump_log_ring();
@@ -1459,6 +1568,7 @@ static mp_obj_t mpos_core_task_presented(void) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_task_presented_obj, mpos_core_task_presented);
+static MP_DEFINE_CONST_FUN_OBJ_0(mpos_core_file_poll_obj, mpos_core_file_poll);
 
 // The pixels of one buffer, with no copy: the app wraps it in a display surface
 // and LVGL reads it directly.
@@ -1653,6 +1763,8 @@ static const mp_rom_map_elem_t mpos_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_quit_requested), MP_ROM_PTR(&mpos_core_quit_requested_obj) },
     { MP_ROM_QSTR(MP_QSTR_task_frame), MP_ROM_PTR(&mpos_core_task_frame_obj) },
     { MP_ROM_QSTR(MP_QSTR_task_presented), MP_ROM_PTR(&mpos_core_task_presented_obj) },
+    { MP_ROM_QSTR(MP_QSTR_file_poll), MP_ROM_PTR(&mpos_core_file_poll_obj) },
+    { MP_ROM_QSTR(MP_QSTR_file_reply), MP_ROM_PTR(&mpos_core_file_reply_obj) },
     { MP_ROM_QSTR(MP_QSTR_task_surface), MP_ROM_PTR(&mpos_core_task_surface_obj) },
     { MP_ROM_QSTR(MP_QSTR_task_log), MP_ROM_PTR(&mpos_core_task_log_obj) },
     { MP_ROM_QSTR(MP_QSTR_task_running), MP_ROM_PTR(&mpos_core_task_running_obj) },
