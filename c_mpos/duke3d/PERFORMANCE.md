@@ -119,3 +119,31 @@ beats one that cannot start.
 
 So: 24 KiB for the OS, 48 KiB for a Duke-class engine, from internal RAM when
 the board has a block that size and from PSRAM when it does not.
+
+## Launch cycle and the tile cache
+
+The engine heap is the third big PSRAM block (after the 2.6 MB GRP and the
+1.9 MB arena), so what it gets depends on the boot, not on the engine:
+
+| run | heap chosen | free after the cache was sized |
+|---|---|---|
+| 1st after a reboot | 2560 KB | 1147 KB |
+| 2nd-4th | 1536 KB -> 1024 KB -> 512 KB | 166 KB at the 512 KB step |
+
+MicroPython's split GC heap never returns an area to the IDF heap, so the
+largest free PSRAM block shrinks with every launch and the heap ladder follows
+it down. A start below **768 KB** is refused with "restart the badge"; a reboot
+is the only defragmenter today. The GRP may be inflated in 512 KB chunks so a
+fragmented board does not need one 2.4 MB block for it.
+
+The profile line the core logs every 5 s carries `heap <free>/<largest> KB`
+and the tile-decodes count, so a shrinking cache is visible before it fails.
+When it does fail, `allocache()` clears stale locks and retries; if there is
+still no room it returns NULL and `loadtile()` gives that one tile a 1×1
+transparent stand-in. A full cache costs an invisible texture, not the app.
+
+The renderer's own limit is not memory: the off-screen views (a mirror tile
+declared 128x400, the 320-tall tilt/thumbnail) set a view larger than the
+screen's row/column tables. That was the crash, and the fix is the clamp
+described in `README.md` ("Renderer limits"), not a bigger heap.
+
