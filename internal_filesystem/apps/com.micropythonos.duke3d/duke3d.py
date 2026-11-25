@@ -19,6 +19,17 @@ Controls - touch. Hold the badge sideways:
     right, middle    A fire, B jump
     right, bottom    START menu, MENU next weapon
 
+Controls - badge joystick and buttons. The labels are the action pad's, so the
+two maps are the same one:
+
+    joystick         walk and turn
+    A                fire (hold)
+    B                jump (hold)
+    X                crouch (hold)
+    Y                use/open (hold)
+    START            menu
+    MENU             next weapon
+
 In the engine's menus the stick moves the cursor and A or Y confirm; START goes
 back.
 """
@@ -29,6 +40,7 @@ import time
 
 import lvgl as lv
 
+from mpos.ui.input_manager import InputManager
 from mpos.ui.native_activity import NativeActivity
 from duke_controls import (
     DukeTouch, KEY_CROUCH, KEY_DOWN, KEY_FIRE, KEY_JUMP,
@@ -566,6 +578,11 @@ class Duke3D(NativeActivity):
     # top one, so the OS's edge swipes would steal both: the same opt-out Doom
     # makes, through the attribute the view reads for the foreground activity.
     system_gestures_enabled = False
+    # A keypad reports a press and no release, so without this a held joystick
+    # turns for 180 ms and then waits for the keypad's first repeat at 400 ms.
+    # The drivers that can report their real state (the fri3d 2026 expander)
+    # make it a continuous hold instead.
+    key_state = True
     # No audio output on the panels this engine targets; the core's mixer is a
     # silent stub (see c_mpos/duke3d/core/duke_audio.c).
     audio_rate = None
@@ -582,6 +599,46 @@ class Duke3D(NativeActivity):
         global state has to be restored afterwards.
         """
         return True
+
+    def on_key_event(self, key):
+        """The badge's joystick and its six labelled buttons.
+
+        The labels are the action pad's, not a keyboard's, so a player who
+        learned the touch map does not have to learn a second one:
+
+            joystick    walk and turn
+            A           fire (hold)
+            B           jump (hold)
+            X           crouch (hold)
+            Y           use / open (hold)
+            START       menu
+            MENU        next weapon
+
+        X arrives as ESC and Y as its letter (the expander dual-delivers B and
+        Y because LVGL takes NEXT/PREV for focus); START is END and MENU is
+        HOME. All six therefore reach the app even though the OS uses X for
+        back and MENU for the drawer.
+        """
+        if key == lv.KEY.LEFT:
+            self.holds.hold(KEY_LEFT, key)
+        elif key == lv.KEY.RIGHT:
+            self.holds.hold(KEY_RIGHT, key)
+        elif key == lv.KEY.UP:
+            self.holds.hold(KEY_UP, key)
+        elif key == lv.KEY.DOWN:
+            self.holds.hold(KEY_DOWN, key)
+        elif key in (lv.KEY.ENTER, ord("A"), ord("a")):
+            self.holds.hold(KEY_FIRE, key)
+        elif key in (ord("B"), ord("b")):
+            self.holds.hold(KEY_JUMP, key)
+        elif key == lv.KEY.ESC:
+            self.holds.hold(KEY_CROUCH, key)
+        elif key in (ord("Y"), ord("y")):
+            self.holds.hold(KEY_USE, key)
+        elif key == lv.KEY.END:
+            self.holds.tap(KEY_MENU)
+        elif key == lv.KEY.HOME:
+            self.holds.tap(KEY_WEAPON)
 
     def onCreate(self):
         _debug("onCreate")
@@ -634,6 +691,10 @@ class Duke3D(NativeActivity):
 
     def onResume(self, screen):
         _debug("onResume enter")
+        # MENU is the action pad's next-weapon key, so the OS drawer must not
+        # open over the game when it is pressed. This is the framework's
+        # per-activity switch; onPause puts it back for whatever comes next.
+        InputManager.set_drawer_open_disabled(True)
         try:
             super().onResume(screen)
         except Exception as error:
@@ -644,6 +705,7 @@ class Duke3D(NativeActivity):
     def onPause(self, screen):
         _debug("onPause")
         super().onPause(screen)
+        InputManager.set_drawer_open_disabled(False)
 
     def _leave(self):
         _debug("leave requested")
@@ -742,6 +804,7 @@ class Duke3D(NativeActivity):
         except Exception:
             pass
         super().onStop(screen)
+        InputManager.set_drawer_open_disabled(False)
         self._release_grp()
         if _DEBUG_LOG is not None:
             try:
@@ -812,9 +875,3 @@ class Duke3D(NativeActivity):
             self._touch.moving(finger, gx, gy)
         else:
             self._touch.released(finger)
-
-    def on_key_event(self, key):
-        # A keyboard on a desktop is not a supported engine host (there is no
-        # x64 module), but the badge's IO0 back key arrives here and is left to
-        # the OS: it closes the activity, which is what "back" should do.
-        pass
