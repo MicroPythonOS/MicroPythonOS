@@ -217,7 +217,10 @@ Two x64-specific rules are load-bearing:
   heap with `MAP_32BIT`, and `patches/micropython_natmod_bss_low32.patch` maps
   the native module's BSS/rodata below 4 GB too (it falls back to the heap when
   that fails; the Doom module does not care either way). With those in place
-  every truncated address is still a valid one.
+  every truncated address is still a valid one. The loader patch is applied by
+  `./scripts/build_mpos.sh unix`; a desktop binary built before it loads the
+  module with high BSS and the renderer's 32-bit addresses crash, so rebuild
+  the desktop OS once before the first run.
 * **`-Wa,-mrelax-relocations=no`.** mpy_ld understands `R_X86_64_GOTPCREL` but
   not the linker-relaxable `R_X86_64_GOTPCRELX` (41). Keeping the assembler
   from emitting the relaxed form avoids patching the linker.
