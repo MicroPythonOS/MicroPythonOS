@@ -38,6 +38,58 @@ def _notify_selected(activity, index):
         logger.error("selected_callback raised: %s", e)
 
 
+SCAN_WARNING_DEFAULT = "This doesn't look like a valid %s. Check that you scanned the right QR code."
+
+
+def scan_check_warning(setting, text):
+    """Run the setting's optional `scan_check(text)` on data scanned from a
+    QR code and return the warning to show, or None when there is nothing
+    to warn about. The check returns True (or None) when the data has the
+    expected format, False for the standard warning naming the setting's
+    title, or a string to show as the warning instead. Never raises: a
+    broken check must not break the input screen."""
+    check = setting.get("scan_check") if setting else None
+    if not check:
+        return None
+    try:
+        verdict = check(text)
+    except Exception as e:
+        logger.error("scan_check raised: %s", e)
+        return None
+    if isinstance(verdict, str):
+        return verdict or None
+    if verdict is None or verdict:
+        return None
+    return SCAN_WARNING_DEFAULT % (setting.get("title") or "value")
+
+
+def _show_scan_warning(activity, message):
+    """Show `message` in the scan warning label, or hide the label when
+    `message` is empty. Module-level for the same reason as
+    _notify_selected."""
+    label = getattr(activity, "_scan_warning_label", None)
+    if not label:
+        return
+    if message:
+        label.set_text(lv.SYMBOL.WARNING + " " + message)
+        label.remove_flag(lv.obj.FLAG.HIDDEN)
+    else:
+        label.set_text("")
+        label.add_flag(lv.obj.FLAG.HIDDEN)
+
+
+def _clear_stale_scan_warning(activity):
+    """Hide the scan warning once the text no longer matches what was
+    scanned: the user has edited it, so the warning is out of date."""
+    scanned = getattr(activity, "_scanned_text", None)
+    textarea = getattr(activity, "textarea", None)
+    if scanned is None or not textarea:
+        return
+    if textarea.get_text() != scanned:
+        activity._scanned_text = None
+        _show_scan_warning(activity, None)
+
+
 class InputActivity(Activity):
 
     active_radio_index = -1  # Track active radio button index
@@ -48,6 +100,8 @@ class InputActivity(Activity):
     dropdown = None
     radio_container = None
     slider = None
+    _scan_warning_label = None
+    _scanned_text = None
 
     def onCreate(self):
         self.setting = self.getIntent().extras.get("setting")
@@ -165,6 +219,25 @@ class InputActivity(Activity):
             self.keyboard = MposKeyboard(input_screen)
             self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
             self.keyboard.set_textarea(self.textarea)
+            if self.setting.get("scan_check"):
+                # Warning shown below the field when data scanned from a QR
+                # code fails the setting's format check. Created after the
+                # keyboard, so the keyboard stays in place when the warning
+                # goes away on the first keypress. The keyboard is hidden
+                # while a scan returns, so the warning still sits right
+                # below the field then.
+                self._scan_warning_label = lv.label(input_screen)
+                self._scan_warning_label.set_text("")
+                self._scan_warning_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+                self._scan_warning_label.set_width(lv.pct(95))
+                self._scan_warning_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+                self._scan_warning_label.set_style_text_color(lv.palette_main(lv.PALETTE.DEEP_ORANGE), lv.PART.MAIN)
+                self._scan_warning_label.set_style_margin_left(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+                self._scan_warning_label.set_style_pad_top(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+                self._scan_warning_label.add_flag(lv.obj.FLAG.HIDDEN)
+                self.textarea.add_event_cb(
+                    lambda e: _clear_stale_scan_warning(self),
+                    lv.EVENT.VALUE_CHANGED, None)
 
         # Optional informational note below the input widget.
         note_text = self.setting.get("note")
@@ -285,7 +358,9 @@ class InputActivity(Activity):
         if result.get("result_code"):
             data = result.get("data")
             if __debug__: logger.debug("Setting textarea data: %s", data)
+            self._scanned_text = data
             self.textarea.set_text(data)
+            _show_scan_warning(self, scan_check_warning(self.setting, data))
 
     def cambutton_cb(self, event):
         from ..content.intent import Intent
