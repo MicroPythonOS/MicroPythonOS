@@ -2,10 +2,14 @@ Future release (next version)
 =====
 
 Frameworks:
+- micropython-nostr: NIP-44 is about 100 times faster on MicroPython, with a Viper ChaCha20 core (an 11 KB payload takes 32 ms on an ESP32-S3 instead of 3.6 s)
 - `mpos_core.start_task()`: a core can run on a FreeRTOS task of its own (ABI 9), with C-only services for input, its asset and its log, and a two-buffer frame hand-off to the activity. A Duke-sized engine then needs 48 KiB on that task instead of 48 KiB on the MicroPython task, which is back to 24 KiB
 - `NativeDisplay`: `add_buffer()` / `select_buffer()` show whichever of a device's buffers is finished
 - `mpos.ui.native_input.KeyHolds.tap_held()`: a key that an engine samples once a tic stays down for one tic; `tap()` only suits engines that act on the key event itself
 - native modules on x64: the loader maps the module's BSS/rodata below 4 GB (falling back to the heap), so an engine that keeps addresses in 32-bit words (Duke3D's Build renderer) works as a desktop module
+
+Builtin Apps:
+- Nostr Chat 1.1.2: NostrManager speaks NIP-44 to Nostr Wallet Connect wallets whose info event (kind 13194) lists nip44_v2, listens for kind 23197 notifications instead of 23196, and falls back to NIP-04 when the wallet answers UNSUPPORTED_ENCRYPTION or never answers a NIP-44 request; wallets without the tag (LNbits) stay on NIP-04. The first poll of a connection waits up to 3 s for the info event, so it is sent once, and NWC replies from anyone but the wallet are ignored
 
 0.23.0
 ======
