@@ -46,6 +46,8 @@
 // Split entry points in engine/Game/game.c (the Makefile renames main).
 int duke_engine_main(int argc, char **argv);
 int duke_run_frame(void);
+// Engine/display.c: drops the timer frequency so the next start re-installs it.
+void uninittimer(void);
 
 // engine/Game/game.c owns the exit flag and the player state.
 extern bool rg_system_should_exit(void);
@@ -597,6 +599,12 @@ static mp_obj_t nat_stop(void) {
     duke_platform_set_running(0);
     g_key_head = 0;
     g_key_tail = 0;
+    // The engine's timer keeps the base it was installed with, and keeps it in
+    // the module's BSS across sessions. A later start() would then neither
+    // re-install it nor take the clock it is given as its base: a test that
+    // simulates a clock gets a dead one, and a relaunched app drags the old
+    // session's base along. Dropping it here makes every start its own.
+    uninittimer();
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(nat_stop_obj, nat_stop);
@@ -643,7 +651,7 @@ static mp_obj_t nat_pos(void) {
     if (i < 0 || i >= MAXPLAYERS) {
         return mp_const_none;
     }
-    mp_obj_t items[9];
+    mp_obj_t items[10];
     items[0] = mp_obj_new_int(ps[i].posx);
     items[1] = mp_obj_new_int(ps[i].posy);
     items[2] = mp_obj_new_int(ps[i].ang);
@@ -653,7 +661,8 @@ static mp_obj_t nat_pos(void) {
     items[6] = mp_obj_new_int(movefifoend[i] - movefifoplc);
     items[7] = mp_obj_new_int(KB_KeyDown[sc_UpArrow] ? 1 : 0);
     items[8] = mp_obj_new_int(ps[i].posxv + ps[i].posyv);
-    return mp_obj_new_tuple(9, items);
+    items[9] = mp_obj_new_int(ps[i].posz);
+    return mp_obj_new_tuple(10, items);
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(nat_pos_obj, nat_pos);
 

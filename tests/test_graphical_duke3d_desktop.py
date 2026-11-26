@@ -131,6 +131,46 @@ class TestDuke3DDesktop(unittest.TestCase):
             if not isinstance(buffer, str):
                 duke3d._free_asset_buffer(buffer)
 
+    def test_the_jump_key_leaves_the_floor(self):
+        """B is the pad's jump and the engine's own jump binding (A)."""
+        if sys.platform == "esp32":
+            self.skipTest("the badge runs the flash-resident core")
+        if module_x64 is None:
+            self.skipTest("no native Duke3D module for this host")
+        if zipasset is None:
+            self.skipTest("this firmware has no zipasset support")
+
+        loading = lambda text, done=0, total=0: None
+        grp = duke3d.prepare_grp(loading)
+        engine = duke3d._NatmodEngine()
+        surface = _FakeSurface(duke3d.GAME_WIDTH, duke3d.GAME_HEIGHT,
+                               rows=72)
+        try:
+            engine.start(grp, surface)
+            now = time.ticks_ms()
+            for _ in range(60):
+                now = time.ticks_add(now, 20)
+                engine.tick(now)
+            floor = module_x64.pos()[9]
+
+            engine.key(duke3d.KEY_JUMP, True)
+            peak = floor
+            for _ in range(25):  # the key edge, then ~0.5 s of flight
+                now = time.ticks_add(now, 20)
+                engine.tick(now)
+                height = module_x64.pos()[9]
+                if height < peak:
+                    peak = height
+            engine.key(duke3d.KEY_JUMP, False)
+            # z grows downward, so airborne is a smaller z.
+            self.assertTrue(peak < floor - 2000,
+                            "jump moved the player %d units" % (floor - peak))
+        finally:
+            engine.stop()
+            buffer, _size = grp
+            if not isinstance(buffer, str):
+                duke3d._free_asset_buffer(buffer)
+
     def test_a_held_key_does_not_run_at_render_speed(self):
         """A held direction must advance the game at the engine's tic rate.
 
@@ -165,7 +205,7 @@ class TestDuke3DDesktop(unittest.TestCase):
                 engine.tick(now)
 
             # pos() = (x, y, ang, totalclock, sector, ototalclock, fifo,
-            #          key_down, velocity)
+            #          key_down, velocity, z)
             start = module_x64.pos()
             self.assertTrue(start[3] - start[5] < 100,
                             "the engine clock ran away from its tic clock")
