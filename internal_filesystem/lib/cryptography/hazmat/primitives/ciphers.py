@@ -38,13 +38,11 @@ class Encryptor:
         if len(self._buffer) >= block_size:
             to_process = self._buffer[:len(self._buffer) - (len(self._buffer) % block_size)]
             self._buffer = self._buffer[len(to_process):]
-            print(f"Encryptor.update processing: {to_process.hex()}")
             return self._cipher.encrypt(to_process)
         return b''
 
     def finalize(self):
         if self._buffer:
-            print(f"Encryptor.finalize processing: {self._buffer.hex()}")
             return self._cipher.encrypt(self._buffer)
         return b''
 
