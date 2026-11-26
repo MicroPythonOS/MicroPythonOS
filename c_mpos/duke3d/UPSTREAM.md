@@ -28,11 +28,6 @@ void setviewtotile(short tilenume, int32_t tileWidth, int32_t tileHeight) {
 }
 ```
 
-**Duke's bathroom mirrors are not this path.** They are walls with
-`picnum MIRROR` (560), drawn with `preparemirror()` / `completemirror()`
-straight into the screen (E1L1 has four such walls, E1L2 two), and never call
-`setviewtotile()`. Playing with a mirror does not reproduce anything here.
-
 On the ESP32 profile (`components/duke3d/Engine/build.h`) `MAXXDIM` is **320**
 and `MAXYDIM` was **240** until `9c46dd9e` raised it to `INTERNAL_RES_W`
 (320). The renderer's tables are:

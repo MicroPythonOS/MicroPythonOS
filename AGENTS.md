@@ -483,16 +483,25 @@ app's own README and in `../docs/` (Duke: `c_mpos/duke3d/README.md`,
 - **Off-screen views are a second size domain.** A `setview`-style call whose
   size comes from a *camera/monitor texture* or a hard-coded tilt (the 320x320
   death view) can exceed every screen-sized table (`ylookup`, `lastx`,
-  `uwall`/`dwall`). Duke's bathroom mirrors are **not** this path: `picnum
-  MIRROR` walls are drawn with `preparemirror()`/`completemirror()` into the
-  screen and never call `setviewtotile()`. Audit the calls that do: size the
-  tables for the largest view or clamp the view, and verify with a canary.
-  Duke's corruption surfaced as four different panics in
+  `uwall`/`dwall`). Size the tables for the largest view or clamp the view, and
+  verify with a canary. Duke's corruption surfaced as four different panics in
   `hline`/`hlineasm4`/`setaspect`; they were one overflow.
 - **A `reportandexit`/`Error` macro must actually stop.** Duke's port had
   `RG_PANIC` as a log call; its cache allocator then continued with an invalid
   best fit and wrote past `cac[]`. It aborts now, and the allocator recovers:
   clear stale locks and retry, then give that tile a 1x1 transparent stand-in.
+- **A texture that cannot be decoded must keep its declared size and fit the
+  heap the cache was sized from.** Duke's compacted GRP serves most tiles as
+  PNG overrides, and a decode needs its own buffer next to the tile itself. Two
+  traps: the cache is sized from "largest free block minus a reserve", so the
+  reserve must cover the biggest decode (a 320x200 image is 64 KB of palette
+  indices, or 250 KB decoded to RGBA); and the "invisible tile" fallback must
+  not shrink `dim`, because a multi-tile texture (a parallax sky is one image in
+  five slices) then samples with the base tile's stride and each slice's own
+  size - which looked like a sky of vertical garbage bands. Decode palette PNGs
+  as palette (`color_convert = 0` + a 256-entry LUT): four times less memory and
+  no per-pixel nearest-colour search, which on a badge is the difference between
+  a 20 s level start and a few seconds.
 - **A view into a tile leaves the span renderer's view offset in that tile.**
   `drawrooms()` sets `frameoffset = frameplace + viewoffset`, so a view drawn
   into a texture (Duke's 320x320 tilted death view) leaves the offset pointing

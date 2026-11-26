@@ -148,9 +148,7 @@ The engine draws some things into a **tile**, not the screen, and sets the view
 from the tile's own dimensions: a security camera's monitor (`xyzmirror()`),
 the screen-tilt view used while the player is dead, and the save thumbnail.
 The tilt view asks for **320x320** while the screen is 320x200, and a GRP can
-declare a camera texture larger still. Duke's bathroom mirrors are **not** this
-path: `picnum MIRROR` walls are drawn with `preparemirror()`/`completemirror()`
-into the screen. The port originally sized `ylookup` at
+declare a camera texture larger still. The port originally sized `ylookup` at
 `MAXYDIM+1` (241), `lastx` at `MAXYDIM` (240) and the per-column arrays
 (`uwall`, `dwall`, `swal`, `lwal`) at `MAXXDIM+1` (321), so drawing one of those
 views wrote and read past them - into `numpages`/`ydim`/`xdim`/`tsprite` first,
