@@ -490,6 +490,22 @@ app's own README and in `../docs/` (Duke: `c_mpos/duke3d/README.md`,
   `RG_PANIC` as a log call; its cache allocator then continued with an invalid
   best fit and wrote past `cac[]`. It aborts now, and the allocator recovers:
   clear stale locks and retry, then give that tile a 1x1 transparent stand-in.
+- **A view into a tile leaves the span renderer's view offset in that tile.**
+  `drawrooms()` sets `frameoffset = frameplace + viewoffset`, so a view drawn
+  into a texture (Duke's 320x320 tilted death view) leaves the offset pointing
+  into the tile; `setviewback()` restores `frameplace` but not the offset, and
+  everything drawn after it (status bar, weapon, menus) belongs to the screen.
+  On a badge that looks like a graphics fault: the frame freezes at the moment
+  of death (the world keeps being drawn into a tile nothing presents) and the
+  pause menu over the dead view comes out as red fragments and stripes. Restore
+  `viewoffset`/`frameoffset` in `setviewback()`, and bound any span guard by
+  `frameplace` and the taller of `ydim`/`ydimen` - never by `frameoffset`,
+  which describes a view, not the buffer being drawn into.
+- **Once the player is dead, the death render state is permanent.** Duke's tilt
+  angle stops decaying, so the tile view runs for the rest of the session and
+  every menu is drawn on top of it. A bug that only appears "after dying" is
+  usually in that state, not in the menu - and driving it needs a real game
+  (the attract demo ignores keys and its player is not the one you can kill).
 - **A missing ART file is not a missing tile**: give it a 1x1 transparent tile
   (dimensions and `picsiz` included), not the declared 50 KB.
 - **An ART entry that cannot be *read* is cosmetic too.** The compacted GRP

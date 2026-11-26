@@ -667,13 +667,76 @@ static mp_obj_t nat_pos(void) {
 static MP_DEFINE_CONST_FUN_OBJ_0(nat_pos_obj, nat_pos);
 
 static mp_obj_t nat_debug_state(void) {
+    const int i = myconnectindex;
     mp_printf(&mp_plat_print,
               "[duke] created=%d running=%d quit=%d connect=%d ticks=%u\n",
               g_created, g_running, g_quit, (int)myconnectindex,
               (unsigned)g_now_ms);
-    return mp_const_none;
+    extern void *get_framebuffer(void);
+    extern uint8_t *screen;
+    mp_printf(&mp_plat_print,
+              "[duke] hp=%d dead=%d tilt=%d detail=%u view=%dx%d "
+              "bpl=%d views=%d frame=%p offset=%p range=%d yx=%d xscale=%d\n",
+              (int)sprite[ps[i].i].extra,
+              (int)ps[i].dead_flag, (int)ps[i].rotscrnang, (unsigned)ud.detail,
+              (int)xdim, (int)ydim, (int)bytesperline, (int)setviewcnt,
+              (void *)frameplace, (void *)frameoffset, (int)viewingrange,
+              (int)yxaspect, (int)xdimenscale);
+    mp_printf(&mp_plat_print,
+              "[duke] fb=%p screen=%p tilt-tile=%p(%dx%d) thumb=%p "
+              "bak0=%p bak1=%p\n",
+              get_framebuffer(), (void *)screen,
+              (void *)tiles[MAXTILES - 2].data, (int)tiles[MAXTILES - 2].dim.width,
+              (int)tiles[MAXTILES - 2].dim.height,
+              (void *)tiles[MAXTILES - 1].data, (void *)bakframeplace[0],
+              (void *)bakframeplace[1]);
+    // What a test wants to see: the frame the renderer is drawing into is the
+    // one the host presents, and nothing was dropped at the span guard.
+    extern int32_t bogus_span_count;
+    mp_obj_t items[6];
+    items[0] = mp_obj_new_int(sprite[ps[i].i].extra);
+    items[1] = mp_obj_new_int(ps[i].dead_flag);
+    items[2] = mp_obj_new_int(ps[i].rotscrnang);
+    items[3] = mp_obj_new_int(setviewcnt);
+    items[4] = mp_obj_new_bool(frameplace == frameoffset);
+    items[5] = mp_obj_new_int(bogus_span_count);
+    return mp_obj_new_tuple(6, items);
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(nat_debug_state_obj, nat_debug_state);
+
+// The death screen's tilted view only exists while a player is dying, which a
+// script cannot reach through the module's public API. Two hooks make it
+// reproducible: kill the local player, or turn the view by hand.
+static mp_obj_t nat_debug_kill(void) {
+    const int i = myconnectindex;
+    if (i < 0 || i >= MAXPLAYERS) {
+        return mp_const_none;
+    }
+    sprite[ps[i].i].extra = 0;
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(nat_debug_kill_obj, nat_debug_kill);
+
+// Start a real single-player level, which the menus otherwise take a dozen
+// key presses to reach.
+extern void newgame(uint8_t vn, uint8_t ln, uint8_t sk);
+extern void enterlevel(uint8_t g);
+static mp_obj_t nat_debug_newgame(void) {
+    newgame(0, 0, 2);
+    enterlevel(MODE_GAME);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(nat_debug_newgame_obj, nat_debug_newgame);
+
+static mp_obj_t nat_debug_tilt(mp_obj_t angle_obj) {
+    const int i = myconnectindex;
+    if (i < 0 || i >= MAXPLAYERS) {
+        return mp_const_none;
+    }
+    ps[i].rotscrnang = mp_obj_get_int(angle_obj) & 2047;
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(nat_debug_tilt_obj, nat_debug_tilt);
 
 mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw,
                   mp_obj_t *args) {
@@ -698,6 +761,10 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw,
     mp_store_global(MP_QSTR_pos, MP_OBJ_FROM_PTR(&nat_pos_obj));
     mp_store_global(MP_QSTR_save_slot, MP_OBJ_FROM_PTR(&nat_save_slot_obj));
     mp_store_global(MP_QSTR_load_slot, MP_OBJ_FROM_PTR(&nat_load_slot_obj));
+    mp_store_global(MP_QSTR_debug_kill, MP_OBJ_FROM_PTR(&nat_debug_kill_obj));
+    mp_store_global(MP_QSTR_debug_newgame,
+                    MP_OBJ_FROM_PTR(&nat_debug_newgame_obj));
+    mp_store_global(MP_QSTR_debug_tilt, MP_OBJ_FROM_PTR(&nat_debug_tilt_obj));
 
     MP_DYNRUNTIME_INIT_EXIT
 }

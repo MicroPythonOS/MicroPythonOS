@@ -400,10 +400,46 @@ void setupvlineasm(int32_t i1)
     mach3_al = (i1&0x1f);
 }
 
+/* Spans the renderer asks for that reach past the buffer it is drawing into.
+ * A nonzero count means part of the picture was dropped, which is never right:
+ * such a span is either a real clip at the edge (clamped, not counted) or a
+ * broken pointer. */
+int32_t bogus_span_count;
+
+/* The buffer a span may write to. frameplace is the target: frameoffset cannot
+ * be used here, because while a view is drawn into a tile it points into that
+ * tile and the HUD and menus drawn afterwards still go to frameplace. The
+ * height is the taller of the screen and the current view: a room is drawn
+ * into a 320x320 tile while the tilt view is on, and the game draws the status
+ * bar below the 3D view's window. */
+static uint8_t *span_window(uint8_t *dest, int32_t *rows, int32_t numPixels)
+{
+    extern uint8_t *frameplace;
+    extern int32_t ydimen;
+    uint8_t *base = frameplace;
+    int32_t height = ydim > ydimen ? ydim : ydimen;
+    uint8_t *end = base + (size_t)bytesperline * (size_t)height;
+
+    if (numPixels <= 0 || numPixels > height) {
+        return NULL;
+    }
+    if (dest < base || dest >= end) {
+        return NULL;
+    }
+    {
+        size_t room = (size_t)(end - dest);
+        int32_t fits = (int32_t)((room + (size_t)bytesperline - 1)
+                                 / (size_t)bytesperline);
+        if (fits < numPixels) {
+            *rows = fits;
+        }
+    }
+    return base;
+}
+
 //FCS This is used to fill the inside of a wall (so it draws VERTICAL column, always).
 IRAM_ATTR void vlineasm4(int32_t numPixels, intptr_t framebuffer)
 {
-    extern uint8_t *frameoffset;
     int i;
 
     if (!RENDER_DRAW_WALL_INSIDE)
@@ -412,22 +448,24 @@ IRAM_ATTR void vlineasm4(int32_t numPixels, intptr_t framebuffer)
      * The old loop derived its length from ylookup[columnIndex], which is
      * only the row count when the index is a row; a span that started or
      * ended outside the view made it walk the pointer until it wrapped and
-     * write millions of rows past the screen. Refuse such a span instead. */
-    if (numPixels <= 0 || numPixels > ydim)
-        return;
+     * write millions of rows past the screen. Keep the span inside the
+     * buffer instead. */
     {
-        uint8_t *base = frameoffset;
-        uint8_t *dest = (uint8_t *)framebuffer;
-        uint8_t *end = base + (size_t)bytesperline * (size_t)ydim;
-        if (dest < base || dest >= end) {
-            static int bogus_spans;
-            if (bogus_spans < 4) {
-                bogus_spans++;
-                RG_LOGW("vlineasm4: span %d at %p outside %p..%p",
-                        (int)numPixels, dest, base, end);
+        int32_t rows = numPixels;
+        if (span_window((uint8_t *)framebuffer, &rows, numPixels) == NULL) {
+            if (bogus_span_count < 1000000) {
+                bogus_span_count++;
+                if (bogus_span_count <= 4) {
+                    RG_LOGW("vlineasm4: span %d at %p outside the view",
+                            (int)numPixels, (void *)framebuffer);
+                }
             }
             return;
         }
+        numPixels = rows;
+    }
+    {
+        uint8_t *dest = (uint8_t *)framebuffer;
         for (; numPixels > 0; numPixels--, dest += bytesperline) {
             for (i = 0; i < 4; i++) {
                 uint32_t temp = ((uint32_t)vplce[i]) >> mach3_al;
@@ -450,26 +488,26 @@ void setupmvlineasm(int32_t i1)
 
 IRAM_ATTR void mvlineasm4(int32_t numPixels, intptr_t framebufferOffset)
 {
-    extern uint8_t *frameoffset;
     int i;
 
     if (!RENDER_DRAW_WALL_INSIDE)
         return;
-    if (numPixels <= 0 || numPixels > ydim)
-        return;
     {
-        uint8_t *base = frameoffset;
-        uint8_t *dest = (uint8_t *)framebufferOffset;
-        uint8_t *end = base + (size_t)bytesperline * (size_t)ydim;
-        if (dest < base || dest >= end) {
-            static int bogus_spans;
-            if (bogus_spans < 4) {
-                bogus_spans++;
-                RG_LOGW("mvlineasm4: span %d at %p outside %p..%p",
-                        (int)numPixels, dest, base, end);
+        int32_t rows = numPixels;
+        if (span_window((uint8_t *)framebufferOffset, &rows, numPixels) == NULL) {
+            if (bogus_span_count < 1000000) {
+                bogus_span_count++;
+                if (bogus_span_count <= 4) {
+                    RG_LOGW("mvlineasm4: span %d at %p outside the view",
+                            (int)numPixels, (void *)framebufferOffset);
+                }
             }
             return;
         }
+        numPixels = rows;
+    }
+    {
+        uint8_t *dest = (uint8_t *)framebufferOffset;
         for (; numPixels > 0; numPixels--, dest += bytesperline) {
             for (i = 0; i < 4; i++) {
                 uint32_t temp = ((uint32_t)vplce[i]) >> machmv;

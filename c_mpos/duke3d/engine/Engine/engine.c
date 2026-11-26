@@ -9119,6 +9119,12 @@ void setviewback(void)
     j = 0;
     for(i=0; i<=k; i++) ylookup[i] = j, j += bytesperline;
     setBytesPerLine(bytesperline);
+    /* The room draw recomputes frameoffset from frameplace, so the view of a
+     * tile leaves it pointing into the tile. Everything drawn after
+     * setviewback (the HUD, the menus, and this port's span guards) belongs to
+     * the restored buffer, so recompute it here. */
+    viewoffset = windowy1*bytesperline + windowx1;
+    frameoffset = frameplace+viewoffset;
 }
 
 
