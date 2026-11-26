@@ -215,9 +215,17 @@ class InputActivity(Activity):
             placeholder = self.setting.get("placeholder")
             if placeholder:
                 self.textarea.set_placeholder_text(placeholder)
+            from mpos import MposKeyboard
+            self.keyboard = MposKeyboard(input_screen)
+            self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+            self.keyboard.set_textarea(self.textarea)
             if self.setting.get("scan_check"):
                 # Warning shown below the field when data scanned from a QR
-                # code fails the setting's format check.
+                # code fails the setting's format check. Created after the
+                # keyboard, so the keyboard stays in place when the warning
+                # goes away on the first keypress. The keyboard is hidden
+                # while a scan returns, so the warning still sits right
+                # below the field then.
                 self._scan_warning_label = lv.label(input_screen)
                 self._scan_warning_label.set_text("")
                 self._scan_warning_label.set_long_mode(lv.label.LONG_MODE.WRAP)
@@ -230,10 +238,6 @@ class InputActivity(Activity):
                 self.textarea.add_event_cb(
                     lambda e: _clear_stale_scan_warning(self),
                     lv.EVENT.VALUE_CHANGED, None)
-            from mpos import MposKeyboard
-            self.keyboard = MposKeyboard(input_screen)
-            self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
-            self.keyboard.set_textarea(self.textarea)
 
         # Optional informational note below the input widget.
         note_text = self.setting.get("note")

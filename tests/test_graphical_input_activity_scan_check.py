@@ -124,6 +124,35 @@ class TestInputActivityScanWarning(unittest.TestCase):
         wait_for_render(5)
         self.assertFalse(self._warning_visible(activity))
 
+    def test_keyboard_stays_in_place_when_warning_clears(self):
+        activity = self._open(self._key_setting())
+        self._scan(activity, "wrong")
+        self.assertTrue(self._warning_visible(activity))
+        activity.keyboard.remove_flag(lv.obj.FLAG.HIDDEN)
+        wait_for_render(5)
+        keyboard_y = activity.keyboard.get_y()
+        activity.textarea.add_text("x")
+        wait_for_render(5)
+        self.assertFalse(self._warning_visible(activity))
+        self.assertEqual(activity.keyboard.get_y(), keyboard_y,
+                         "The keyboard must not move under the finger when the warning clears")
+
+    def test_save_with_warning_visible_returns_the_scanned_text(self):
+        results = []
+        intent = Intent(activity_class=InputActivity)
+        intent.putExtra("setting", self._key_setting())
+        ActivityNavigator.startActivityForResult(intent, results.append)
+        wait_for_render(10)
+        activity = mpos.ui.screen_stack[-1][0]
+        self.assertIsInstance(activity, InputActivity)
+        self._scan(activity, "https://example.com/not-a-key")
+        self.assertTrue(self._warning_visible(activity))
+        activity.save_input()
+        wait_for_render(10)
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0]["result_code"])
+        self.assertEqual(results[0]["data"]["value"], "https://example.com/not-a-key")
+
     def test_cancelled_scan_changes_nothing(self):
         activity = self._open(self._key_setting())
         activity.gotqr_result_callback({"result_code": False, "data": None})
