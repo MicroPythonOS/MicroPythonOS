@@ -45,7 +45,7 @@ from mpos.ui.native_activity import NativeActivity
 from duke_controls import (
     DukeTouch, KEY_CROUCH, KEY_DOWN, KEY_FIRE, KEY_JUMP,
     KEY_LEFT, KEY_MENU, KEY_RIGHT, KEY_UP, KEY_USE, KEY_WEAPON)
-from duke_overlay import TouchOverlay
+from duke_overlay import ControlsOverlay, TouchOverlay
 
 try:
     from mpos import platform as mpos_platform
@@ -190,6 +190,51 @@ GRP_FILE_CANDIDATES = (
 
 HINT_TEXT = "Hold sideways: left is walk/turn, right is the action pad"
 TOUCH_HINT_MS = 8000
+# The keyboard's list stays up long enough to read, and F1 brings it back.
+CONTROLS_HINT_MS = 12000
+
+# SDL F1: the driver hands F-keys through as their own codes (282 is F1 in
+# drivers/indev/sdl_keyboard.py). LVGL has no F1 of its own.
+HELP_KEY = 282
+
+# What an LVGL key means to the engine. A badge's X reports ESC and is
+# labelled crouch on the action pad; a keyboard has no pad and Esc is the
+# menu every player reaches for, so the map depends on the host.
+KEY_ACTION_HOLD = "hold"
+KEY_ACTION_TAP = "tap"
+
+
+def key_action(key, touch_pad):
+    """(engine key, hold or tap) for an LVGL key, or None.
+
+    A tap is a menu action the engine samples once a tic; everything else is a
+    hold that lasts as long as the hardware says the key is down.
+    """
+    if key == lv.KEY.LEFT:
+        return (KEY_LEFT, KEY_ACTION_HOLD)
+    if key == lv.KEY.RIGHT:
+        return (KEY_RIGHT, KEY_ACTION_HOLD)
+    if key == lv.KEY.UP:
+        return (KEY_UP, KEY_ACTION_HOLD)
+    if key == lv.KEY.DOWN:
+        return (KEY_DOWN, KEY_ACTION_HOLD)
+    if key in (lv.KEY.ENTER, ord("A"), ord("a")):
+        return (KEY_FIRE, KEY_ACTION_HOLD)
+    if key in (ord("B"), ord("b")):
+        return (KEY_JUMP, KEY_ACTION_HOLD)
+    if key in (ord("X"), ord("x"), ord("Z"), ord("z")):
+        return (KEY_CROUCH, KEY_ACTION_HOLD)
+    if key in (ord("Y"), ord("y"), ord(" ")):
+        return (KEY_USE, KEY_ACTION_HOLD)
+    if key == lv.KEY.ESC:
+        if touch_pad:
+            return (KEY_CROUCH, KEY_ACTION_HOLD)
+        return (KEY_MENU, KEY_ACTION_TAP)
+    if key == lv.KEY.END:
+        return (KEY_MENU, KEY_ACTION_TAP)
+    if key == lv.KEY.HOME:
+        return (KEY_WEAPON, KEY_ACTION_TAP)
+    return None
 
 # A menu key is sampled by the engine once a tic. A busy frame can stretch the
 # presenter's frame past the default one-tic hold, so keep the key down long
@@ -934,7 +979,11 @@ class Duke3D(NativeActivity):
     """One activity, one engine: the core on a badge, the module on a desktop."""
 
     target_fps = TARGET_FPS
-    hint_text = HINT_TEXT
+    # A badge has the action pad its labels belong to; a desktop has a
+    # keyboard, whose keys follow the map in the controls overlay.
+    touch_pad = sys.platform == "esp32"
+    # The sideways hint is a pad instruction; a keyboard gets the list instead.
+    hint_text = HINT_TEXT if touch_pad else None
     hint_ms = TOUCH_HINT_MS
     # The GT911 reports five points, so both thumbs get their own finger.
     touch_fingers = True
@@ -951,6 +1000,11 @@ class Duke3D(NativeActivity):
     # silent stub (see c_mpos/duke3d/core/duke_audio.c).
     audio_rate = None
     screen_transition_ms = 0
+    # Built on launch by start_engine(); they exist before onCreate() so a key
+    # that arrives early (and a test that builds the activity directly) is
+    # harmless rather than an AttributeError.
+    _controls = None
+    _controls_until = 0
 
     def onBackPressed(self, screen):
         """Keep the OS's back from ending a game in progress.
@@ -965,46 +1019,45 @@ class Duke3D(NativeActivity):
         return True
 
     def on_key_event(self, key):
-        """The badge's joystick and its six labelled buttons.
+        """A key from the badge's pad or from a keyboard.
 
-        The labels are the action pad's, not a keyboard's, so a player who
-        learned the touch map does not have to learn a second one:
+        On a badge the labels are the action pad's: joystick walks and turns,
+        A fires, B jumps, X crouches, Y uses, START opens the menu and MENU
+        picks the next weapon. X arrives as ESC and Y as its letter (the
+        expander dual-delivers B and Y because LVGL takes NEXT/PREV for focus);
+        START is END and MENU is HOME, so all six reach the app even though the
+        OS uses X for back and MENU for the drawer.
 
-            joystick    walk and turn
-            A           fire (hold)
-            B           jump (hold)
-            X           crouch (hold)
-            Y           use / open (hold)
-            START       menu
-            MENU        next weapon
-
-        X arrives as ESC and Y as its letter (the expander dual-delivers B and
-        Y because LVGL takes NEXT/PREV for focus); START is END and MENU is
-        HOME. All six therefore reach the app even though the OS uses X for
-        back and MENU for the drawer.
+        A keyboard has none of those buttons. It keeps the pad's letters for
+        fire/jump/crouch/use and adds Space (use), Z (crouch) and, because it is
+        what every player reaches for, Esc opens the engine's menu instead of
+        crouching. See ``key_action`` and the controls overlay.
         """
-        if key == lv.KEY.LEFT:
-            self.holds.hold(KEY_LEFT, key)
-        elif key == lv.KEY.RIGHT:
-            self.holds.hold(KEY_RIGHT, key)
-        elif key == lv.KEY.UP:
-            self.holds.hold(KEY_UP, key)
-        elif key == lv.KEY.DOWN:
-            self.holds.hold(KEY_DOWN, key)
-        elif key in (lv.KEY.ENTER, ord("A"), ord("a")):
-            self.holds.hold(KEY_FIRE, key)
-        elif key in (ord("B"), ord("b")):
-            self.holds.hold(KEY_JUMP, key)
-        elif key == lv.KEY.ESC:
-            self.holds.hold(KEY_CROUCH, key)
-        elif key in (ord("Y"), ord("y")):
-            self.holds.hold(KEY_USE, key)
-        elif key == lv.KEY.END:
+        if key == HELP_KEY:
+            if self._controls is not None and self._controls.visible:
+                self._controls.set_visible(False)
+            else:
+                self._show_controls()
+            return
+        if self._controls is not None and self._controls.visible:
+            self._controls.set_visible(False)
+        action = key_action(key, self.touch_pad)
+        if action is None:
+            return
+        code, kind = action
+        if kind == KEY_ACTION_TAP:
             # The engine samples its menu key once a tic: press and release in
             # one frame would cancel out before it reads the key.
-            self.holds.tap_held(KEY_MENU, MENU_TAP_MS)
-        elif key == lv.KEY.HOME:
-            self.holds.tap_held(KEY_WEAPON, MENU_TAP_MS)
+            self.holds.tap_held(code, MENU_TAP_MS)
+        else:
+            self.holds.hold(code, key)
+
+    def _show_controls(self, ms=CONTROLS_HINT_MS):
+        """Put the key list up (F1, and once at launch on a desktop)."""
+        if self._controls is None:
+            return
+        self._controls.set_visible(True)
+        self._controls_until = time.ticks_add(time.ticks_ms(), ms)
 
     def onCreate(self):
         _debug("onCreate")
@@ -1016,6 +1069,8 @@ class Duke3D(NativeActivity):
             lambda code: self.holds.tap_held(code, MENU_TAP_MS))
         self._overlay = None
         self._overlay_until = 0
+        self._controls = None
+        self._controls_until = 0
         self._grp = None
         # Poll faster when the engine runs on its own task: the frame loop only
         # shows what the engine published, and it publishes as soon as the
@@ -1036,7 +1091,6 @@ class Duke3D(NativeActivity):
         self._selftest_step = -1
         self._selftest_down = ()
         super().onCreate()
-        self._loading("Loading Duke Nukem 3D...")
 
     def _loading(self, text, done=0, total=0):
         if total:
@@ -1109,8 +1163,15 @@ class Duke3D(NativeActivity):
         self.engine.progress = self._extent_progress
         try:
             self.engine.start(self._grp, surface)
-            self._overlay = TouchOverlay(self)
-            self._overlay_until = time.ticks_add(time.ticks_ms(), 6000)
+            # The launch progress label sits above the picture and would stay
+            # there for the rest of the session: nothing else clears it.
+            self._clear_hint()
+            if self.touch_pad:
+                self._overlay = TouchOverlay(self)
+                self._overlay_until = time.ticks_add(time.ticks_ms(), 6000)
+            else:
+                self._controls = ControlsOverlay(self)
+                self._show_controls()
         except Exception as error:
             # Do not leave the loading message on screen for ever, and do not
             # keep 2.4 MB of GRP that nothing is going to read: say what went
@@ -1229,6 +1290,9 @@ class Duke3D(NativeActivity):
             # overlapping the picture is redrawn on every present, and that is
             # a third of the frame time. The outlines stay available on resume.
             self._overlay.set_visible(False)
+        if (self._controls is not None and self._controls.visible
+                and time.ticks_diff(now, self._controls_until) >= 0):
+            self._controls.set_visible(False)
         try:
             self.engine.tick(now)
         except Exception as error:

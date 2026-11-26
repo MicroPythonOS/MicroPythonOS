@@ -22,6 +22,7 @@ if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
 import duke3d  # noqa: E402
+import duke_overlay  # noqa: E402
 
 from mpos.ui import topmenu  # noqa: E402
 from mpos.ui.native_input import KeyHolds  # noqa: E402
@@ -102,11 +103,40 @@ class TestDuke3DButtons(unittest.TestCase):
 
     def test_the_buttons_match_the_action_pad_labels(self):
         # A, B, X and Y are the pad's cells, so their physical buttons send the
-        # same engine keys as tapping the cell with that label.
+        # same engine keys as tapping the cell with that label. The pad has no
+        # keyboard, so on a badge the key the pad calls X (which arrives as
+        # ESC) is crouch.
+        self.activity.touch_pad = True
         for key, code in ((lv.KEY.ENTER, duke3d.KEY_FIRE),
                           (ord("B"), duke3d.KEY_JUMP),
                           (lv.KEY.ESC, duke3d.KEY_CROUCH),
                           (ord("Y"), duke3d.KEY_USE)):
+            self.assertEqual(self._code_for(key), [(code, True)],
+                             "wrong engine key for %r" % (key,))
+
+    def test_a_keyboard_escape_opens_the_menu_instead_of_crouching(self):
+        # On a keyboard Esc is what a player reaches for, and the pad's X (the
+        # only thing that means crouch on a badge) is not there.
+        self.activity.touch_pad = False
+        self.activity.holds.release_all()
+        del self.engine.keys[:]
+        self.activity.on_key_event(lv.KEY.ESC)
+        self.assertEqual(self.engine.keys, [(duke3d.KEY_MENU, True)])
+        self.activity.holds.tick(
+            time.ticks_add(time.ticks_ms(), duke3d.MENU_TAP_MS + 1))
+        self.assertEqual(self.engine.keys,
+                         [(duke3d.KEY_MENU, True), (duke3d.KEY_MENU, False)])
+
+    def test_a_keyboard_keeps_the_pads_letters_and_adds_the_classics(self):
+        # A, B and Y are the pad's labels; X and Z both crouch and Space is
+        # use, which is what a keyboard player tries first.
+        self.activity.touch_pad = False
+        for key, code in ((ord("a"), duke3d.KEY_FIRE),
+                          (ord("B"), duke3d.KEY_JUMP),
+                          (ord("x"), duke3d.KEY_CROUCH),
+                          (ord("Z"), duke3d.KEY_CROUCH),
+                          (ord("y"), duke3d.KEY_USE),
+                          (ord(" "), duke3d.KEY_USE)):
             self.assertEqual(self._code_for(key), [(code, True)],
                              "wrong engine key for %r" % (key,))
 
@@ -308,6 +338,67 @@ class TestDuke3DHostFiles(unittest.TestCase):
         self.engine._core = _FakeCore([])
         self.engine.serve_files()
         self.assertEqual(self.engine._core.replies, [])
+
+
+class _OverlaySurface:
+    """A 320x240 panel showing the 320x200 frame centred."""
+
+    width = 320
+    height = 240
+    _image_x = 0
+    _image_y = 20
+    rows_per_band = 40
+
+
+class TestDuke3DControlsOverlay(unittest.TestCase):
+    """A keyboard has no labelled pad, so the keys have to be on screen."""
+
+    def _activity(self):
+        activity = duke3d.Duke3D()
+        activity.screen = lv.obj()
+        activity._surface = _OverlaySurface()
+        activity._game_width = duke3d.GAME_WIDTH
+        activity._game_height = duke3d.GAME_HEIGHT
+        activity._frame_window = None
+        activity._rotated = False
+        return activity
+
+    def _texts(self, overlay):
+        return [obj.get_text() for obj in overlay._objects
+                if isinstance(obj, lv.label)]
+
+    def test_the_list_names_jump_crouch_use_and_the_menu(self):
+        texts = self._texts(duke_overlay.ControlsOverlay(self._activity()))
+        body = "\n".join(texts)
+        for line in ("jump", "crouch", "use", "menu", "next weapon"):
+            self.assertIn(line, body)
+        # The keys themselves, not just the actions: an overlay that said
+        # "jump: ?" would be no help at all.
+        self.assertIn("B", body)
+        self.assertIn("Esc", body)
+
+    def test_it_starts_visible_and_hides(self):
+        overlay = duke_overlay.ControlsOverlay(self._activity())
+        self.assertTrue(overlay.visible)
+        overlay.set_visible(False)
+        self.assertFalse(overlay.visible)
+        for obj in overlay._objects:
+            self.assertTrue(obj.has_flag(lv.obj.FLAG.HIDDEN))
+
+    def test_f1_toggles_it_and_other_keys_dismiss_it(self):
+        activity = self._activity()
+        activity.holds = KeyHolds(activity.key)
+        activity.engine = _FakeEngine()
+        activity._controls = duke_overlay.ControlsOverlay(activity)
+        activity._show_controls()
+
+        activity.on_key_event(duke3d.HELP_KEY)
+        self.assertFalse(activity._controls.visible, "F1 did not hide it")
+        activity.on_key_event(duke3d.HELP_KEY)
+        self.assertTrue(activity._controls.visible, "F1 did not bring it back")
+        activity.on_key_event(lv.KEY.UP)
+        self.assertFalse(activity._controls.visible,
+                         "a key press should dismiss the list")
 
 
 if __name__ == "__main__":
