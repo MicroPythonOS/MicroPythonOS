@@ -385,6 +385,22 @@ class TestDuke3DControlsOverlay(unittest.TestCase):
         for obj in overlay._objects:
             self.assertTrue(obj.has_flag(lv.obj.FLAG.HIDDEN))
 
+    def test_the_pad_outline_still_marks_the_stick_and_six_cells(self):
+        # A badge draws the hit areas DukeTouch uses; the labels are the pad's
+        # own. This is the overlay the badge shows instead of the key list.
+        activity = self._activity()
+        overlay = duke_overlay.TouchOverlay(activity)
+        rects = [obj for obj in overlay._objects
+                 if not isinstance(obj, lv.label)]
+        labels = self._texts(overlay)
+        buttons = duke_overlay.BUTTONS
+        self.assertEqual(len(rects), 1 + len(buttons))
+        self.assertEqual(len(labels), 1 + len(buttons))
+        self.assertIn("WALK/TURN", labels)
+        for label in labels[1:]:
+            self.assertIn(label, [cell[0] for cell in buttons])
+        self.assertTrue(overlay.visible)
+
     def test_f1_toggles_it_and_other_keys_dismiss_it(self):
         activity = self._activity()
         activity.holds = KeyHolds(activity.key)
