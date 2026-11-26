@@ -145,10 +145,12 @@ does not need a source rewrite to be loadable.
 ## Renderer limits
 
 The engine draws some things into a **tile**, not the screen, and sets the view
-from the tile's own dimensions: `xyzmirror()` for a mirror, the screen-tilt and
-save-thumbnail paths, and `setviewtotile()` generally. The compacted GRP
-declares a **128x400** mirror and the tilt/thumbnail views ask for **320**,
-while the screen is 320x200. The port originally sized `ylookup` at
+from the tile's own dimensions: a security camera's monitor (`xyzmirror()`),
+the screen-tilt view used while the player is dead, and the save thumbnail.
+The tilt view asks for **320x320** while the screen is 320x200, and a GRP can
+declare a camera texture larger still. Duke's bathroom mirrors are **not** this
+path: `picnum MIRROR` walls are drawn with `preparemirror()`/`completemirror()`
+into the screen. The port originally sized `ylookup` at
 `MAXYDIM+1` (241), `lastx` at `MAXYDIM` (240) and the per-column arrays
 (`uwall`, `dwall`, `swal`, `lwal`) at `MAXXDIM+1` (321), so drawing one of those
 views wrote and read past them - into `numpages`/`ydim`/`xdim`/`tsprite` first,
@@ -182,8 +184,11 @@ Two more engine landmines:
   scans a sparse ART set.
 
 The upstream tree (`DukeNano3D/retro-go-for-DukeNano3D`, `components/duke3d/`)
-has the same over-tall-view bug on its ESP32 profile. `UPSTREAM.md` has the
-analysis, the reproduction and the patch to propose there.
+had the same overrun in its death/tilt view; DynaMight's `9c46dd9e` ("Fixed
+death glitch and also FPS cap") removed it by raising `MAXYDIM` to 320.
+`UPSTREAM.md` has the analysis and reproduction, and
+[DynaMight1124/retro-go#31](https://github.com/DynaMight1124/retro-go/pull/31)
+carries the remaining bounds.
 
 ## Audio
 

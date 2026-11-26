@@ -477,15 +477,18 @@ app's own README and in `../docs/` (Duke: `c_mpos/duke3d/README.md`,
 **A second core: Duke Nukem 3D (`c_mpos/duke3d/`, `com.micropythonos.duke3d`)**
 - Full case study: `c_mpos/duke3d/README.md` (renderer limits, allocator,
   worker task) and `../docs/docs/apps/duke3d.md` (the app page). The upstream
-  tree has the same over-tall-view bug on its ESP32 profile; the analysis and
-  the patch to propose there are in `c_mpos/duke3d/UPSTREAM.md`.
+  tree had the same overrun in its death/tilt view; DynaMight's `9c46dd9e`
+  raised `MAXYDIM` to 320 to remove it, and the remaining bounds are in
+  `c_mpos/duke3d/UPSTREAM.md` and DynaMight1124/retro-go#31.
 - **Off-screen views are a second size domain.** A `setview`-style call whose
-  size comes from an *asset* (a mirror tile declared 128x400, the 320-tall
-  tilt/thumbnail) can exceed every screen-sized table (`ylookup`, `lastx`,
-  `uwall`/`dwall`). Audit those calls in any engine: size the tables for the
-  largest view or clamp the view, and verify with a canary. Duke's corruption
-  surfaced as four different panics in `hline`/`hlineasm4`/`setaspect`; they
-  were one overflow.
+  size comes from a *camera/monitor texture* or a hard-coded tilt (the 320x320
+  death view) can exceed every screen-sized table (`ylookup`, `lastx`,
+  `uwall`/`dwall`). Duke's bathroom mirrors are **not** this path: `picnum
+  MIRROR` walls are drawn with `preparemirror()`/`completemirror()` into the
+  screen and never call `setviewtotile()`. Audit the calls that do: size the
+  tables for the largest view or clamp the view, and verify with a canary.
+  Duke's corruption surfaced as four different panics in
+  `hline`/`hlineasm4`/`setaspect`; they were one overflow.
 - **A `reportandexit`/`Error` macro must actually stop.** Duke's port had
   `RG_PANIC` as a log call; its cache allocator then continued with an invalid
   best fit and wrote past `cac[]`. It aborts now, and the allocator recovers:

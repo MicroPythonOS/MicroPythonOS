@@ -142,8 +142,8 @@ When it does fail, `allocache()` clears stale locks and retries; if there is
 still no room it returns NULL and `loadtile()` gives that one tile a 1×1
 transparent stand-in. A full cache costs an invisible texture, not the app.
 
-The renderer's own limit is not memory: the off-screen views (a mirror tile
-declared 128x400, the 320-tall tilt/thumbnail) set a view larger than the
-screen's row/column tables. That was the crash, and the fix is the clamp
-described in `README.md` ("Renderer limits"), not a bigger heap.
+The renderer's own limit is not memory: an off-screen view larger than the
+screen (the 320-tall death/tilt view, or a camera texture declared larger) sets
+a view past the screen's row/column tables. That was the crash, and the fix is
+the clamp described in `README.md` ("Renderer limits"), not a bigger heap.
 
