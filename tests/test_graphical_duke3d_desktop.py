@@ -130,3 +130,73 @@ class TestDuke3DDesktop(unittest.TestCase):
             buffer, _size = grp
             if not isinstance(buffer, str):
                 duke3d._free_asset_buffer(buffer)
+
+    def test_a_held_key_does_not_run_at_render_speed(self):
+        """A held direction must advance the game at the engine's tic rate.
+
+        The native module's clock is the host's, and the engine installs its
+        timer during start-up. When start-up saw a zero clock, the first tick
+        looked like the whole host uptime had elapsed: ``totalclock`` jumped
+        far ahead of the engine's own ``ototalclock``, and every
+        ``faketimerhandler()`` call inside the renderer then counted as a game
+        tic, so one short press ran the player across the level.
+        """
+        if sys.platform == "esp32":
+            self.skipTest("the badge runs the flash-resident core")
+        if module_x64 is None:
+            self.skipTest("no native Duke3D module for this host")
+        if zipasset is None:
+            self.skipTest("this firmware has no zipasset support")
+
+        loading = lambda text, done=0, total=0: None
+        grp = duke3d.prepare_grp(loading)
+        engine = duke3d._NatmodEngine()
+        surface = _FakeSurface(duke3d.GAME_WIDTH, duke3d.GAME_HEIGHT,
+                               rows=72)
+        # A host that has been up for days is where the runaway clock showed:
+        # the first tick must continue from the clock start() was given, not
+        # from zero.
+        started_at = 900000000
+        try:
+            engine.start(grp, surface, now_ms=started_at)
+            now = started_at
+            for _ in range(60):
+                now = time.ticks_add(now, 20)
+                engine.tick(now)
+
+            # pos() = (x, y, ang, totalclock, sector, ototalclock, fifo,
+            #          key_down, velocity)
+            start = module_x64.pos()
+            self.assertTrue(start[3] - start[5] < 100,
+                            "the engine clock ran away from its tic clock")
+            self.assertTrue(start[3] < 1000,
+                            "the engine clock did not start with the session")
+
+            engine.key(duke3d.KEY_UP, True)
+            for _ in range(50):  # one second of engine time
+                now = time.ticks_add(now, 20)
+                engine.tick(now)
+            engine.key(duke3d.KEY_UP, False)
+            for _ in range(25):
+                now = time.ticks_add(now, 20)
+                engine.tick(now)
+
+            end = module_x64.pos()
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            walked = int((dx * dx + dy * dy) ** 0.5)
+            # A second of walking covers a few tiles; the runaway clock covered
+            # the room in the first frame. The bound is loose on purpose: the
+            # level and the spawn sector are the bundled episode's, not this
+            # test's.
+            self.assertTrue(walked < 6000,
+                            "one second of holding a direction moved %d units"
+                            % walked)
+            self.assertTrue(end[3] - end[5] < 100,
+                            "the engine clock ran away from its tic clock")
+            self.assertEqual(end[7], 0, "the key is still down after release")
+        finally:
+            engine.stop()
+            buffer, _size = grp
+            if not isinstance(buffer, str):
+                duke3d._free_asset_buffer(buffer)

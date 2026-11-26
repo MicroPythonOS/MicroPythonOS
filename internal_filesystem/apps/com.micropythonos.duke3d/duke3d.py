@@ -839,7 +839,7 @@ class _NatmodEngine:
         width, height, self.frame_window = _surface_for_display(display)
         return width, height
 
-    def start(self, grp, surface):
+    def start(self, grp, surface, now_ms=None):
         buffer, size = grp
         if isinstance(buffer, (list, tuple)):
             # The chunked inflate is for a fragmented badge heap; a desktop has
@@ -860,7 +860,12 @@ class _NatmodEngine:
         self._duke.surface(surface.buffer, surface.width, surface.height,
                           surface.rows_per_band, self._present)
         try:
-            self._duke.start(buffer, GRP_NAME, self._config_dir)
+            # The clock the first tick continues from: the engine installs its
+            # timer while this call is running, and a zero there would make the
+            # first tick look like the host's whole uptime had elapsed.
+            if now_ms is None:
+                now_ms = time.ticks_ms()
+            self._duke.start(buffer, GRP_NAME, self._config_dir, now_ms)
         except SystemExit:
             # Error()/exit() during the engine's start-up: it is not going to
             # run, and the app has to say so rather than show a black screen.

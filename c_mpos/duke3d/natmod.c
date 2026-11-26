@@ -17,13 +17,14 @@
 // The contract with Python:
 //
 //   surface(buffer, width, height, band_rows, present)   where a frame goes
-//   start(asset, asset_name, config_dir)                 boot the engine
+//   start(asset, asset_name, config_dir, now_ms)         boot the engine
 //   tick(now_ms)                                        run one engine frame
 //   key(code, pressed)                                  queue a Duke key event
 //   stop()                                              stop presenting
 //   quit_requested()                                    the engine wants out
 //   width() / height()                                  engine resolution
 //   debug_state()                                       one console line
+//   pos()                                               player and clock, for tests
 //
 // `asset` is the inflated GRP buffer (or None when there is no buffer); its
 // bytes are read through read_file() without a Python call per lump. The
@@ -472,13 +473,20 @@ static mp_uint_t nat_copy_str(char *dst, size_t size, mp_obj_t object) {
 }
 
 static mp_obj_t nat_start(size_t n_args, const mp_obj_t *args) {
-    if (n_args != 3) {
-        mp_raise_TypeError("start() takes 3 arguments");
+    if (n_args != 4) {
+        mp_raise_TypeError("start() takes 4 arguments");
     }
     g_quit = 0;
     g_key_head = 0;
     g_key_tail = 0;
-    g_now_ms = 0;
+    // The engine's timer is installed during start-up and takes its base from
+    // SDL_GetTicks() (= this clock). Leaving it at 0 here makes the first
+    // tick() look like the whole host uptime elapsed at once: totalclock jumps
+    // ahead of ototalclock for good, and every faketimerhandler() call in the
+    // renderer then counts as a game tic, so a held key moves the player at
+    // hundreds of frames a second. The host passes its clock so start-up and
+    // ticks are on the same timeline.
+    g_now_ms = (uint32_t)mp_obj_get_int(args[3]);
     nat_copy_str(g_asset_name, sizeof(g_asset_name), args[1]);
     nat_copy_str(g_config_dir, sizeof(g_config_dir), args[2]);
     g_asset = NULL;
@@ -554,7 +562,7 @@ static mp_obj_t nat_start(size_t n_args, const mp_obj_t *args) {
     g_running = 1;
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(nat_start_obj, 3, 3, nat_start);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(nat_start_obj, 4, 4, nat_start);
 
 static mp_obj_t nat_tick(mp_obj_t now_obj) {
     if (!g_created || !g_running) {
@@ -627,6 +635,28 @@ static mp_obj_t nat_load_slot(mp_obj_t spot_obj) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(nat_load_slot_obj, nat_load_slot);
 
+// Player position, angle and the engine's two clocks, so a host test can
+// measure movement and tic pacing instead of guessing from a picture.
+extern struct player_struct ps[MAXPLAYERS];
+static mp_obj_t nat_pos(void) {
+    const int i = myconnectindex;
+    if (i < 0 || i >= MAXPLAYERS) {
+        return mp_const_none;
+    }
+    mp_obj_t items[9];
+    items[0] = mp_obj_new_int(ps[i].posx);
+    items[1] = mp_obj_new_int(ps[i].posy);
+    items[2] = mp_obj_new_int(ps[i].ang);
+    items[3] = mp_obj_new_int(totalclock);
+    items[4] = mp_obj_new_int(ps[i].cursectnum);
+    items[5] = mp_obj_new_int(ototalclock);
+    items[6] = mp_obj_new_int(movefifoend[i] - movefifoplc);
+    items[7] = mp_obj_new_int(KB_KeyDown[sc_UpArrow] ? 1 : 0);
+    items[8] = mp_obj_new_int(ps[i].posxv + ps[i].posyv);
+    return mp_obj_new_tuple(9, items);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(nat_pos_obj, nat_pos);
+
 static mp_obj_t nat_debug_state(void) {
     mp_printf(&mp_plat_print,
               "[duke] created=%d running=%d quit=%d connect=%d ticks=%u\n",
@@ -656,6 +686,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw,
     mp_store_global(MP_QSTR_width, MP_OBJ_FROM_PTR(&nat_width_obj));
     mp_store_global(MP_QSTR_height, MP_OBJ_FROM_PTR(&nat_height_obj));
     mp_store_global(MP_QSTR_debug_state, MP_OBJ_FROM_PTR(&nat_debug_state_obj));
+    mp_store_global(MP_QSTR_pos, MP_OBJ_FROM_PTR(&nat_pos_obj));
     mp_store_global(MP_QSTR_save_slot, MP_OBJ_FROM_PTR(&nat_save_slot_obj));
     mp_store_global(MP_QSTR_load_slot, MP_OBJ_FROM_PTR(&nat_load_slot_obj));
 
