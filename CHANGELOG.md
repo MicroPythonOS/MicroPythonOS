@@ -7,6 +7,9 @@ Frameworks:
 - `mpos.ui.native_input.KeyHolds.tap_held()`: a key that an engine samples once a tic stays down for one tic; `tap()` only suits engines that act on the key event itself
 - native modules on x64: the loader maps the module's BSS/rodata below 4 GB (falling back to the heap), so an engine that keeps addresses in 32-bit words (Duke3D's Build renderer) works as a desktop module
 
+Testing:
+- test runner: desktop tests run headless by default (SDL's dummy video driver), so the test binaries no longer take the keyboard focus; `--show-window` or `MPOS_TEST_SHOW_WINDOW=1` brings the window back. `tests/cpython_mpos_controller.py` and `tests/cpython_aiorepl_probe.py` start their desktop binary the same way
+
 0.23.0
 ======
 
@@ -32,7 +35,6 @@ Builtin Apps:
 - OSUpdate: an update check tries the remaining mirror when the first one is unreachable
 
 Testing:
-- test runner: desktop tests run headless by default (SDL's dummy video driver), so the test binaries no longer take the keyboard focus; `--show-window` or `MPOS_TEST_SHOW_WINDOW=1` brings the window back
 - connectivity: mocks are installed per test instead of at module import, so they no longer leak into later tests in a one-interpreter device run
 - test runner: stages `lib/unittest` first on a device run (frozen -O3 strips `assert`) and installs its asyncio wrappers once instead of per test
 - screen camera: `cell_ncc_min` skips single-colour cells, so a mostly blank screen no longer fails webcam verification

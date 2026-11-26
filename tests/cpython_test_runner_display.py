@@ -92,5 +92,83 @@ class TestDesktopDisplay(unittest.TestCase):
             os.environ.update(saved)
 
 
+class TestOtherDesktopLaunchers(unittest.TestCase):
+    """The CPython tests that start a desktop binary themselves are headless
+    too. A fake controller records the environment instead of starting one."""
+
+    def setUp(self):
+        self._saved_environ = dict(os.environ)
+        for key in test_runner.HEADLESS_SDL_ENV:
+            os.environ.pop(key, None)
+        os.environ.pop("MPOS_TEST_SHOW_WINDOW", None)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._saved_environ)
+
+    def _fake_controller(self, seen):
+        class FakeController:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def start(self):
+                seen.append({key: os.environ.get(key) for key in test_runner.HEADLESS_SDL_ENV})
+
+            def exec(self, *args, **kwargs):
+                return b""
+
+            def stop(self):
+                pass
+
+            def __enter__(self):
+                self.start()
+                return self
+
+            def __exit__(self, *exc):
+                self.stop()
+
+        return FakeController
+
+    def test_aiorepl_probe_starts_its_desktop_binary_headless(self):
+        from tests import cpython_aiorepl_probe as probe
+        seen = []
+        saved = probe.MPOSController, probe._SERIAL_PORT
+        probe.MPOSController, probe._SERIAL_PORT = self._fake_controller(seen), None
+        try:
+            case = probe.TestConsoleProbeDoesNotStallConsole("setUp")
+            case.setUp()
+            case.tearDown()
+        finally:
+            probe.MPOSController, probe._SERIAL_PORT = saved
+        self.assertEqual(seen, [test_runner.HEADLESS_SDL_ENV])
+
+    def test_controller_tests_start_their_desktop_binary_headless(self):
+        from tests import cpython_mpos_controller as controller_tests
+        seen = []
+        saved = controller_tests.MPOSController, controller_tests.run_tests, sys.argv
+        controller_tests.MPOSController = self._fake_controller(seen)
+        controller_tests.run_tests = lambda *args, **kwargs: None
+        sys.argv = ["cpython_mpos_controller.py"]
+        try:
+            controller_tests.main()
+        finally:
+            controller_tests.MPOSController, controller_tests.run_tests, sys.argv = saved
+        self.assertEqual(seen, [test_runner.HEADLESS_SDL_ENV])
+
+    def test_show_window_variable_reaches_the_other_launchers(self):
+        from tests import cpython_aiorepl_probe as probe
+        os.environ["MPOS_TEST_SHOW_WINDOW"] = "1"
+        seen = []
+        saved = probe.MPOSController, probe._SERIAL_PORT
+        probe.MPOSController, probe._SERIAL_PORT = self._fake_controller(seen), None
+        try:
+            case = probe.TestConsoleProbeDoesNotStallConsole("setUp")
+            case.setUp()
+            case.tearDown()
+        finally:
+            probe.MPOSController, probe._SERIAL_PORT = saved
+        self.assertEqual(seen, [dict.fromkeys(test_runner.HEADLESS_SDL_ENV)])
+
+
 if __name__ == "__main__":
     unittest.main()

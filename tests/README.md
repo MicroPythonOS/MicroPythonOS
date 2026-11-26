@@ -30,7 +30,9 @@ you type elsewhere. LVGL still renders and simulated input still works.
 `--show-window` or `MPOS_TEST_SHOW_WINDOW=1` (or `true`, `yes`, `on`) brings
 the window back. SDL variables you set yourself are kept, and a video driver
 set under only one of its names (`SDL_VIDEO_DRIVER` or `SDL_VIDEODRIVER`) is
-used for the other too.
+used for the other too. The CPython tests that start a desktop binary
+themselves (`cpython_mpos_controller.py`, `cpython_aiorepl_probe.py`) use the
+same settings.
 
 ## Test Architecture
 
