@@ -4,9 +4,9 @@ Unit tests for NIP-44 encryption in NostrManager's Nostr Wallet Connect client.
 NIP-47 lets a wallet service advertise the encryption schemes it supports in
 the "encryption" tag of its info event (kind 13194). NostrManager starts every
 connection on nip04, switches to nip44_v2 when the wallet lists it, and falls
-back to nip04 if the wallet then answers UNSUPPORTED_ENCRYPTION. Replies are
-decrypted per event, so NIP-04 replies to requests sent before a switch still
-work.
+back to nip04 if the wallet then answers UNSUPPORTED_ENCRYPTION or never
+answers NIP-44 at all. Replies are decrypted per event, so NIP-04 replies to
+requests sent before a switch still work.
 
 The wallet side is played with real keys, so these tests check the actual
 NIP-04 and NIP-44 ciphertexts both ways, not mocks.
@@ -217,6 +217,29 @@ class TestNwcEncryptionNegotiation(_FastNip44Case):
         self.mgr._process_event(_info_event(stranger, "nip44_v2"))
         self.assertEqual(self.mgr._nwc_encryption, "nip04")
 
+    def test_first_info_event_sends_the_waiting_first_poll(self):
+        # At the start of a connection the first poll waits a few seconds
+        # for the info event, so it goes out once, in the right encryption.
+        self.mgr._nwc_awaiting_info = True
+        self.mgr._last_nwc_poll = time.time() - self.mgr.NWC_POLL_SECONDS + self.mgr.NWC_INFO_WAIT_SECONDS
+        self.mgr._process_event(_info_event(self.wallet, "nip04"))
+        self.assertFalse(self.mgr._nwc_awaiting_info)
+        self.assertTrue(time.time() - self.mgr._last_nwc_poll >= self.mgr.NWC_POLL_SECONDS)
+        self.assertFalse(self.mgr._nwc_repoll)
+
+    def test_first_info_event_listing_nip44_polls_in_nip44(self):
+        self.mgr._nwc_awaiting_info = True
+        self.mgr._last_nwc_poll = time.time() - self.mgr.NWC_POLL_SECONDS + self.mgr.NWC_INFO_WAIT_SECONDS
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2 nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertFalse(self.mgr._nwc_awaiting_info)
+        self.assertTrue(time.time() - self.mgr._last_nwc_poll >= self.mgr.NWC_POLL_SECONDS)
+
+    def test_info_event_later_on_does_not_force_a_poll(self):
+        before = self.mgr._last_nwc_poll
+        self.mgr._process_event(_info_event(self.wallet, "nip04"))
+        self.assertEqual(self.mgr._last_nwc_poll, before)
+
     def test_no_conversation_key_stays_nip04(self):
         self.mgr._nwc_conversation_key = None
         self.mgr._process_event(_info_event(self.wallet, "nip44_v2 nip04"))
@@ -336,6 +359,32 @@ class TestNwcReplies(_FastNip44Case):
         reply = {"result_type": "get_balance", "result": {"balance": 5000}}
         self.mgr._process_event(_reply_event(self.wallet, self.client, reply, "nip04"))
         self.assertEqual(self.balances, [5])
+
+    def test_reply_from_another_author_is_ignored(self):
+        # NIP-04 decrypts with the sender's key, so without the author check
+        # anyone could show a balance of their choice.
+        stranger = PrivateKey()
+        reply = {"result_type": "get_balance", "result": {"balance": 99000}}
+        self.mgr._process_event(_reply_event(stranger, self.client, reply, "nip04"))
+        self.assertEqual(self.balances, [])
+        self.assertEqual(self.errors, [])
+
+    def test_refusal_from_another_author_does_not_switch_encryption(self):
+        self.mgr._nwc_encryption = "nip44_v2"
+        self._send_poll()
+        stranger = PrivateKey()
+        self.mgr._process_event(_reply_event(
+            stranger, self.client, _unsupported("get_balance"), "nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertFalse(self.mgr._nwc_nip44_refused)
+        self.assertEqual(len(self.mgr._nwc_request_schemes), 2)
+
+    def test_notification_from_another_author_is_ignored(self):
+        stranger = PrivateKey()
+        payload = {"notification_type": "payment_received",
+                   "notification": {"type": "incoming", "amount": 1000}}
+        self.mgr._process_event(_reply_event(stranger, self.client, payload, "nip04", kind=23196))
+        self.assertEqual(self.notifications, [])
 
     def test_nip44_notification_kind_23197(self):
         self.mgr._nwc_encryption = "nip44_v2"
@@ -605,6 +654,11 @@ class TestNwcReplies(_FastNip44Case):
             self.wallet, self.client, _unsupported("get_balance"), "nip04",
             created_at=self.mgr._nwc_poll_sent_unix - 120))
         self.assertEqual(len(self.mgr._nwc_request_schemes), 2)
+        # Written before our first poll: it refuses nothing we sent, so it
+        # must not end NIP-44 on this connection.
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertFalse(self.mgr._nwc_nip44_refused)
+        self.assertEqual(self.errors, [])
 
     def test_info_event_resets_the_silence_watchdog(self):
         self.mgr._polls_since_last_event = 2
@@ -615,6 +669,125 @@ class TestNwcReplies(_FastNip44Case):
         for _ in range(12):
             self._send_poll()
         self.assertEqual(len(self.mgr._nwc_request_schemes), 16)
+
+
+class TestNwcWalletSilentOnNip44(_FastNip44Case):
+    """A wallet that lists nip44_v2 but never answers NIP-44 requests."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = PrivateKey()
+        self.wallet = PrivateKey()
+        self.mgr = _manager(self.client, self.wallet)
+        self.errors = []
+        self.balances = []
+        self.mgr._error_cb = self.errors.append
+        self.mgr._nwc_balance_cb = self.balances.append
+        self.mgr._process_event(_info_event(self.wallet, "nip44_v2 nip04"))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+
+    def _poll(self):
+        self.mgr._nwc_before_poll()
+        self.mgr.nwc_fetch_balance()
+        self.mgr.nwc_fetch_payments()
+        return self.mgr.relay_manager.published[-2:]
+
+    def _silent_polls(self):
+        for _ in range(self.mgr.NWC_NIP44_SILENT_POLLS):
+            for request in self._poll():
+                self.assertTrue(["encryption", "nip44_v2"] in request.tags)
+            self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+
+    def test_unanswered_nip44_polls_end_in_nip04(self):
+        self._silent_polls()
+        for request in self._poll():
+            self.assertFalse(["encryption", "nip44_v2"] in request.tags)
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertFalse(self.mgr._nwc_nip44_refused)
+        self.assertEqual(_filter_kinds(self.mgr._nwc_filters), [[23195, 23196], [13194]])
+        self.assertEqual(self.errors, [])
+        # The nip04 poll is answered: the connection works again.
+        reply = {"result_type": "get_balance", "result": {"balance": 21000}}
+        self.mgr._process_event(_reply_event(self.wallet, self.client, reply, "nip04"))
+        self.assertEqual(self.balances, [21])
+
+    def test_newer_info_event_does_not_switch_back(self):
+        self._silent_polls()
+        self._poll()
+        self.mgr._process_event(_info_event(
+            self.wallet, "nip44_v2 nip04", created_at=Event.epoch_seconds() + 60))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+
+    def test_any_event_from_the_wallet_restarts_the_count(self):
+        for _ in range(self.mgr.NWC_NIP44_SILENT_POLLS - 1):
+            self._poll()
+        # An error reply in nip04: the wallet is there, NIP-44 not proven.
+        error = {"result_type": "get_balance", "error": {"code": "INTERNAL", "message": "busy"}}
+        self.mgr._process_event(_reply_event(self.wallet, self.client, error, "nip04"))
+        self._silent_polls()
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+
+    def test_wallet_that_answered_nip44_is_not_given_up_on(self):
+        self._poll()
+        reply = {"result_type": "get_balance", "result": {"balance": 21000}}
+        self.mgr._process_event(_reply_event(self.wallet, self.client, reply, "nip44_v2"))
+        self.assertTrue(self.mgr._nwc_nip44_answered)
+        # It then goes offline for a long time.
+        for _ in range(self.mgr.NWC_NIP44_SILENT_POLLS + 3):
+            self._poll()
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+
+    def test_polls_while_the_wallet_relay_is_down_do_not_count(self):
+        class _Relay:
+            connected = False
+
+        relay = _Relay()
+        self.mgr.relay_manager.relays = {"wss://wallet.example": relay}
+        self.mgr._nwc_relays = ["wss://wallet.example"]
+        for _ in range(self.mgr.NWC_NIP44_SILENT_POLLS + 3):
+            self._poll()
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        relay.connected = True
+        self._silent_polls()
+        self._poll()
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+
+    def test_nip04_refusal_after_the_fallback_returns_to_nip44_for_good(self):
+        # A nip44_v2-only wallet that was offline: it refuses the nip04
+        # poll, gets nip44_v2 back, and silence does not move it again.
+        self._silent_polls()
+        nip04_requests = self._poll()
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.mgr._process_event(_reply_event(
+            self.wallet, self.client, _unsupported("get_balance"), "nip04",
+            request_id=nip04_requests[0].id))
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+        self.assertEqual(self.errors, [])
+        for _ in range(self.mgr.NWC_NIP44_SILENT_POLLS + 3):
+            self._poll()
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
+
+    def test_nip04_connection_is_left_alone(self):
+        self.mgr._process_event(_info_event(
+            self.wallet, "nip04", created_at=Event.epoch_seconds() + 60))
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        for _ in range(self.mgr.NWC_NIP44_SILENT_POLLS + 3):
+            self._poll()
+        self.assertEqual(self.mgr._nwc_encryption, "nip04")
+        self.assertFalse(self.mgr._nwc_nip44_silent)
+
+    def test_configure_forgets_the_silence(self):
+        self._silent_polls()
+        self._poll()
+        self.assertTrue(self.mgr._nwc_nip44_silent)
+        self.mgr._nwc_nwc_url = None
+        url = "nostr+walletconnect://{}?relay=wss://relay.example&secret={}".format(
+            self.wallet.public_key.hex(), PrivateKey().raw_secret.hex())
+        self.mgr.configure_nwc(url)
+        self.assertFalse(self.mgr._nwc_nip44_silent)
+        self.assertFalse(self.mgr._nwc_nip44_answered)
+        # The wallet's cached info applies to the new connection.
+        self.assertEqual(self.mgr._nwc_encryption, "nip44_v2")
 
 
 class TestConfigureNwc(_FastNip44Case):

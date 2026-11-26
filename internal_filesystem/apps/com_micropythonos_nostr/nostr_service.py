@@ -298,7 +298,27 @@ class NostrManager:
     # written before the current poll went out is taken to answer an earlier
     # poll (see _nwc_take_request_scheme).
     NWC_CLOCK_SKEW_SECONDS = 30
+    # How long the first poll of a connection waits for the wallet's info
+    # event, which says whether to send it as nip04 or nip44_v2.
+    NWC_INFO_WAIT_SECONDS = 3
+    # Polls in a row a wallet may leave unanswered in nip44_v2, on a
+    # connection where it never answered NIP-44, before nip04 is tried (see
+    # _nwc_before_poll).
+    NWC_NIP44_SILENT_POLLS = 3
     RELAY_SILENT_RECONNECT_THRESHOLD = 3
+
+    # State of the silent-NIP-44 fallback and of the first poll, as class
+    # defaults so that they exist before __init__ and configure_nwc run.
+    # True once a reply from the wallet decrypted as NIP-44 on this
+    # connection: a wallet that has answered NIP-44 is not given up on.
+    _nwc_nip44_answered = False
+    # nip44_v2 polls sent since the wallet's last event.
+    _nwc_nip44_silent_polls = 0
+    # Set when nip44_v2 was dropped because the wallet never answered it, so
+    # a replayed info event does not switch back to it.
+    _nwc_nip44_silent = False
+    # True while the first poll of a connection waits for the info event.
+    _nwc_awaiting_info = False
 
     @classmethod
     def get_instance(cls):
@@ -1097,6 +1117,9 @@ class NostrManager:
         self._nwc_encryption = "nip04"
         self._nwc_nip44_refused = False
         self._nwc_nip04_refused = False
+        self._nwc_nip44_answered = False
+        self._nwc_nip44_silent_polls = 0
+        self._nwc_nip44_silent = False
         self._nwc_filters = None
         self._nwc_request_schemes = []
         self._nwc_conversation_key = None
@@ -1122,7 +1145,13 @@ class NostrManager:
             # listening with the old key until a watchdog reconnect.
             if self._nwc_sub_id is None:
                 self._nwc_sub_id = _make_subscription_id("micropython_nwc_")
-            self._publish_nwc_subscription()
+            try:
+                self._publish_nwc_subscription()
+            except Exception as e:
+                # The caller is the app's settings code: a relay that fails
+                # here must not stop the new connection from being stored.
+                # A reconnect sends the subscription again.
+                logger.warning("NostrManager: could not send the NWC subscription: %s", e)
         self._ensure_main_task()
 
     def _parse_nwc_url(self, nwc_url):
@@ -1294,6 +1323,13 @@ class NostrManager:
                 logger.error("NostrManager: relay list publish error: %s", e)
 
         self._last_nwc_poll = time.time() - self.NWC_POLL_SECONDS
+        if self._nwc_configured and self._nwc_info.get(self._nwc_wallet_pubkey) is None:
+            # Nothing known about this wallet yet: its info event, asked for
+            # above, says which encryption it speaks. Give it a few seconds
+            # to arrive, so the first poll does not go out as nip04 and then
+            # again as nip44_v2. _process_nwc_info polls as soon as it is in.
+            self._nwc_awaiting_info = True
+            self._last_nwc_poll += self.NWC_INFO_WAIT_SECONDS
 
         # Main processing loop
         while self.keep_running:
@@ -1326,6 +1362,7 @@ class NostrManager:
             # --- Periodic NWC polling ---
             if self._nwc_configured and now - self._last_nwc_poll >= self.NWC_POLL_SECONDS:
                 self._last_nwc_poll = now
+                self._nwc_awaiting_info = False
                 repoll = self._nwc_repoll
                 self._start_nwc_poll(now)
 
@@ -1338,6 +1375,11 @@ class NostrManager:
                             break
 
                     self._polls_since_last_event += 1
+
+                try:
+                    self._nwc_before_poll()
+                except Exception as e:
+                    logger.warning("NostrManager: NIP-44 silence check error: %s", e)
 
                 try:
                     self.nwc_fetch_balance()
@@ -1425,6 +1467,15 @@ class NostrManager:
 
         # NWC events are private and handled separately.
         if event.kind in NWC_REPLY_KINDS and self._nwc_configured:
+            if event.public_key != self._nwc_wallet_pubkey:
+                # The NWC subscription asks for the wallet's events only, so
+                # a relay should never deliver this. Not from the wallet of
+                # this connection: do not show it as a balance or payment
+                # (a NIP-04 payload decrypts with its sender's key) and do
+                # not let it switch the encryption.
+                logger.warning("NostrManager: ignoring NWC event kind=%s from %s, not the wallet",
+                    event.kind, str(event.public_key)[:16])
+                return
             self._process_nwc_event(event)
             return
         if (event.kind == KIND_NWC_INFO and self._nwc_configured
@@ -1517,6 +1568,7 @@ class NostrManager:
             if __debug__:
                 logger.debug("NostrManager: NWC watchdog counter reset (event kind=%s)", getattr(event, "kind", "?"))
         self._polls_since_last_event = 0
+        self._nwc_nip44_silent_polls = 0
         # Close the request this reply answers before decrypting, so a reply
         # that fails to decrypt or parse does not leave it open.
         if getattr(event, "kind", None) == KIND_NWC_RESPONSE:
@@ -1601,7 +1653,10 @@ class NostrManager:
         content = event.content or ""
         ck = getattr(self, "_nwc_conversation_key", None)
         if ck is not None and nip44_decrypt is not None and "?iv=" not in content:
-            return nip44_decrypt(content, ck)
+            text = nip44_decrypt(content, ck)
+            # The wallet speaks NIP-44 on this connection.
+            self._nwc_nip44_answered = True
+            return text
         return self._nwc_private_key.decrypt_message(content, event.public_key)
 
     def _handle_nwc_unsupported_encryption(self, scheme):
@@ -1661,7 +1716,9 @@ class NostrManager:
         earlier poll instead. Either way the request is then no longer open.
         Returns "stale" for a reply whose
         "e" tag names no open request of ours (a relay replaying an earlier
-        session's reply), and None when nothing is known.
+        session's reply), and for an untagged reply written before the
+        current poll went out when no earlier request is open. Returns None
+        when nothing is known.
         """
         sent = getattr(self, "_nwc_request_schemes", None) or []
         for tag in getattr(event, "tags", None) or []:
@@ -1682,7 +1739,12 @@ class NostrManager:
         if sent_unix and created_at and created_at < sent_unix - self.NWC_CLOCK_SKEW_SECONDS:
             earlier = [r[2] for r in sent if r[3] and r[2] < current_poll]
             if not earlier:
-                return None
+                # Written before the current poll and nothing older is open:
+                # it answers no request of this session (a relay replaying
+                # an earlier session's reply). Treating it as an answer to
+                # the current poll would let an old refusal switch the
+                # encryption for good.
+                return "stale"
             latest = max(earlier)
             for i in range(len(sent)):
                 if sent[i][3] and sent[i][2] == latest:
@@ -1729,10 +1791,40 @@ class NostrManager:
         # list takes seconds to decrypt and blocks the UI, so stay on nip04
         # there until the wallet actually refuses it. Wallets that list only
         # nip44_v2 may still answer nip04 (Rizful did in November 2026).
+        # After the silent-NIP-44 fallback (_nwc_before_poll) the
+        # same holds: nip04, unless the wallet refuses it.
         if ("nip44_v2" in schemes and self._nwc_nip44_usable()
-                and (NIP44_FAST or getattr(self, "_nwc_nip04_refused", False))):
+                and ((NIP44_FAST and not self._nwc_nip44_silent)
+                     or getattr(self, "_nwc_nip04_refused", False))):
             return "nip44_v2"
         return "nip04"
+
+    def _nwc_before_poll(self):
+        """Go back to nip04 when the wallet never answers NIP-44.
+
+        Called before each poll. A wallet that lists nip44_v2 and
+        then cannot read our NIP-44 requests sends no reply at all, not even
+        UNSUPPORTED_ENCRYPTION, and the connection would stay silent for
+        good. So after NWC_NIP44_SILENT_POLLS polls in a row without any
+        event from the wallet, on a connection where no NIP-44 reply ever
+        arrived, try nip04, which is what every connection used before
+        NIP-44 support. Polls sent while the wallet's relay was down do not
+        count. A wallet that then refuses nip04 gets nip44_v2 back (see
+        _handle_nwc_unsupported_encryption).
+        """
+        if (self._nwc_encryption != "nip44_v2" or self._nwc_nip44_answered
+                or getattr(self, "_nwc_nip04_refused", False)):
+            self._nwc_nip44_silent_polls = 0
+            return
+        if self._nwc_nip44_silent_polls >= self.NWC_NIP44_SILENT_POLLS:
+            logger.warning("NostrManager: no reply to %s NIP-44 polls, trying NIP-04",
+                self._nwc_nip44_silent_polls)
+            self._nwc_nip44_silent = True
+            self._nwc_nip44_silent_polls = 0
+            self._set_nwc_encryption("nip04", poll_now=False)
+            return
+        if self._nwc_relay_connected():
+            self._nwc_nip44_silent_polls += 1
 
     def _process_nwc_info(self, event):
         """Pick the NWC encryption from the wallet's info event (kind 13194).
@@ -1761,6 +1853,10 @@ class NostrManager:
         if wanted != self._nwc_encryption:
             logger.info("NostrManager: NWC wallet supports %s, using %s", schemes or ["nip04"], wanted)
             self._set_nwc_encryption(wanted, reason="info")
+        elif self._nwc_awaiting_info:
+            # The first poll was waiting for this event: send it now.
+            self._last_nwc_poll = time.time() - self.NWC_POLL_SECONDS
+        self._nwc_awaiting_info = False
 
     def _remember_nwc_info(self, wallet, created_at, schemes):
         """Store a wallet's info, mark it most recently used and drop the
