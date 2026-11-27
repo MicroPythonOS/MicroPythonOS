@@ -163,6 +163,27 @@ These live in the MicroPythonOS copy and are candidates for a separate PR:
   under the clamp. Upstream relies on the clamp alone; the port's BSS puts
   `globalhoriz` right after `lastx`, so an off-by-one there is a fault.
 
+## Where this copy stands
+
+The engine in `engine/` is the `Duke3D` branch of
+`DukeNano3D/retro-go-for-DukeNano3D`, imported into the core and adapted to the
+MPOS shims. It carries:
+
+* the tile-view bounds in the shape of
+  [DynaMight1124/retro-go#31](https://github.com/DynaMight1124/retro-go/pull/31);
+* the palette fill-expand fix for the 6-bit to RGB565 conversion;
+* the cheats menu under Options > Game Options, the PNG retry throttle and the
+  dynamic tile-cache sizing.
+
+It does **not** carry the optimisation pass (`cc042b62`, `OPTIMISATION.md`) or
+the megapack restructure (`265695ca`). The optimisation pass is built around
+Retro-Go's double-buffered indexed surfaces - it renders into two stable
+surfaces and syncs only the HUD - which is the opposite of this port's model
+(one `NativeDisplay` surface, band by band), so taking it means redoing its
+display half rather than merging files. The megapack is board/data support for
+Retro-Go's own targets. A merge of either should start from the upstream tree
+and re-apply the MPOS shims, not from this copy.
+
 ## Notes
 
 * **`RG_PANIC` is not the upstream bug.** Upstream defines it as
