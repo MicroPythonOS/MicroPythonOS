@@ -480,6 +480,12 @@ app's own README and in `../docs/` (Duke: `c_mpos/duke3d/README.md`,
   tree had the same overrun in its death/tilt view; DynaMight's `9c46dd9e`
   raised `MAXYDIM` to 320 to remove it, and the remaining bounds are in
   `c_mpos/duke3d/UPSTREAM.md` and DynaMight1124/retro-go#31.
+- **Take upstream's shape even when a local variant works.** The port's own
+  tile-view clamp worked, but then every sync had to reconcile two fixes for
+  one bug; it now uses PR #31's shape verbatim (`MAXYDIM + 1` tables,
+  `setviewback()` restores the offsets) and `UPSTREAM.md` lists only the extras
+  that are genuinely this port's (palette decode, flat sky, span guard). A fix
+  that could go back upstream starts from upstream's patch, not from ours.
 - **Off-screen views are a second size domain.** A `setview`-style call whose
   size comes from a *camera/monitor texture* or a hard-coded tilt (the 320x320
   death view) can exceed every screen-sized table (`ylookup`, `lastx`,
@@ -537,6 +543,19 @@ app's own README and in `../docs/` (Duke: `c_mpos/duke3d/README.md`,
   ~1 MB of PSRAM lost per save and enough to stop the next engine from starting.
   Requests made during `init()` answer -1 at once (the frame loop does not
   exist yet), so a config file read at start-up must be preloaded if it matters.
+  **Reply before painting anything**: the core waits at most ten seconds, so a
+  progress label created before `file_reply()` turns an out-of-memory error or a
+  torn-down screen into a lost savegame. The reply goes first, best-effort
+  labels after it.
+- **A worker core cannot paint, so it reports start-up progress (ABI 11).** Its
+  task must not enter MicroPython, but a launch can be 22 s (Duke: 5.7 s of
+  data, then a 15 s texture preload) and a blank screen that long reads as a
+  hang. `progress(host, permille, text)` copies a phase and a permille from the
+  core's task; `mpos_core.start_task(progress=...)` forwards the newest one from
+  the host's task while it waits, so that callback may touch LVGL. Gate the call
+  on `abi->version >= 11` (a shipped ABI 10 blob still runs on a newer host) and
+  report permille, not percent: a long phase that reports whole percent sits on
+  one integer for half a second.
 - **The core loader's log ring must keep the newest lines.** It dropped the new
   line when full, so 36 lines of start-up chatter ate the error that explained a
   failed launch; a full ring now overwrites the oldest. `expected_crc` must be
