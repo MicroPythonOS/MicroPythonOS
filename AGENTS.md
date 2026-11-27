@@ -500,8 +500,10 @@ app's own README and in `../docs/` (Duke: `c_mpos/duke3d/README.md`,
   five slices) then samples with the base tile's stride and each slice's own
   size - which looked like a sky of vertical garbage bands. Decode palette PNGs
   as palette (`color_convert = 0` + a 256-entry LUT): four times less memory and
-  no per-pixel nearest-colour search, which on a badge is the difference between
-  a 20 s level start and a few seconds.
+  no per-pixel nearest-colour search. Memory, not CPU, is what it buys on a
+  badge: a decode that needed 250 KB and no longer fitted now needs 64 KB (a
+  level's 15 s texture preload barely moved, so do not expect the decode to
+  shorten a start-up).
 - **A view into a tile leaves the span renderer's view offset in that tile.**
   `drawrooms()` sets `frameoffset = frameplace + viewoffset`, so a view drawn
   into a texture (Duke's 320x320 tilted death view) leaves the offset pointing
