@@ -21,6 +21,7 @@ import time
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from scripts import test_runner
 from scripts.mpos_controller import MPOSController
 
 # A CBOR map header: a valid UTF-8 lead byte with no continuation byte, which is
@@ -53,6 +54,9 @@ class TestConsoleProbeDoesNotStallConsole(unittest.TestCase):
             self.mpos = MPOSController(backend="serial", port=port)
             self.answer_timeout = DEVICE_ANSWER_TIMEOUT_S
         else:
+            # Headless like scripts/test_runner.py, so the desktop binary
+            # doesn't take the keyboard focus; MPOS_TEST_SHOW_WINDOW=1 shows it.
+            test_runner._configure_desktop_display(False)
             self.mpos = MPOSController(backend="process")
             self.answer_timeout = DESKTOP_ANSWER_TIMEOUT_S
         self.mpos.start()

@@ -30,6 +30,7 @@ import argparse
 import subprocess
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from scripts import test_runner
 from scripts.mpos_controller import (
     MPOSController,
     AIOREPLClient,
@@ -849,6 +850,9 @@ def main():
         print(f"\n{'#'*60}")
         print(f"  Testing DESKTOP (process) backend")
         print(f"{'#'*60}")
+        # Headless like scripts/test_runner.py, so the desktop binaries started
+        # here don't take the keyboard focus; MPOS_TEST_SHOW_WINDOW=1 shows them.
+        test_runner._configure_desktop_display(False)
         with MPOSController(binary=args.binary) as mpos:
             run_tests(mpos, only=args.only, cli_binary=args.binary, serial_port=args.serial)
 

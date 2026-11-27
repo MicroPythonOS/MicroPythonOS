@@ -9,6 +9,9 @@ Frameworks:
 - native modules on x64: the loader maps the module's BSS/rodata below 4 GB (falling back to the heap), so an engine that keeps addresses in 32-bit words (Duke3D's Build renderer) works as a desktop module
 - Duke3D: the death view keeps the renderer's write pointer on the screen, so the picture no longer freezes at the moment of death and the menu over it renders again; a level's sky is painted flat instead of as stripes when one of its textures cannot be decoded, and palette PNG overrides decode with a quarter of the memory (a level loads noticeably faster); a savegame reports its progress on screen, and the launch message says what it is waiting for
 
+Testing:
+- test runner: desktop tests run headless by default (SDL's dummy video driver), so the test binaries no longer take the keyboard focus; `--show-window` or `MPOS_TEST_SHOW_WINDOW=1` brings the window back. `tests/cpython_mpos_controller.py` and `tests/cpython_aiorepl_probe.py` start their desktop binary the same way
+
 0.23.0
 ======
 

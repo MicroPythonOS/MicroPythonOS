@@ -44,7 +44,11 @@ Examples:
     # Throttle the desktop process to simulate a slow CI runner (desktop only)
     python3 scripts/test_runner.py --cpulimit 10 tests/test_graphical_infinite_list.py
 
+    # Desktop: show the SDL window while the tests run (headless by default)
+    python3 scripts/test_runner.py --show-window tests/test_graphical_about_app.py
+
     MPOS_TEST_PORT env var sets the default serial port (default: /dev/ttyACM0).
+    MPOS_TEST_SHOW_WINDOW=1 does the same as --show-window.
 """
 
 import argparse
@@ -71,6 +75,16 @@ BUILD_DIR = os.path.join(REPO_ROOT, "lvgl_micropython", "build")
 
 MAX_RETRIES = 3
 
+# Desktop tests run with SDL's dummy video driver, so no window opens. Each
+# test file starts a new binary, and on macOS every new window took the
+# keyboard focus from whatever the user was typing in. The tests do not need
+# the window: LVGL renders without it and simulated input has its own indev.
+HEADLESS_SDL_ENV = {
+    "SDL_VIDEO_DRIVER": "dummy",  # SDL3 (the macOS build links sdl2-compat)
+    "SDL_VIDEODRIVER": "dummy",  # SDL2
+    "SDL_MAC_BACKGROUND_APP": "1",  # no activation if a window opens anyway
+}
+
 ONDEVICE_SKIP = {
     "test_apps_manifest.py",
     "test_connectivity_manager.py",
@@ -84,6 +98,27 @@ ONDEVICE_SKIP = {
 COVERAGE_RE = re.compile(
     r"=== COVERAGE_DATA ===\n(.*?)\n=== END_COVERAGE_DATA ===", re.DOTALL
 )
+
+
+def _configure_desktop_display(show_window, environ=None):
+    """Make the desktop binaries headless unless the window is wanted.
+
+    Variables already set in the environment are kept, so a caller can still
+    pick another SDL video driver. A driver set under only one of its two
+    names is copied to the other, so SDL2 and SDL3 both use it. The test
+    binaries inherit the result. Returns True when the run is headless.
+    """
+    environ = os.environ if environ is None else environ
+    show = environ.get("MPOS_TEST_SHOW_WINDOW", "").strip().lower()
+    if show_window or show in ("1", "true", "yes", "on"):
+        return False
+    driver = (environ.get("SDL_VIDEO_DRIVER") or environ.get("SDL_VIDEODRIVER")
+              or HEADLESS_SDL_ENV["SDL_VIDEO_DRIVER"])
+    for key in ("SDL_VIDEO_DRIVER", "SDL_VIDEODRIVER"):
+        if not environ.get(key):
+            environ[key] = driver
+    environ.setdefault("SDL_MAC_BACKGROUND_APP", HEADLESS_SDL_ENV["SDL_MAC_BACKGROUND_APP"])
+    return environ["SDL_VIDEO_DRIVER"] == "dummy"
 
 
 def _resolve_binary():
@@ -1008,6 +1043,12 @@ def main():
              "Requires cpulimit to be installed.",
     )
     parser.add_argument(
+        "--show-window", action="store_true",
+        help="Show the SDL window of the desktop binary (desktop only). By "
+             "default the tests run headless so the window does not take "
+             "the keyboard focus; MPOS_TEST_SHOW_WINDOW=1 does the same.",
+    )
+    parser.add_argument(
         "--coverage-save", default=None,
         help="Save merged coverage JSON to FILE (use with --coverage-load to merge runs)",
     )
@@ -1072,6 +1113,11 @@ def main():
         print("WARNING: --relayport has no effect without --reset, ignoring")
     if args.logserial and not args.ondevice:
         print("WARNING: --logserial has no effect without --ondevice, ignoring")
+    if args.show_window and args.ondevice:
+        print("WARNING: --show-window has no effect with --ondevice, ignoring")
+
+    if not args.ondevice:
+        _configure_desktop_display(args.show_window)
 
     if args.port:
         os.environ["MPOS_TEST_PORT"] = args.port

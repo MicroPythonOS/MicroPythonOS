@@ -22,9 +22,10 @@ To keep it easy to manage/sync with upsteam lvgl_micropython, we keep the change
 
 ## Testing
 
-**Run:** `./scripts/test_runner.py tests/<test_file> tests/<other_test_file> [--ondevice] [--port <port>] [--reset]` 
+**Run:** `./scripts/test_runner.py tests/<test_file> tests/<other_test_file> [--ondevice] [--port <port>] [--reset] [--show-window]` 
 **All tests:** `make tests` (20–35 min). CI runs them on push. **Syntax:** `make syntax-tests`  
 **CPython controller tests:** `python3 tests/cpython_mpos_controller.py`, `python3 tests/cpython_kill_orphaned.py`, `python3 tests/cpython_kill_orphaned_linux.py` (not run by test_runner.py).  
+**Headless:** desktop tests run with SDL's dummy video driver, so no window takes the user's keyboard focus. Use `--show-window` (or `MPOS_TEST_SHOW_WINDOW=1`) only when the window is needed. `tests/cpython_mpos_controller.py` and `tests/cpython_aiorepl_probe.py` do the same. When starting `lvgl_micropy_macOS` or `run_desktop.sh` directly, or a script that uses `MPOSController(backend='process')`, for a check the user doesn't need to watch, prefix `SDL_VIDEO_DRIVER=dummy SDL_VIDEODRIVER=dummy SDL_MAC_BACKGROUND_APP=1`.  
 **Prefs wipe:** `test_runner.py` deletes `internal_filesystem/prefs/` (all app settings) in the checkout it runs from (`_cleanup_config`). Run tests from a worktree if that checkout holds settings you need.  
 **Details:** `tests/README.md`  
 **Frozen bytecode is -O3** (`manifests/manifest.py`): `mpy-cross` drops every `assert` at any
