@@ -552,10 +552,12 @@ app's own README and in `../docs/` (Duke: `c_mpos/duke3d/README.md`,
   data, then a 15 s texture preload) and a blank screen that long reads as a
   hang. `progress(host, permille, text)` copies a phase and a permille from the
   core's task; `mpos_core.start_task(progress=...)` forwards the newest one from
-  the host's task while it waits, so that callback may touch LVGL. Gate the call
-  on `abi->version >= 11` (a shipped ABI 10 blob still runs on a newer host) and
-  report permille, not percent: a long phase that reports whole percent sits on
-  one integer for half a second.
+  the host's task while it waits, so that callback may touch LVGL. Test the
+  pointer, not the version: `progress` is NULL when the same core runs on the
+  host's own task (`start()`), and a worker core just declares the ABI it needs
+  because the loader refuses an older host - with API level 0 there is no
+  backwards compatibility to keep. Report permille, not percent: a long phase
+  that reports whole percent sits on one integer for half a second.
 - **The core loader's log ring must keep the newest lines.** It dropped the new
   line when full, so 36 lines of start-up chatter ate the error that explained a
   failed launch; a full ring now overwrites the oldest. `expected_crc` must be
