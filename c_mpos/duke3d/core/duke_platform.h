@@ -19,6 +19,8 @@ void duke_platform_add_wait(uint32_t ms);
 // A no-op in a core (there is no scheduler to yield to), but it is where the
 // retro-go shims park their SDL_Delay/vTaskDelay calls.
 void duke_platform_idle(void);
+uint32_t duke_platform_ticks(void);
+void duke_platform_progress(int permille, const char *text);
 
 // Diagnostics for the MicroPython task stack: record the lowest stack pointer
 // seen from the engine and name the phase that reached it.

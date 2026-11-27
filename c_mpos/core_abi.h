@@ -59,7 +59,7 @@
 
 #include <stdint.h>
 
-#define MPOS_CORE_ABI_VERSION 10
+#define MPOS_CORE_ABI_VERSION 11
 /* Oldest entry table this loader still runs. Everything added since is
  * appended to both structs, so a core built against an older header keeps
  * working: it never reads the fields it does not know about. A blob is refused
@@ -186,6 +186,19 @@ typedef struct mpos_core_abi {
      */
     int (*file_request)(void *host, int op, const char *path,
                         uint32_t offset, uint32_t len, void *data);
+
+    /*
+     * ABI 11, for a start-up long enough that the host has to say what it is
+     * waiting for (Duke's texture preload is fifteen seconds on an S3).
+     *
+     * progress(host, permille, text): a phase name and how far it has got,
+     *     called a few times a second from the core's own task. It must do no
+     *     more than copy the two values: a host must not be entered from there
+     *     (a worker core's host forwards it from its own task, a core on the
+     *     host's task calls it directly). NULL means the host has no progress
+     *     display.
+     */
+    void (*progress)(void *host, int permille, const char *text);
 } mpos_core_abi_t;
 
 #define MPOS_CORE_FILE_READ 0

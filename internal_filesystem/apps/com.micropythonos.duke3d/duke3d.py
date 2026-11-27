@@ -504,6 +504,10 @@ class _CoreEngine:
         self._keys = []
         self._io_count = 0
         self._callbacks = None
+        self._grp_file = None
+        self.start_progress = None
+        self.file_progress = None
+        self._save_total = 0
         self.quit = False
         self._quit_query = getattr(mpos_core, "quit_requested", None)
         # A firmware with ABI 9 can run the engine on a task of its own.
@@ -610,7 +614,8 @@ class _CoreEngine:
             # loader falls back to PSRAM.
             stack_bytes=48 * 1024,
             affinity=WORKER_AFFINITY,
-            surface=surface.buffer)
+            surface=surface.buffer,
+            progress=self.start_progress)
         buffer = self._core.task_surface(1)
         self._worker_surfaces.append(buffer)
         self._surface_index = [0, surface.add_buffer(buffer)]
@@ -647,6 +652,13 @@ class _CoreEngine:
             self._core.stop()
         except Exception:
             pass
+        handle = self._grp_file
+        self._grp_file = None
+        if handle is not None:
+            try:
+                handle.close()
+            except Exception:
+                pass
         self._grp = None
         self._grp_path = None
         self._grp_size = 0
@@ -732,12 +744,27 @@ class _CoreEngine:
         # re-enter MicroPython on a deep engine stack.
         if path == GRP_NAME:
             if self._grp_path is not None:
+                # Start-up reads the directory, the ART headers, every PNG
+                # header and then the level's lumps: opening and closing the
+                # file for each of those was most of a badge's launch time, so
+                # the handle stays open for the session (a cache miss during
+                # play reads a lump too).
+                handle = self._grp_file
+                if handle is None:
+                    try:
+                        handle = self._grp_file = open(self._grp_path, "rb")
+                    except OSError:
+                        return -1
                 try:
-                    with open(self._grp_path, "rb") as handle:
-                        handle.seek(offset)
-                        got = handle.readinto(into)
+                    handle.seek(offset)
+                    got = handle.readinto(into)
                     return 0 if got is None else got
                 except Exception:
+                    try:
+                        handle.close()
+                    except Exception:
+                        pass
+                    self._grp_file = None
                     return -1
             if self._grp is not None and offset < self._grp_size:
                 count = self._grp_size - offset
@@ -792,6 +819,14 @@ class _CoreEngine:
         # on a board where the next engine needs every block).
         op, path, offset, length, buffer = request
         count = -1
+        if op == 1 and offset == 0:
+            # A savegame is about to be rewritten: its size on disk is the best
+            # estimate of the total, because the structures Duke writes do not
+            # change size for a level.
+            try:
+                self._save_total = os.stat(self._host_path(path))[6]
+            except OSError:
+                pass
         try:
             real = self._host_path(path)
             if op == 0:
@@ -816,6 +851,12 @@ class _CoreEngine:
             # costs the engine its 10 s timeout and a corrupt save.
             _debug("file %s failed: %r" % (path, error))
             count = -1
+        if (path.startswith("/saves/") and length >= 4096 and count > 0
+                and self.file_progress is not None):
+            # The activity owns the label; this runs on its frame loop, so the
+            # call may touch LVGL.
+            self.file_progress("Saving" if op == 1 else "Loading",
+                               offset + count, self._save_total)
         reply(count)
 
     def _log(self, line):
@@ -1147,9 +1188,12 @@ class Duke3D(NativeActivity):
         _debug("start: surface %dx%d in %d-row bands"
                % (surface.width, surface.height, surface.rows_per_band))
         self._loading("Unpacking Duke3D data 0%")
+        began = time.ticks_ms()
         try:
             self._grp = prepare_grp(
                 self._loading, getattr(self, "intent", None))
+            _debug("start: data ready in %d ms"
+                   % (time.ticks_diff(time.ticks_ms(), began),))
         except Exception as error:
             print("duke3d: prepare failed: %s" % (error,))
             sys.print_exception(error)
@@ -1159,10 +1203,19 @@ class Duke3D(NativeActivity):
                 "Duke Nukem 3D cannot start.\n\n%s\n\n"
                 "Restart the badge, then launch it again." % (error,))
             return False
-        self._loading("Starting the engine")
+        # The engine's start is one blocking call: it indexes the GRP, sets up
+        # the palette and decodes the level's textures (tens of seconds on a
+        # badge, and nothing can repaint while it runs). Say what the wait is.
+        self._loading("Loading the level's textures...")
         self.engine.progress = self._extent_progress
+        self.engine.file_progress = self._file_progress
+        self.engine.start_progress = self._start_progress
+        began = time.ticks_ms()
+        self._start_percent = -1
         try:
             self.engine.start(self._grp, surface)
+            _debug("start: engine up in %d ms"
+                   % (time.ticks_diff(time.ticks_ms(), began),))
             # The launch progress label sits above the picture and would stay
             # there for the rest of the session: nothing else clears it.
             self._clear_hint()
@@ -1276,6 +1329,46 @@ class Duke3D(NativeActivity):
             self.key(code, True)
         self._selftest_down = codes
         print("duke3d: selftest step %d %s" % (step, codes))
+
+    def _start_progress(self, permille, text):
+        """The engine says which start-up phase it is in and how far it got.
+
+        Called from this task while it waits for the core to become ready (the
+        core itself runs on the worker task and may not touch LVGL), so a
+        repaint here is safe - and throttled, because a repaint is a whole
+        pass and the core is waiting for this task to keep serving it.
+        """
+        if not text:
+            return
+        percent = permille // 10
+        if percent == self._start_percent:
+            return
+        self._start_percent = percent
+        self._loading("%s %d%%" % (text, percent))
+
+    def _file_progress(self, what, done, total):
+        """Show how far a savegame has got.
+
+        Half a megabyte in a handful of large writes takes the badge's flash
+        tens of seconds, and the engine is blocked while it happens - so this
+        frame loop is free to say what it is waiting for. The total is the file
+        being overwritten (or the last save of this level); without one the
+        label counts kilobytes instead of pretending to know a percentage.
+        """
+        if total > 0:
+            percent = done * 100 // total
+            if percent > 99:
+                percent = 99
+            text = "%s %d%%" % (what, percent)
+        else:
+            text = "%s %d KB" % (what, done // 1024)
+        if self.hint is None:
+            self.show_hint(text, 4000)
+        else:
+            self.set_message(text)
+            # Each block pushes the label out; a save that stops asking lets
+            # it expire instead of leaving it on the picture.
+            self._hint_until = time.ticks_add(time.ticks_ms(), 4000)
 
     def on_frame(self, now):
         if self._selftest:

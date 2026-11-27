@@ -604,6 +604,32 @@ static mp_obj_t mpos_core_file_reply(mp_obj_t count_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mpos_core_file_reply_obj, mpos_core_file_reply);
 
+// -- start-up progress (ABI 11) ---------------------------------------------
+//
+// The core's task must never enter MicroPython, so a report is copied here and
+// the host's task forwards it while it waits for the core to become ready.
+
+#define MPOS_CORE_PROGRESS_CHARS 48
+
+static volatile int s_progress_seq;
+static volatile int s_progress_permille;
+static char s_progress_text[MPOS_CORE_PROGRESS_CHARS];
+
+static void host_progress(void *host, int permille, const char *text) {
+    (void)host;
+    if (text == NULL) {
+        text = "";
+    }
+    size_t i = 0;
+    while (text[i] != '\0' && i + 1 < MPOS_CORE_PROGRESS_CHARS) {
+        s_progress_text[i] = text[i];
+        i++;
+    }
+    s_progress_text[i] = '\0';
+    s_progress_permille = permille;
+    s_progress_seq++;
+}
+
 static void log_push(const char *line) {
     if (s_log_ring == NULL || line == NULL) {
         return;
@@ -1182,6 +1208,7 @@ enum {
     ARG_expected_crc,
     ARG_affinity,
     ARG_surface,
+    ARG_progress,
 };
 
 static const mp_arg_t start_task_args[] = {
@@ -1201,6 +1228,7 @@ static const mp_arg_t start_task_args[] = {
     { MP_QSTR_expected_crc, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_INT(0)} },
     { MP_QSTR_affinity, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = MPOS_CORE_WORKER_CORE} },
     { MP_QSTR_surface, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
+    { MP_QSTR_progress, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_rom_obj = MP_ROM_NONE} },
 };
 
 // Copy a Python string into a fixed buffer; an empty result means "none".
@@ -1381,10 +1409,11 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
 
     // Root the asset and the surface: the loader holds raw pointers into both
     // for the whole session, and the collector cannot see those pointers.
-    mp_obj_t roots[2];
+    mp_obj_t roots[3];
     roots[0] = parsed[ARG_asset].u_obj;
     roots[1] = parsed[ARG_surface].u_obj;
-    MP_STATE_VM(mpos_core_refs) = mp_obj_new_tuple(2, roots);
+    roots[2] = parsed[ARG_progress].u_obj;
+    MP_STATE_VM(mpos_core_refs) = mp_obj_new_tuple(3, roots);
 
     s_task_ready = xSemaphoreCreateBinary();
     s_task_exit = xSemaphoreCreateBinary();
@@ -1422,6 +1451,7 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
     s_abi.frame = s_buffers[s_back_buffer];
     s_abi.frame_ready = worker_frame_ready;
     s_abi.yield = abi_yield;
+    s_abi.progress = host_progress;
 
     // Internal RAM first: it is what a task stack has always been, and it is
     // several times faster than PSRAM. A board whose DRAM is fragmented into
@@ -1457,7 +1487,30 @@ static mp_obj_t mpos_core_start_task(size_t n_args, const mp_obj_t *pos_args,
 
     // Block until the core has finished its start-up (or failed): the caller
     // shows a progress message, and nothing may tick before init returned.
-    xSemaphoreTake(s_task_ready, portMAX_DELAY);
+    // While waiting, forward the core's phase reports to the caller's
+    // callback, which is the only thing that can move the message.
+    const mp_obj_t progress_obj = parsed[ARG_progress].u_obj;
+    int progress_seen = 0;
+    while (xSemaphoreTake(s_task_ready, pdMS_TO_TICKS(25)) != pdTRUE) {
+        if (progress_obj == mp_const_none) {
+            continue;
+        }
+        const int seq = s_progress_seq;
+        if (seq == progress_seen) {
+            continue;
+        }
+        progress_seen = seq;
+        char text[MPOS_CORE_PROGRESS_CHARS];
+        const int permille = s_progress_permille;
+        strcpy(text, s_progress_text);
+        nlr_buf_t nlr;
+        if (nlr_push(&nlr) == 0) {
+            mp_obj_t args[2] = { mp_obj_new_int(permille),
+                                 mp_obj_new_str(text, strlen(text)) };
+            mp_call_function_2(progress_obj, args[0], args[1]);
+            nlr_pop();
+        }
+    }
     // From here the host's frame loop runs, so it can answer file requests.
     if (s_file_done != NULL) {
         s_file_ready = 1;

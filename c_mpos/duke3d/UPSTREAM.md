@@ -135,10 +135,33 @@ Two smaller hardening changes, also in the port:
 * bound the `lastx[y1--]`/`lastx[y2++]` stores in `drawalls()` (and the
   `ny1`/`ny2` variants) to `0 .. MAXYDIM`.
 
-Alternatively, if tile previews should be drawn in full, size `ylookup` for the
-largest tile dimension (`MAXYLOOKUP 1024` used in the port) and do the same for
-`lastx`; the per-column arrays would still need `MAXXDIM+1 >= tile width`, so a
-tile wider than `MAXXDIM` must be clamped either way.
+The port now follows the PR's shape exactly (clamped view, `ylookup[MAXYDIM+1]`,
+`lastx[MAXYDIM+1]`, clamped `setviewback()`), so a future merge only has to
+reconcile the port's own extras, which are listed in the next section. One
+alternative was tried first and dropped: sizing `ylookup` for the largest tile
+dimension (`MAXYLOOKUP 1024`). It covers the tilt view but a tile wider than
+`MAXXDIM` still has to be clamped, so it bought a bigger table without making
+the views safe.
+
+## Port-only extras (not upstream)
+
+These live in the MicroPythonOS copy and are candidates for a separate PR:
+
+* **Palette PNG overrides are decoded as palette** (`lodepng_decode` with
+  `color_convert = 0` + a 256-entry lookup). Every override in the compacted
+  GRP is a palette PNG, and decoding to RGBA needs four times the memory and a
+  nearest-colour search per pixel.
+* **`parascan()` paints a flat sky when its slice tiles disagree.** The
+  compacted GRP supplies one 128x400 sky image for tiles 89-93 and 95; a slice
+  that cannot be decoded is replaced by the 1x1 stand-in, and the mismatch
+  between the base tile's stride and a slice's size produced vertical bands of
+  garbage.
+* **The span guard in `vlineasm4`/`mvlineasm4` is bounded by `frameplace` and
+  `ydimen`**, not by `frameoffset`: during a tile view the offset points into
+  the tile while the HUD and menus are drawn to `frameplace`.
+* **Per-store `lastx` bounds in `drawalls()`** (`0 .. MAXYDIM`) as a second net
+  under the clamp. Upstream relies on the clamp alone; the port's BSS puts
+  `globalhoriz` right after `lastx`, so an off-by-one there is a fault.
 
 ## Notes
 

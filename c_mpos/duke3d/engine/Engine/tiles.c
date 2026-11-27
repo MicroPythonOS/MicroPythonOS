@@ -634,6 +634,10 @@ static int try_loadtile_from_override_png(short tilenume)
     int32_t fileSize;
     uint8_t *pngBytes = NULL;
     unsigned char *rgba = NULL;
+    unsigned char *indices = NULL;
+    uint8_t palette_lut[256];
+    LodePNGState state;
+    int paletted = 0;
     unsigned width = 0;
     unsigned height = 0;
     unsigned err;
@@ -697,10 +701,53 @@ static int try_loadtile_from_override_png(short tilenume)
     }
     kclose(fileHandle);
 
-    err = lodepng_decode32(&rgba, &width, &height, pngBytes, (size_t)fileSize);
+    /* Every override in the GRP is a palette PNG, so decode it as one: the
+     * result is one byte per pixel instead of RGBA. That is four times less
+     * memory (a 320x200 tile needs 64 KB, not 250 KB - on the badge the decode
+     * used to fail outright and the tile became the 1x1 stand-in, which showed
+     * the sky as stripes) and a palette lookup per entry instead of a
+     * nearest-colour search per pixel. */
+    lodepng_state_init(&state);
+    state.decoder.color_convert = 0;
+    err = lodepng_decode(&indices, &width, &height, &state, pngBytes,
+                         (size_t)fileSize);
+    if (err == 0 && indices != NULL
+            && state.info_raw.colortype == LCT_PALETTE
+            && state.info_raw.bitdepth == 8
+            && state.info_raw.palettesize > 0) {
+        paletted = 1;
+        for (int i = 0; i < 256; i++) {
+            if (i < (int)state.info_raw.palettesize) {
+                const unsigned char *entry = &state.info_raw.palette[i * 4];
+                palette_lut[i] = (entry[3] < 128)
+                                     ? 255
+                                     : nearest_palette_index_cached(entry[0],
+                                                                    entry[1],
+                                                                    entry[2]);
+            } else {
+                palette_lut[i] = 255;
+            }
+        }
+    } else if (err == 0) {
+        /* Not an 8-bit palette image: the general path. */
+        free(indices);
+        indices = NULL;
+        err = lodepng_decode32(&rgba, &width, &height, pngBytes,
+                               (size_t)fileSize);
+    }
+    lodepng_state_cleanup(&state);
     free(pngBytes);
-    if (err != 0 || rgba == NULL)
+    if (err != 0 || (paletted ? indices == NULL : rgba == NULL))
     {
+        static int32_t decode_warned;
+        if (decode_warned < 8) {
+            decode_warned++;
+            RG_LOGW("loadtile: tile %d: PNG '%s' did not decode (%u), %d bytes free",
+                    (int)tilenume, overrideFile, (unsigned)err,
+                    (int)mpos_heap_free());
+        }
+        free(indices);
+        free(rgba);
         missingPngTile[missing_idx] |= missing_mask;
         return 0;
     }
@@ -709,6 +756,7 @@ static int try_loadtile_from_override_png(short tilenume)
         ((uint64_t)width * (uint64_t)height > 0x7fffffffULL))
     {
         missingPngTile[missing_idx] |= missing_mask;
+        free(indices);
         free(rgba);
         return 0;
     }
@@ -720,6 +768,7 @@ static int try_loadtile_from_override_png(short tilenume)
         ((int64_t)targetWidth * (int64_t)targetHeight > 0x7fffffffLL))
     {
         missingPngTile[missing_idx] |= missing_mask;
+        free(indices);
         free(rgba);
         return 0;
     }
@@ -759,6 +808,7 @@ static int try_loadtile_from_override_png(short tilenume)
         allocache(&tiles[tilenume].data, pixelCount, (uint8_t *)&tiles[tilenume].lock);
         if (tiles[tilenume].data == NULL)
         {
+            free(indices);
             free(rgba);
             missingPngTile[missing_idx] |= missing_mask;
             return 0;
@@ -772,13 +822,20 @@ static int try_loadtile_from_override_png(short tilenume)
         {
             const int32_t srcX = (x * (int32_t)width) / targetWidth;
             const int32_t srcY = (y * (int32_t)height) / targetHeight;
-            const int32_t srcIndex = (srcY * (int32_t)width + srcX) * 4;
             const int32_t dstIndex = x * targetHeight + y;
-            const uint8_t r = rgba[srcIndex + 0];
-            const uint8_t g = rgba[srcIndex + 1];
-            const uint8_t b = rgba[srcIndex + 2];
-            const uint8_t a = rgba[srcIndex + 3];
-            dst[dstIndex] = (a < 128) ? 255 : nearest_palette_index_cached(r, g, b);
+            if (paletted)
+            {
+                dst[dstIndex] = palette_lut[indices[srcY * (int32_t)width + srcX]];
+            }
+            else
+            {
+                const int32_t srcIndex = (srcY * (int32_t)width + srcX) * 4;
+                const uint8_t r = rgba[srcIndex + 0];
+                const uint8_t g = rgba[srcIndex + 1];
+                const uint8_t b = rgba[srcIndex + 2];
+                const uint8_t a = rgba[srcIndex + 3];
+                dst[dstIndex] = (a < 128) ? 255 : nearest_palette_index_cached(r, g, b);
+            }
         }
     }
 
@@ -792,6 +849,7 @@ static int try_loadtile_from_override_png(short tilenume)
         }
     }
 
+    free(indices);
     free(rgba);
     missingPngTile[missing_idx] &= (uint8_t)~missing_mask;
     return 1;
@@ -800,26 +858,28 @@ static int try_loadtile_from_override_png(short tilenume)
 void setviewtotile(short tilenume, int32_t tileWidth, int32_t tileHeight)
 {
     int32_t i, j;
-    int32_t viewW = tileWidth;
-    int32_t viewH = tileHeight;
+    int32_t viewRows = tileWidth;  /* the view's y extent (the tile's height) */
+    int32_t viewCols = tileHeight; /* the view's x extent (the tile's width) */
 
     /* The off-screen view is drawn into arrays sized for the screen: lastx
-     * has MAXYDIM rows and uwall/dwall/swal/lwal MAXXDIM+1 columns. A mirror
-     * tile declared 128x400, or the 320-tall tilt/thumbnail view, is bigger,
-     * and drawing it indexed horizlookup2 past its table. Keep the tile's own
-     * dimensions and pixels but clamp the view to what those arrays hold. */
-    if (viewW > MAXYDIM)
-        viewW = MAXYDIM;
-    if (viewH > MAXXDIM)
-        viewH = MAXXDIM;
-    if (viewW >= MAXYLOOKUP)
-        viewW = MAXYLOOKUP - 1;
+     * has MAXYDIM rows and startumost/startdmost MAXXDIM columns. The 320x320
+     * view used while the player is dead is larger than a 240-row profile's
+     * tables, and a GRP or mod can declare a camera/monitor texture larger
+     * than either. Keep the tile's own dimensions and pixels, but clamp the
+     * preview view to what the screen arrays hold; the rest of the tile is
+     * left as it was. */
+    if (viewRows > MAXYDIM)
+        viewRows = MAXYDIM;
+    if (viewCols > MAXXDIM)
+        viewCols = MAXXDIM;
+    if (viewCols > MAXYDIM) /* ylookup is indexed by column */
+        viewCols = MAXYDIM;
 
     /* DRAWROOMS TO TILE BACKUP&SET CODE */
     tiles[tilenume].dim.width = tileWidth;
     tiles[tilenume].dim.height = tileHeight;
-    bakxsiz[setviewcnt] = max(xdimen, viewW);
-    bakysiz[setviewcnt] = max(ydimen, viewH);
+    bakxsiz[setviewcnt] = max(xdimen, viewCols);
+    bakysiz[setviewcnt] = max(ydimen, viewRows);
     bakvidoption[setviewcnt] = vidoption;
     vidoption = 2;
     bakframeplace[setviewcnt] = frameplace;
@@ -830,10 +890,10 @@ void setviewtotile(short tilenume, int32_t tileWidth, int32_t tileHeight)
     bakwindowy2[setviewcnt] = windowy2;
     copybufbyte(&startumost[windowx1],&bakumost[windowx1],(windowx2-windowx1+1)*sizeof(bakumost[0]));
     copybufbyte(&startdmost[windowx1],&bakdmost[windowx1],(windowx2-windowx1+1)*sizeof(bakdmost[0]));
-    setview(0,0,viewH-1,viewW-1);
+    setview(0,0,viewCols-1,viewRows-1);
     setaspect(65536,65536);
     j = 0;
-    for(i=0; i<=viewW; i++) {
+    for(i=0; i<=viewCols; i++) {
         ylookup[i] = j;
         j += tileHeight;
     }
@@ -1064,6 +1124,7 @@ int loadpics(char  *filename, char * gamedir)
     artsize = 0L;
 
     numtilefiles = 0;
+    uint32_t scan_started = duke_platform_ticks();
     for (k = 0; k < MAX_ART_FILES_SCAN; k++)
     {
         artfilename[7] = (k%10)+48;
@@ -1122,12 +1183,16 @@ int loadpics(char  *filename, char * gamedir)
         numtilefiles++;
     }
 
-    printf("Art files loaded: %" PRId32 " file(s) found by sparse scan\n", numtilefiles);
+    printf("Art files loaded: %" PRId32 " file(s) found by sparse scan (%u ms)\n",
+           numtilefiles, (unsigned)(duke_platform_ticks() - scan_started));
     if (!seenAnyArt)
         printf("loadpics: no ART files found; relying on DEF PNG overrides and header metadata\n");
 
+    uint32_t meta_started = duke_platform_ticks();
     parse_tile_overrides_from_def();
     prime_tile_override_metadata_from_png_headers();
+    RG_LOGD("loadpics: override metadata in %u ms",
+            (unsigned)(duke_platform_ticks() - meta_started));
 
     clearbuf(gotpic,(MAXTILES+31)>>5,0L);
     clearbuf(missingPngTile,(MAXTILES+31)>>5,0L);
@@ -1140,8 +1205,12 @@ int loadpics(char  *filename, char * gamedir)
     // Reserving too much space will result in little space left over for texture cache, making the game laggy.
 #ifdef MPOS_CORE
     /* The S3 has less heap than the native port's boards; the cache is the
-     * difference between a texture decode every few frames and none. */
-    const int32_t reserve_bytes = 320 * 1024;
+     * difference between a texture decode every few frames and none. The
+     * reserve has to fit the largest override decode plus its tile (a
+     * 320x200 image is 64 KB of indices and 64 KB of tile); a decode that
+     * does not fit makes that tile invisible instead, which is how a level's
+     * sky came out as stripes on a board whose cache had eaten the heap. */
+    const int32_t reserve_bytes = 512 * 1024;
 #else
     const int32_t reserve_bytes = 640 * 1024;
 #endif // 500KB has missing textures, 750KB is fine, 640KB seems to be the sweet spot

@@ -79,6 +79,7 @@ int g_key_head;
 int g_key_tail;
 uint32_t g_now_ms;
 int g_created;
+int g_heap_override_kb;
 int g_running;
 int g_quit;
 // The engine's own heap and the CON script are mapped below 4 GB (see
@@ -528,6 +529,12 @@ static mp_obj_t nat_start(size_t n_args, const mp_obj_t *args) {
     // gets a fresh arena each time.
     g_running = 0;
 
+    if (g_heap == NULL && g_heap_override_kb > 0) {
+        g_heap = nat_map_low((uint32_t)g_heap_override_kb * 1024u);
+        if (g_heap != NULL) {
+            g_heap_bytes = (uint32_t)g_heap_override_kb * 1024u;
+        }
+    }
     if (g_heap == NULL) {
         const uint32_t wanted[7] = {
             8u * 1024u * 1024u, 6u * 1024u * 1024u, 4u * 1024u * 1024u,
@@ -717,6 +724,30 @@ static mp_obj_t nat_debug_kill(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(nat_debug_kill_obj, nat_debug_kill);
 
+// The engine heap a badge gives Duke is a few megabytes, and the tile cache
+// takes most of it; a desktop has eight. Pin it to reproduce the small-heap
+// cases (a PNG override that no longer fits, textures reloading).
+static mp_obj_t nat_debug_heap_kb(mp_obj_t kb_obj) {
+    g_heap_override_kb = mp_obj_get_int(kb_obj);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(nat_debug_heap_kb_obj, nat_debug_heap_kb);
+
+// Tile status for a range, for the asset questions a picture cannot answer:
+// a tile the compacted GRP does not hold comes back as the 1x1 stand-in, and
+// anything that samples it by the base tile's stride reads garbage.
+static mp_obj_t nat_debug_tiles(mp_obj_t first_obj, mp_obj_t count_obj) {
+    const int first = mp_obj_get_int(first_obj);
+    const int count = mp_obj_get_int(count_obj);
+    for (int i = first; i < first + count && i < MAXTILES; i++) {
+        mp_printf(&mp_plat_print, "[tile] %d dim=%dx%d picsiz=%x data=%p\n",
+                  i, (int)tiles[i].dim.width, (int)tiles[i].dim.height,
+                  (unsigned)picsiz[i], (void *)tiles[i].data);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(nat_debug_tiles_obj, nat_debug_tiles);
+
 // Start a real single-player level, which the menus otherwise take a dozen
 // key presses to reach.
 extern void newgame(uint8_t vn, uint8_t ln, uint8_t sk);
@@ -762,6 +793,9 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw,
     mp_store_global(MP_QSTR_save_slot, MP_OBJ_FROM_PTR(&nat_save_slot_obj));
     mp_store_global(MP_QSTR_load_slot, MP_OBJ_FROM_PTR(&nat_load_slot_obj));
     mp_store_global(MP_QSTR_debug_kill, MP_OBJ_FROM_PTR(&nat_debug_kill_obj));
+    mp_store_global(MP_QSTR_debug_tiles, MP_OBJ_FROM_PTR(&nat_debug_tiles_obj));
+    mp_store_global(MP_QSTR_debug_heap_kb,
+                    MP_OBJ_FROM_PTR(&nat_debug_heap_kb_obj));
     mp_store_global(MP_QSTR_debug_newgame,
                     MP_OBJ_FROM_PTR(&nat_debug_newgame_obj));
     mp_store_global(MP_QSTR_debug_tilt, MP_OBJ_FROM_PTR(&nat_debug_tilt_obj));

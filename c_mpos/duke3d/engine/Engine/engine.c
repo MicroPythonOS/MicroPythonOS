@@ -1575,6 +1575,24 @@ IRAM_ATTR static void maskwallscan(int32_t x1, int32_t x2,
 }
 
 /* renders parallaxed skies/floors  --ryan. */
+/* Paint the band a parallax sky would cover. Used when the GRP cannot supply
+ * the sky's slice tiles: sampling a 1x1 stand-in with the base tile's stride
+ * produced vertical bands of garbage, which on a badge looked like a broken
+ * sky. Rows and clip arrays are the ones wallscan() uses. */
+static void skyfill(int32_t x1, int32_t x2, int16_t *topptr, int16_t *botptr)
+{
+    int32_t x, y1, y2;
+
+    for (x = x1; x <= x2; x++) {
+        y1 = topptr[x];
+        if (umost[x] > y1) y1 = umost[x];
+        y2 = botptr[x];
+        if (dmost[x] < y2) y2 = dmost[x];
+        for (; y1 < y2; y1++)
+            frameplace[ylookup[y1] + x] = 0;
+    }
+}
+
 IRAM_ATTR static void parascan(int32_t dax1, int32_t dax2, int32_t sectnum,uint8_t  dastat, int32_t bunch)
 {
     sectortype *sec;
@@ -1616,6 +1634,28 @@ IRAM_ATTR static void parascan(int32_t dax1, int32_t dax2, int32_t sectnum,uint8
 
     if (tiles[globalpicnum].animFlags&192)
         globalpicnum += animateoffs(globalpicnum);
+
+    /* parascan derives the horizontal step from the base tile's picsiz and
+     * wallscan samples each slice with its own dimensions, so the slices have
+     * to be the same texture. loadtile replaces a tile the GRP cannot supply
+     * with the 1x1 stand-in, and the mismatch showed as vertical bands of
+     * garbage across the sky. A sky that cannot be drawn is better flat. */
+    {
+        int32_t ok = (tiles[globalpicnum].dim.width >= 2 &&
+                      tiles[globalpicnum].dim.height >= 2);
+        for (j = 0; ok && j < MAXPSKYTILES; j++) {
+            int32_t slice = globalpicnum + pskyoff[j];
+            if (slice >= MAXTILES)
+                continue;
+            if (tiles[slice].dim.width != tiles[globalpicnum].dim.width ||
+                tiles[slice].dim.height != tiles[globalpicnum].dim.height)
+                ok = 0;
+        }
+        if (!ok) {
+            skyfill(dax1, dax2, topptr, botptr);
+            return;
+        }
+    }
 
     globalshiftval = (picsiz[globalpicnum]>>4);
 
@@ -9115,14 +9155,14 @@ void setviewback(void)
         k = bakxsiz[0];
     else
         k = max(bakxsiz[setviewcnt-1],bakxsiz[setviewcnt]);
-    if (k >= MAXYLOOKUP) k = MAXYLOOKUP - 1;
+    if (k > MAXYDIM) k = MAXYDIM;
     j = 0;
     for(i=0; i<=k; i++) ylookup[i] = j, j += bytesperline;
     setBytesPerLine(bytesperline);
-    /* The room draw recomputes frameoffset from frameplace, so the view of a
-     * tile leaves it pointing into the tile. Everything drawn after
-     * setviewback (the HUD, the menus, and this port's span guards) belongs to
-     * the restored buffer, so recompute it here. */
+    /* drawrooms() recomputes frameoffset from frameplace, so a view drawn
+     * into a tile leaves it pointing into the tile. Everything drawn after
+     * setviewback (status bar, weapon, menus) belongs to the restored
+     * buffer, so recompute it here. */
     viewoffset = windowy1*bytesperline + windowx1;
     frameoffset = frameplace+viewoffset;
 }

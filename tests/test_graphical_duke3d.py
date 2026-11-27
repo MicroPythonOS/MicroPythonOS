@@ -419,3 +419,25 @@ class TestDuke3DControlsOverlay(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDuke3DSaveProgress(unittest.TestCase):
+    """A savegame is tens of seconds of flash writes; the frame loop says how far.
+
+    The engine blocks on the host for every block it writes, so the label has
+    to come from the same frame loop that answers those blocks.
+    """
+
+    def test_the_label_counts_up_and_admits_an_unknown_total(self):
+        activity = duke3d.Duke3D()
+        try:
+            activity._file_progress("Saving", 256 * 1024, 512 * 1024)
+            self.assertEqual(activity.hint.get_text(), "Saving 50%")
+            activity._file_progress("Saving", 900 * 1024, 512 * 1024)
+            self.assertEqual(activity.hint.get_text(), "Saving 99%",
+                             "a save must not show 100% before it is done")
+            # A first save into an empty slot has no size to compare with.
+            activity._file_progress("Loading", 100 * 1024, 0)
+            self.assertEqual(activity.hint.get_text(), "Loading 100 KB")
+        finally:
+            activity._clear_hint()

@@ -31,11 +31,18 @@
 #define MAXSPRITESONSCREEN 256
 #endif
 
+#define INTERNAL_RES_W 320
+#define INTERNAL_RES_H 240
+#define DEFAULT_RES_W  240
+#define DEFAULT_RES_H  160
+
 #ifdef CONFIG_IDF_TARGET_ESP32
 #define MAXSECTORS 512
 #define MAXWALLS 4096
-#define MAXXDIM 320
-#define MAXYDIM 240
+#define MAXXDIM INTERNAL_RES_W
+/* Screen tilt and the death view render through a temporary 320x320 tile.
+ * Renderer work arrays must cover that target, not only the LCD height. */
+#define MAXYDIM INTERNAL_RES_W
 #else
 #define MAXSECTORS 2048
 #define MAXWALLS 8192
@@ -51,11 +58,6 @@
 #undef MAXSECTORS
 #define MAXSECTORS 1024
 #endif
-
-#define INTERNAL_RES_W 320
-#define INTERNAL_RES_H 240
-#define DEFAULT_RES_W  240
-#define DEFAULT_RES_H  160
 
 #define MAXPALOOKUPS 256
 #define MAXPSKYTILES 256
@@ -207,8 +209,7 @@ EXTERN int32_t xdim, ydim, numpages;
  * 128x400 textures, and the save thumbnail asks for 320), so the table must
  * cover the largest tile dimension, not only MAXYDIM: writing past it lands
  * in ydim/xdim/tsprite and corrupts the renderer. */
-#define MAXYLOOKUP 1024
-EXTERN FAST_RAM_ATTR int32_t ylookup[MAXYLOOKUP];
+EXTERN FAST_RAM_ATTR int32_t ylookup[MAXYDIM+1];
 
 EXTERN int32_t yxaspect, viewingrange;
 

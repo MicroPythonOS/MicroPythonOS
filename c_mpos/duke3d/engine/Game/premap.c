@@ -290,22 +290,32 @@ void precachenecessarysounds(void)
 void cacheit(void)
 {
     short i,j;
+    const uint32_t cache_started = duke_platform_ticks();
 
     precachenecessarysounds();
 
     cachegoodsprites();
 
+    /* A level asks for hundreds of tiles and the decodes are most of a badge's
+     * start-up, so say how far this has got. Walls are the bulk of it; the
+     * sector pass (floor, ceiling and its sprites) finishes the scale. */
     for(i=0;i<numwalls;i++)
-        if( tiles[wall[i].picnum].data == NULL)
     {
-        if(tiles[wall[i].picnum].data == NULL)
-            tloadtile(wall[i].picnum);
-        if(wall[i].overpicnum >= 0 && tiles[wall[i].overpicnum].data == NULL )
-            tloadtile(wall[i].overpicnum);
+        if( tiles[wall[i].picnum].data == NULL)
+        {
+            if(tiles[wall[i].picnum].data == NULL)
+                tloadtile(wall[i].picnum);
+            if(wall[i].overpicnum >= 0 && tiles[wall[i].overpicnum].data == NULL )
+                tloadtile(wall[i].overpicnum);
+        }
+        if ((i & 15) == 0 && numwalls > 0)
+            duke_platform_progress(i * 700 / numwalls, "Textures");
     }
 
     for(i=0;i<numsectors;i++)
     {
+        if ((i & 15) == 0 && numsectors > 0)
+            duke_platform_progress(700 + i * 300 / numsectors, "Textures");
         if( tiles[sector[i].floorpicnum].data == NULL )
             tloadtile( sector[i].floorpicnum );
         if( tiles[sector[i].ceilingpicnum].data == NULL )
@@ -328,13 +338,21 @@ void cacheit(void)
         }
     }
 
+    RG_LOGD("loadtiles: level textures in %u ms",
+            (unsigned)(duke_platform_ticks() - cache_started));
 }
 
 void docacheit(void)
 {
     int32_t i,j;
+    const uint32_t cache_started = duke_platform_ticks();
 
     j = 0;
+    int32_t total = 0;
+
+    for(i=0;i<MAXTILES;i++)
+        if( (gotpic[i>>3]&(1<<(i&7))) && tiles[i].data == NULL)
+            total++;
 
     for(i=0;i<MAXTILES;i++)
         if( (gotpic[i>>3]&(1<<(i&7))) && tiles[i].data == NULL)
@@ -345,11 +363,14 @@ void docacheit(void)
         {
             getpackets();
             _idle();
+            duke_platform_progress(j * 1000 / (total > 0 ? total : 1),
+                                   "Textures");
         }
     }
 
     clearbufbyte(gotpic,sizeof(gotpic),0L);
-
+    RG_LOGD("loadtiles: %d cached tiles in %u ms", (int)j,
+            (unsigned)(duke_platform_ticks() - cache_started));
 }
 
 
@@ -658,6 +679,7 @@ void setupbackdrop(short sky)
 {
     short i;
 
+    RG_LOGD("setupbackdrop: sky tile %d", (int)sky);
     for(i=0;i<MAXPSKYTILES;i++) pskyoff[i]=0;
 
     if(parallaxyscale != 65536L)

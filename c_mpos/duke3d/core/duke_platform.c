@@ -21,6 +21,27 @@
 #include "../../core_abi.h"
 
 static const mpos_core_abi_t *s_abi;
+
+uint32_t duke_platform_ticks(void) {
+    if (s_abi == NULL || s_abi->now_ms == NULL) {
+        return 0;
+    }
+    return s_abi->now_ms(s_abi->host);
+}
+
+/* How far a long start-up phase has got, for the host's launch message. It is
+ * a copy-only call: a worker core must never enter the host's runtime. */
+void duke_platform_progress(int permille, const char *text) {
+    if (s_abi == NULL || s_abi->version < 11 || s_abi->progress == NULL) {
+        return;
+    }
+    if (permille < 0) {
+        permille = 0;
+    } else if (permille > 1000) {
+        permille = 1000;
+    }
+    s_abi->progress(s_abi->host, permille, text);
+}
 static int s_running;
 
 // Set by natmod.c before the engine boots; empty for a file asset.
