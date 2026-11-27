@@ -851,13 +851,18 @@ class _CoreEngine:
             # costs the engine its 10 s timeout and a corrupt save.
             _debug("file %s failed: %r" % (path, error))
             count = -1
+        # Answer first: the core is blocked until it hears back, and a label
+        # that cannot be painted must never cost a savegame.
+        reply(count)
         if (path.startswith("/saves/") and length >= 4096 and count > 0
                 and self.file_progress is not None):
             # The activity owns the label; this runs on its frame loop, so the
             # call may touch LVGL.
-            self.file_progress("Saving" if op == 1 else "Loading",
-                               offset + count, self._save_total)
-        reply(count)
+            try:
+                self.file_progress("Saving" if op == 1 else "Loading",
+                                   offset + count, self._save_total)
+            except Exception as error:
+                _debug("save progress: %r" % (error,))
 
     def _log(self, line):
         # The "\x01yield" sentinel is consumed in C by the core loader before
