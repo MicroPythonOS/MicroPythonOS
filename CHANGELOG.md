@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- AppStore: add selectable uPyStore support with verified staged installs and launcher/cache checks; keep BadgeHub as the default.
+
 Frameworks:
 - `mpos_core.start_task()`: a core can run on a FreeRTOS task of its own (ABI 9), with C-only services for input, its asset and its log, and a two-buffer frame hand-off to the activity.
 - `mpos_core.start_task(progress=...)`: a worker core reports a start-up phase and how far it has got (ABI 11, copy-only from the core's task), and the host's task forwards it to a callback while it waits - so a fifteen-second texture preload can show a percentage A Duke-sized engine then needs 48 KiB on that task instead of 48 KiB on the MicroPython task, which is back to 24 KiB

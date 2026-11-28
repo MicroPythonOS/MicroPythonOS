@@ -1,14 +1,16 @@
+import gc
 import logging
 import time
-import ujson
 
 import lvgl as lv
 
-from mpos import Activity, App, AppManager, BuildInfo, DisplayMetrics, Intent, DownloadManager, SettingsActivity, SharedPreferences, TaskManager
+from mpos import Activity, App, AppManager, BuildInfo, DisplayMetrics, Intent, SettingsActivity, SharedPreferences, TaskManager
 from mpos.ui import QR_SYMBOL, STAR_SYMBOL
 from mpos.content import deeplink
 
 from app_detail import AppDetail
+import store_source
+from store_install import install_package, update_available
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
 
 logger = logging.getLogger(__name__)
@@ -58,6 +60,8 @@ class AppStore(Activity):
     _update_labels = {}
 
     def onCreate(self):
+        self.apps = []
+        self._destroyed = False
         self.prefs = SharedPreferences(self.appFullName)
         self._hide_wip = self.prefs.get_string("hide_wip", "true") == "true"
         self._wip_apps = []
@@ -69,7 +73,7 @@ class AppStore(Activity):
         self._last_scroll_y = None
         self._stable_ticks = 0
         self._download_in_progress = False
-        self._icon_pipeline = self.prefs.get_string("icon_pipeline", self._DEFAULT_ICON_PIPELINE)
+        self._icon_pipeline = self.prefs.get_string("icon_pipeline", "download" if store_source.current_source() == "upystore" else self._DEFAULT_ICON_PIPELINE)
         self.main_screen = lv.obj()
         self.main_screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
@@ -129,6 +133,10 @@ class AppStore(Activity):
     def onResume(self, screen):
         super().onResume(screen)
 
+        if getattr(self, "_pending_deeplink", None) and self._data_loaded and not self._refresh_in_progress and not getattr(self, "_catalog_error", False):
+            self._resolve_pending_deeplink()
+            return
+
         # Attach to AppUpdateManager so the banner refreshes live
         try:
             from appstore_core import AppUpdateManager
@@ -139,7 +147,7 @@ class AppStore(Activity):
         except Exception as e:
             logger.warning("could not attach to AppUpdateManager: %s", e)
 
-        if not self._data_loaded:
+        if not self._data_loaded or getattr(self, "_catalog_error", False):
             self.refresh_list()
         elif self._data_loaded and hasattr(self, "apps_list") and self.apps_list:
             self._stop_all_timers()
@@ -189,6 +197,26 @@ class AppStore(Activity):
         except Exception as e:
             logger.warning("could not detach from AppUpdateManager: %s", e)
         super().onPause(screen)
+
+    def onDestroy(self, screen):
+        self._has_foreground = False
+        self._destroyed = True
+        self._pending_deeplink = None
+        self._stop_all_timers()
+        widgets = getattr(self, "_icon_widgets", {})
+        for app in self.apps:
+            owned = widgets.get(app.fullname)
+            if owned is not None and getattr(app, "image_icon_widget", None) is owned:
+                app.image_icon_widget = None
+        self._icon_widgets = {}
+        self._displayed_apps = []
+        self._update_labels = {}
+        for name in (
+            "main_screen", "apps_list", "app_list", "please_wait_label", "settings_button",
+            "top_bar", "category_dropdown", "update_all_button", "update_all_label",
+        ):
+            setattr(self, name, None)
+        super().onDestroy(screen)
 
     # ------------------------------------------------------------------
     # Update-banner helpers
@@ -251,49 +279,56 @@ class AppStore(Activity):
 
     async def _run_update_all(self, updatable_app_data_list):
         """Sequentially download-and-install every app that has an update."""
-        self.update_all_button.add_state(lv.STATE.DISABLED)
-
-        for app_data in updatable_app_data_list:
-            fullname = app_data.get("fullname")
-            download_url = app_data.get("download_url")
-            if not fullname:
-                if __debug__: logger.debug("skipping update for %s (missing fullname)", app_data)
-                continue
-            if not download_url:
-                from appstore_core import fetch_badgehub_project_details
-                details_url = AppStore._BADGEHUB_DETAILS_URL + "/" + fullname
-                self.update_all_label.set_text(f"Checking {app_data.get('name', fullname)}...")
-                details = await fetch_badgehub_project_details(details_url)
-                download_url = details.get("download_url")
-                if not download_url:
-                    logger.warning("no download URL for %s", fullname)
-                    app_data["download_url"] = None
+        if getattr(self, "_batch_updating", False):
+            return
+        self._batch_updating = True
+        try:
+            if self.has_foreground():
+                self.update_all_button.add_state(lv.STATE.DISABLED)
+            for app_data in updatable_app_data_list:
+                fullname = app_data.get("fullname")
+                if not fullname:
                     continue
-                app_data["download_url"] = download_url
-                app_data["download_url_size"] = details.get("download_url_size")
-
-            self.update_all_label.set_text(f"Updating {app_data.get('name', fullname)}...")
-            try:
-                await AppManager.download_and_install_package(download_url, fullname)
-                if __debug__: logger.debug("updated %s", fullname)
-            except Exception as e:
-                logger.warning("update of %s failed: %s", fullname, e)
-                if "Not enough free space" in str(e):
-                    self.update_all_label.set_text(f"Not enough space for {app_data.get('name', fullname)}")
-                else:
-                    self.update_all_label.set_text(f"Update failed for {app_data.get('name', fullname)}")
-                await TaskManager.sleep(1.5)
+                if not app_data.get("download_url"):
+                    if self.has_foreground():
+                        self.update_all_label.set_text(f"Checking {app_data.get('name', fullname)}...")
+                    try:
+                        details = await store_source.fetch_details(fullname, app_data.get("_store_slug"), app_data.get("_store_source"))
+                    except Exception as error:
+                        logger.warning("update details failed for %s: %s", fullname, error)
+                        continue
+                    if not details.get("download_url"):
+                        logger.warning("no download URL for %s", fullname)
+                        continue
+                    app_data["download_url"] = details["download_url"]
+                    app_data["download_url_size"] = details.get("download_url_size")
+                if self.has_foreground():
+                    self.update_all_label.set_text(f"Updating {app_data.get('name', fullname)}...")
+                try:
+                    await install_package(app_data)
+                except Exception as error:
+                    logger.warning("update of %s failed: %s", fullname, error)
+                    if self.has_foreground():
+                        if "Not enough" in str(error):
+                            self.update_all_label.set_text(f"Not enough space for {app_data.get('name', fullname)}")
+                        else:
+                            self.update_all_label.set_text(f"Update failed for {app_data.get('name', fullname)}")
+                    await TaskManager.sleep(1.5)
 
         # Refresh everything after all updates
-        self.update_all_button.remove_state(lv.STATE.DISABLED)
-        self.apps.clear()
-        self.refresh_list()
-        try:
-            from appstore_core import AppUpdateManager
-            AppManager.refresh_apps()
-            AppUpdateManager.get_instance().check_for_updates_now()
-        except Exception as e:
-            logger.warning("post-update check error: %s", e)
+        finally:
+            self._batch_updating = False
+            self._data_loaded = False
+            if self.has_foreground():
+                self.update_all_button.remove_state(lv.STATE.DISABLED)
+                self.apps.clear()
+                self.refresh_list()
+            try:
+                from appstore_core import AppUpdateManager
+                AppManager.refresh_apps()
+                AppUpdateManager.get_instance().check_for_updates_now()
+            except Exception as error:
+                logger.warning("post-update check error: %s", error)
 
     # ------------------------------------------------------------------
     # Existing AppStore methods (unchanged)
@@ -304,16 +339,21 @@ class AppStore(Activity):
             if __debug__: logger.debug("refresh already in progress, skipping")
             return
         self._refresh_in_progress = True
-        TaskManager.create_task(self._download_app_index_wrapper(AppStore._BADGEHUB_LIST_URL))
+        TaskManager.create_task(self._download_app_index_wrapper(store_source.index_url()))
 
     def settings_button_tap(self, event):
         intent = Intent(activity_class=SettingsActivity)
         intent.putExtra("prefs", self.prefs)
         intent.putExtra("settings", [
+            {"title": "Store Source", "key": "store_source", "ui": "radiobuttons",
+             "default_value": store_source.DEFAULT_SOURCE, "ui_options": [("uPyStore", "upystore"), ("BadgeHub", "badgehub")],
+             "changed_callback": self._store_source_changed},
+            {"title": "Search Store", "key": "store_query", "ui": "textarea",
+             "default_value": "", "changed_callback": self._store_query_changed},
             {"title": "App List Icons",
              "key": "icon_pipeline",
              "ui": "radiobuttons",
-             "default_value": self._DEFAULT_ICON_PIPELINE,
+             "default_value": self._icon_pipeline,
              "ui_options": [
                  ("None", "none"),
                  ("Blocky", "raw"),
@@ -341,6 +381,18 @@ class AppStore(Activity):
              "changed_callback": self._update_notifications_changed},
         ])
         self.startActivity(intent)
+
+    def _store_query_changed(self, value):
+        self._data_loaded = False
+
+    def _store_source_changed(self, value):
+        self._data_loaded = False
+        from appstore_core import AppUpdateManager
+        manager = AppUpdateManager.get_instance()
+        manager.updatable_apps = []
+        manager.clear_updates_notification()
+        manager._last_check_ts = None
+        manager.check_for_updates_now()
 
     def _hide_wip_changed(self, new_value):
         self._hide_wip = new_value == "true"
@@ -424,10 +476,15 @@ class AppStore(Activity):
             self._start_icon_timer()
 
     async def _download_app_index_wrapper(self, json_url):
+        signature = (json_url, self.prefs.get_string("store_query", ""))
         try:
             await self.download_app_index(json_url)
         finally:
             self._refresh_in_progress = False
+            if signature != (store_source.index_url(), self.prefs.get_string("store_query", "")):
+                self._data_loaded = False
+                if self.has_foreground():
+                    self.refresh_list()
 
     async def download_app_index(self, json_url):
         await TaskManager.sleep(0)
@@ -444,7 +501,7 @@ class AppStore(Activity):
             if installed_app.installed_path and "builtin" in installed_app.installed_path:
                 self._builtin_fullnames.add(installed_app.fullname)
                 continue
-            self.apps.append(installed_app)
+            self.apps.append(self._copy_installed_app(installed_app))
         if getattr(self, "_default_to_installed", False):
             self._default_to_installed = False
             n_installed = sum(1 for app in self.apps if app.installed_path is not None)
@@ -466,10 +523,17 @@ class AppStore(Activity):
         if __debug__:
             _t_net = time.ticks_ms()
         try:
-            response = await DownloadManager.download_url(json_url)
+            response = await store_source.fetch_index(json_url)
+            self._catalog_error = False
         except Exception as e:
             if __debug__: logger.debug("store index unavailable (%s), showing installed apps only", e)
+            self._catalog_error = True
+            logger.warning("APPSTORE_CATALOG_FAILED %s %s", type(e).__name__, str(e))
+            if self.has_foreground():
+                self._show_scan_message("Store unavailable", "%s. Check WiFi and reopen the store to retry. Installed apps remain available." % store_source.error_text(e)[:90])
             self._resolve_pending_deeplink(index_available=False)
+            return
+        if getattr(self, "_destroyed", False):
             return
         if __debug__:
             _net_took = time.ticks_diff(time.ticks_ms(), _t_net)
@@ -477,9 +541,12 @@ class AppStore(Activity):
             logger.debug("appstore-perf: phase2 network fetch took=%dms bytes=%d", _net_took, _net_bytes)
             _t_parse = time.ticks_ms()
         try:
-            parsed = ujson.loads(response)
+            parsed = response
         except Exception as e:
             logger.warning("could not parse store index: %s", e)
+            self._catalog_error = True
+            if self.has_foreground():
+                self._show_scan_message("Store unavailable", "%s. Check WiFi and reopen the store to retry. Installed apps remain available." % store_source.error_text(e)[:90])
             self._resolve_pending_deeplink(index_available=False)
             return
         if __debug__:
@@ -496,6 +563,9 @@ class AppStore(Activity):
                     continue
                 if fullname in installed_by_fullname:
                     existing = installed_by_fullname[fullname]
+                    store_source.attach(existing, app_data)
+                    if app_data.get("icon_map", {}).get("64x64", {}).get("url"):
+                        existing.icon_url = app_data["icon_map"]["64x64"]["url"]
                     store_version = app_data.get("version")
                     if store_version:
                         existing._remote_version = store_version
@@ -518,6 +588,10 @@ class AppStore(Activity):
         if __debug__:
             logger.debug("appstore-perf: phase2 merge took=%dms new=%d wip=%d", time.ticks_diff(time.ticks_ms(), _t_merge), len(new_apps), len(self._wip_apps))
 
+        parsed = None
+        response = None
+        gc.collect()
+
         # Merge new apps in memory (sorted once) and build the visible list
         # exactly once below. Per-app widget insertion here would only be
         # deleted again by the mandatory full rebuild for rating labels.
@@ -525,6 +599,7 @@ class AppStore(Activity):
         # back_screen() while the download was in flight), skip the rebuild:
         # acting on deleted LVGL objects can segfault the device.
         if not self.has_foreground():
+            self._data_loaded = False
             self._resolve_pending_deeplink()
             return
         if __debug__:
@@ -643,6 +718,7 @@ class AppStore(Activity):
                 icon_spacer = lv.image(item)
                 icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
                 app.image_icon_widget = icon_spacer
+                self._icon_widgets[app.fullname] = icon_spacer
                 if app.icon_data:
                     self._set_icon_widget(app)
                 elif self._restore_cached_icon(app, icon_spacer):
@@ -715,12 +791,15 @@ class AppStore(Activity):
                 remote = getattr(app, "_remote_version", None)
                 if not remote:
                     continue
-                if AppManager.is_update_available(app.fullname, remote):
+                if update_available(app.fullname, remote, getattr(app, "revision", None), getattr(app, "_store_source", None)):
                     updatable.append({
                         "fullname": app.fullname,
                         "version": remote,
                         "name": app.name,
                         "download_url": app.download_url,
+                        "_store_source": getattr(app, "_store_source", store_source.current_source()),
+                        "_store_slug": getattr(app, "_store_slug", None),
+                        "revision": getattr(app, "revision", None),
                     })
             AppUpdateManager.get_instance().updatable_apps = updatable
             if updatable:
@@ -901,11 +980,11 @@ class AppStore(Activity):
 
     async def _do_download(self, app):
         try:
-            app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(app.icon_url), 5)
+            app.icon_data = await store_source.request(app.icon_url, timeout=10)
         except Exception:
             pass
         self._download_in_progress = False
-        if app.icon_data:
+        if app.icon_data and self.has_foreground():
             try:
                 self._set_icon_widget(app)
             except Exception:
@@ -1014,6 +1093,8 @@ class AppStore(Activity):
 
     def _try_early_deeplink(self):
         """Open a pending deep link now if the app is already resolvable."""
+        if not self.has_foreground():
+            return
         fullname = getattr(self, "_pending_deeplink", None)
         if not fullname:
             return
@@ -1023,6 +1104,8 @@ class AppStore(Activity):
             self.show_app_detail(app)
 
     def _resolve_pending_deeplink(self, index_available=True):
+        if not self.has_foreground():
+            return
         fullname = getattr(self, "_pending_deeplink", None)
         if not fullname:
             return
@@ -1048,6 +1131,18 @@ class AppStore(Activity):
         mbox.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CANCEL, None)
 
     @staticmethod
+    def _copy_installed_app(app):
+        copied = App(load_icons=False)
+        for name in (
+            "name", "publisher", "short_description", "long_description", "fullname",
+            "version", "categories", "activities", "services", "installed_path",
+            "icon_path", "icon_data", "main_launcher_activity",
+        ):
+            if hasattr(app, name):
+                setattr(copied, name, getattr(app, name))
+        return copied
+
+    @staticmethod
     def badgehub_app_to_mpos_app(bhapp):
         name = bhapp.get("name")
         short_description = bhapp.get("description")
@@ -1062,7 +1157,8 @@ class AppStore(Activity):
         ratings = bhapp.get("ratings") or {}
         rating_average = ratings.get("average")
         rating_count = ratings.get("count", 0)
-        return App(name, None, short_description, None, icon_url, None, fullname, bhapp.get("version"), category, None, blur_hash=blur_hash, rating_average=rating_average, rating_count=rating_count)
+        app = App(name, bhapp.get("publisher"), short_description, bhapp.get("long_description"), icon_url, bhapp.get("download_url"), fullname, bhapp.get("version"), category, bhapp.get("activities"), blur_hash=blur_hash, rating_average=rating_average, rating_count=rating_count)
+        return store_source.attach(app, bhapp)
 
     @staticmethod
     def _apply_default_styles(widget, border=0, radius=0, pad=0):

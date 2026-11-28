@@ -79,6 +79,26 @@ class TestAppDetailInstallButton(unittest.TestCase):
         )
         self.assertEqual(self._tasks_created, 0)
 
+    def test_missing_download_url_retries_failed_details(self):
+        self.app.download_url = None
+        self.detail._details_error = True
+        self.detail._details_loading = False
+        self.detail.fetch_and_set_app_details = self.detail.download_and_install
+        self._call_toggle()
+        self.assertEqual(self._tasks_created, 1)
+        self.assertFalse(self.detail._action_in_progress)
+        self.assertEqual(self.detail.install_label.get_text(), "Install")
+        self.assertFalse(bool(self.detail.install_button.get_state() & lv.STATE.DISABLED))
+
+    def test_missing_download_url_does_not_retry_while_loading(self):
+        self.app.download_url = None
+        self.detail._details_error = True
+        self.detail._details_loading = True
+        self.detail.fetch_and_set_app_details = self.detail.download_and_install
+        self._call_toggle()
+        self.assertEqual(self._tasks_created, 0)
+        self.assertFalse(self.detail._action_in_progress)
+
     def test_install_disables_button_immediately(self):
         self._call_toggle()
         self.assertTrue(
